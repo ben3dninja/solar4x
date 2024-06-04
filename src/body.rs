@@ -12,6 +12,9 @@ pub enum BodyType {
     Planet,
     Moon,
     Asteroid,
+    #[serde(alias = "Dwarf Planet")]
+    DwarfPlanet,
+    Comet,
 }
 
 #[derive(Deserialize, PartialEq, Debug, Clone)]

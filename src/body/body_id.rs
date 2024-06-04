@@ -66,11 +66,10 @@ impl<'de> Deserialize<'de> for BodyID {
     }
 }
 
+#[allow(unused_imports)]
 mod tests {
-
-    use serde_json::from_str;
-
     use super::*;
+    use serde_json::from_str;
 
     #[test]
     fn test_single() {
