@@ -2,20 +2,30 @@ use serde::Deserialize;
 
 use body_id::BodyID;
 
+use crate::utils::de::deserialize_options;
+
 mod body_id;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Clone, Copy, Debug, PartialEq)]
+pub enum BodyType {
+    Star,
+    Planet,
+    Moon,
+    Asteroid,
+}
+
+#[derive(Deserialize, PartialEq, Debug, Clone)]
 #[serde(rename_all(deserialize = "camelCase"))]
-struct BodyData {
+pub struct BodyData {
     #[serde(rename(deserialize = "rel"))]
-    body_id: BodyID,
-    #[serde(alias = "englishName")]
-    body_name: String,
-    is_planet: bool,
-    #[serde(alias = "aroundPlanet")]
+    id: BodyID,
+    #[serde(rename(deserialize = "englishName"))]
+    name: String,
+    body_type: BodyType,
+    #[serde(alias = "aroundPlanet", deserialize_with = "deserialize_options")]
     host_body: BodyID,
-    #[serde(alias = "moons")]
-    orbiting_bodies: Option<Vec<BodyID>>,
+    #[serde(alias = "moons", deserialize_with = "deserialize_options")]
+    orbiting_bodies: Vec<BodyID>,
 
     // Orbital elements
     semimajor_axis: i64,
@@ -34,7 +44,8 @@ struct BodyData {
 
 #[cfg(test)]
 mod tests {
-    use crate::body::body_id::BodyID;
+
+    use crate::body::BodyType;
 
     use super::BodyData;
     use serde_json::from_str;
@@ -88,6 +99,23 @@ mod tests {
         }
         "#;
         let body_data: BodyData = from_str(data).unwrap();
-        assert_eq!(body_data.host_body, BodyID(String::from("terre")));
+        assert_eq!(
+            body_data,
+            BodyData {
+                id: "lune".into(),
+                name: "Moon".into(),
+                body_type: BodyType::Moon,
+                host_body: "terre".into(),
+                orbiting_bodies: Vec::new(),
+                semimajor_axis: 384400,
+                eccentricity: 0.0549,
+                inclination: 5.145,
+                long_asc_node: 0.,
+                arg_periapsis: 0.,
+                mean_anomaly: 0.,
+                periapsis: 363300,
+                apoapsis: 405500
+            }
+        );
     }
 }

@@ -3,8 +3,20 @@ use serde::{de::Visitor, Deserialize, Deserializer};
 const ID_PREFIX: &'static str = "https://api.le-systeme-solaire.net/rest/bodies/";
 
 // TODO : change default id
-#[derive(Default, PartialEq, Debug)]
-pub struct BodyID(pub String);
+#[derive(Default, PartialEq, Debug, Clone)]
+pub struct BodyID(String);
+
+impl std::fmt::Display for BodyID {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "@{}", self.0)
+    }
+}
+
+impl From<&str> for BodyID {
+    fn from(value: &str) -> Self {
+        Self(value.into())
+    }
+}
 
 struct IDVisitor;
 
@@ -19,15 +31,16 @@ impl<'de> Visitor<'de> for IDVisitor {
     where
         A: serde::de::MapAccess<'de>,
     {
-        if let Some((key, value)) = map.next_entry::<&'de str, &'de str>()? {
+        let mut id = BodyID::default();
+        while let Some((key, value)) = map.next_entry::<&str, &str>()? {
             if key == "rel" {
-                return Ok(strip_id_prefix(value));
+                id = strip_id_prefix(&value);
             }
         }
-        return Ok(BodyID::default());
+        return Ok(id);
     }
 
-    fn visit_string<E>(self, v: String) -> Result<Self::Value, E>
+    fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
     where
         E: serde::de::Error,
     {
@@ -63,9 +76,8 @@ mod tests {
     fn test_single() {
         let id: BodyID = from_str(
             r#"
-        {
-            "rel": "https://api.le-systeme-solaire.net/rest/bodies/terre"
-        }"#,
+            "https://api.le-systeme-solaire.net/rest/bodies/terre"
+        "#,
         )
         .unwrap();
         assert_eq!(id.0, "terre");
@@ -77,7 +89,7 @@ mod tests {
             r#"
         {
             "planet": "terre",
-            "rel": "https://api.le-systeme-solaire.net/rest/bodies/terre",
+            "rel": "https://api.le-systeme-solaire.net/rest/bodies/terre"
         }"#,
         )
         .unwrap();
