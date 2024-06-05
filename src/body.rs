@@ -2,13 +2,14 @@ use body_data::BodyData;
 
 use crate::utils::algebra::{degs, mod_180, rads};
 
-mod body_data;
+pub mod body_data;
+pub mod body_id;
 
 const E_TOLERANCE: f64 = 1e-6;
 
 #[allow(non_snake_case)]
 #[derive(Default, Clone, Debug)]
-struct Body {
+pub struct Body {
     pub data: BodyData,
     pub mean_anomaly: f64,
     pub eccentric_anomaly: f64,

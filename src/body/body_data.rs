@@ -1,10 +1,8 @@
 use serde::Deserialize;
 
-use body_id::BodyID;
+use crate::body::body_id::BodyID;
 
 use crate::utils::de::deserialize_options;
-
-mod body_id;
 
 #[derive(Deserialize, Clone, Copy, Debug, PartialEq, Default)]
 pub enum BodyType {
