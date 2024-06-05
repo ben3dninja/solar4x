@@ -2,8 +2,7 @@ use body_data::BodyData;
 
 use crate::utils::algebra::{degs, mod_180, rads};
 
-pub mod body_data;
-pub mod body_id;
+use super::body_data;
 
 const E_TOLERANCE: f64 = 1e-6;
 

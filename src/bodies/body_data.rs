@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-use crate::body::body_id::BodyID;
+use super::body_id::BodyID;
 
 use crate::utils::de::deserialize_options;
 
