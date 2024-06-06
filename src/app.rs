@@ -1,7 +1,7 @@
 use std::io::{Result, Stdout};
 
 use crossterm::event::{self, KeyCode, KeyEventKind};
-use ratatui::{backend::CrosstermBackend, Terminal};
+use ratatui::{backend::CrosstermBackend, widgets::ListState, Terminal};
 
 use crate::{
     bodies::{body_id::BodyID, BodySystem},
@@ -21,6 +21,7 @@ pub struct App {
     pub current_screen: AppScreen,
     pub main_body: BodyID,
     pub bodies: BodySystem,
+    pub list_state: ListState,
 }
 
 impl App {
@@ -29,6 +30,7 @@ impl App {
             current_screen: AppScreen::Main,
             main_body: BodyID::from(DEFAULT_BODY),
             bodies: BodySystem::simple_solar_system()?,
+            list_state: ListState::default().with_selected(Some(1)),
         })
     }
     pub fn run(&mut self, tui: &mut Tui) -> Result<()> {
@@ -39,8 +41,18 @@ impl App {
                     continue;
                 }
                 match self.current_screen {
-                    AppScreen::Main { .. } => match event.code {
+                    AppScreen::Main => match event.code {
                         KeyCode::Char('q') => break,
+                        KeyCode::Down => self.list_state.select(match self.list_state.selected() {
+                            Some(i) if i == self.bodies.number() - 1 => Some(i),
+                            Some(i) => Some(i + 1),
+                            None => Some(0),
+                        }),
+                        KeyCode::Up => self.list_state.select(match self.list_state.selected() {
+                            Some(0) => Some(0),
+                            Some(i) => Some(i - 1),
+                            None => None,
+                        }),
                         _ => (),
                     },
                     AppScreen::Info => todo!(),
