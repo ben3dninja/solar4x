@@ -1,8 +1,15 @@
+use std::{
+    cell::RefCell,
+    rc::{Rc, Weak},
+};
+
 use body_data::BodyData;
+use nalgebra::Vector3;
+use num_bigint::BigInt;
 
 use crate::utils::algebra::{degs, mod_180, rads};
 
-use super::body_data;
+use super::{body_data, body_id::BodyID};
 
 const E_TOLERANCE: f64 = 1e-6;
 
@@ -20,6 +27,37 @@ pub struct Body {
     update_state: UpdateState,
     // time in days
     time: f64,
+}
+
+type ChildBody = Rc<RefCell<NewBody>>;
+type ParentBody = Weak<RefCell<NewBody>>;
+
+pub struct NewBody {
+    id: BodyID,
+    orbital_elements: OrbitalElements,
+    info: BodyInfo,
+    orbiting_bodies: Vec<ChildBody>,
+    host_body: ParentBody,
+    coordinates: BodyCoordinates,
+}
+
+struct OrbitalElements {
+    eccentricity: f64,
+    semimajor_axis: i64,
+    inclination: f64,
+    long_asc_node: f64,
+    arg_periapsis: f64,
+    mean_anomaly: f64,
+}
+
+struct BodyInfo {
+    name: String,
+    mass: BigInt,
+}
+
+struct BodyCoordinates {
+    position: Vector3<i64>,
+    velocity: Vector3<i64>,
 }
 
 // State corresponding to which elements are up to date (for example if the state is M, only the mean anomaly is up to date while if it is Orb,
