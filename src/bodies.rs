@@ -12,7 +12,8 @@ pub mod body_data;
 pub mod body_id;
 
 pub struct BodySystem {
-    bodies: Vec<Body>,
+    pub bodies: Vec<Body>,
+    time: f64,
 }
 
 impl BodySystem {
@@ -25,6 +26,7 @@ impl BodySystem {
 
         Ok(Self {
             bodies: all_data.into_iter().map(|data| data.into()).collect(),
+            time: 0.,
         })
     }
 
@@ -39,6 +41,14 @@ impl BodySystem {
     pub fn number(&self) -> usize {
         self.bodies.len()
     }
+
+    pub fn get_max_distance(&self) -> i64 {
+        self.bodies
+            .iter()
+            .map(|body| body.data.apoapsis)
+            .max()
+            .unwrap()
+    }
 }
 
 #[cfg(test)]
@@ -49,5 +59,11 @@ mod tests {
     fn test_simple_solar_system() {
         let system = BodySystem::simple_solar_system().unwrap();
         assert_eq!(system.bodies.len(), 9)
+    }
+
+    #[test]
+    fn test_max_distance() {
+        let system = BodySystem::simple_solar_system().unwrap();
+        assert_eq!(system.get_max_distance(), 4537039826)
     }
 }
