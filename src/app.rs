@@ -10,7 +10,7 @@ use crate::{
 
 type Tui = Terminal<CrosstermBackend<Stdout>>;
 
-const DEFAULT_BODY: &'static str = "soleil";
+const DEFAULT_BODY: &str = "soleil";
 
 pub enum AppScreen {
     Main,

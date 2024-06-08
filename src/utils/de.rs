@@ -4,7 +4,7 @@ use serde::{Deserialize, Deserializer};
 
 use crate::bodies::body_data::BodyData;
 
-const MAIN_OBJECT_FILE_PATH: &'static str = "main_objects.json";
+const MAIN_OBJECT_FILE_PATH: &str = "main_objects.json";
 
 pub fn deserialize_options<'de, D, T>(d: D) -> Result<T, D::Error>
 where
@@ -22,7 +22,7 @@ pub fn read_main_bodies() -> std::io::Result<Vec<BodyData>> {
     struct Input {
         bodies: Vec<BodyData>,
     }
-    let input: Input = serde_json::from_str(&buf).map_err(|e| std::io::Error::from(e))?;
+    let input: Input = serde_json::from_str(&buf).map_err(std::io::Error::from)?;
     Ok(input.bodies)
 }
 

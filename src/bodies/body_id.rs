@@ -1,6 +1,6 @@
 use serde::{de::Visitor, Deserialize, Deserializer};
 
-const ID_PREFIX: &'static str = "https://api.le-systeme-solaire.net/rest/bodies/";
+const ID_PREFIX: &str = "https://api.le-systeme-solaire.net/rest/bodies/";
 
 // TODO : change default id
 #[derive(Default, PartialEq, Debug, Clone)]
@@ -34,17 +34,17 @@ impl<'de> Visitor<'de> for IDVisitor {
         let mut id = BodyID::default();
         while let Some((key, value)) = map.next_entry::<&str, &str>()? {
             if key == "rel" {
-                id = strip_id_prefix(&value);
+                id = strip_id_prefix(value);
             }
         }
-        return Ok(id);
+        Ok(id)
     }
 
     fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
     where
         E: serde::de::Error,
     {
-        return Ok(strip_id_prefix(&v));
+        Ok(strip_id_prefix(v))
     }
 }
 
