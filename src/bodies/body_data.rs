@@ -50,6 +50,9 @@ pub struct BodyData {
     // Time required to rotate around itself (in earth hours)
     #[serde(alias = "sideralRotation")]
     pub rotation_period: f64,
+
+    #[serde(alias = "meanRadius")]
+    pub radius: f64,
 }
 
 #[cfg(test)]
@@ -125,6 +128,7 @@ mod tests {
                 apoapsis: 405500,
                 revolution_period: 27.32170,
                 rotation_period: 655.72800,
+                radius: 1737.
             }
         );
     }

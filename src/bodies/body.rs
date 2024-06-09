@@ -208,7 +208,7 @@ impl Body {
             + (-o.sin() * O.cos() - o.cos() * O.sin() * I.cos()) * y)
             .round() as i64;
         self.y = ((o.cos() * O.sin() + o.sin() * O.cos() * I.cos()) * x
-            + (o.sin() * O.sin() + o.cos() * O.cos() * I.cos()) * y)
+            + (-o.sin() * O.sin() + o.cos() * O.cos() * I.cos()) * y)
             .round() as i64;
         self.z = ((o.sin() * I.sin()) * x + (o.cos() * I.sin()) * y).round() as i64;
         self.update_state = UpdateState::Glob;
@@ -235,6 +235,12 @@ impl From<BodyData> for Body {
         };
         new.update_xyz();
         new
+    }
+}
+
+impl PartialEq for Body {
+    fn eq(&self, other: &Self) -> bool {
+        self.data.id == other.data.id
     }
 }
 

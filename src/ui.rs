@@ -50,7 +50,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
     let max_dist = app.system.get_max_distance() as f64;
     let (width, height) = (chunks[1].width as f64, chunks[1].height as f64);
     let min_dim = width.min(height);
-    let scale = 1.5 * min_dim / max_dist;
+    let scale = app.zoom_level * 0.9 * min_dim / max_dist;
     for body in &mut app.system.bodies {
         body.update_xyz();
         // dbg!(body.time, body.update_state.clone());
@@ -63,18 +63,34 @@ pub fn ui(f: &mut Frame, app: &mut App) {
             for body in &app.system.bodies {
                 let (x, y, _) = body.get_raw_xyz();
                 let (x, y) = (x as f64 * scale, y as f64 * scale);
-                let (radius, color) = match body.data.body_type {
-                    BodyType::Star => (min_dim / 30., Color::Yellow),
-                    BodyType::Planet => (
-                        min_dim / 70.,
+                let color = match body.data.body_type {
+                    _ if body == app.selected_body() => Color::White,
+                    BodyType::Star => Color::Yellow,
+                    BodyType::Planet => {
                         if body.data.apoapsis < 800000000 {
                             Color::Blue
                         } else {
                             Color::Red
-                        },
-                    ),
-                    _ => (min_dim / 150., Color::Gray),
+                        }
+                    }
+                    _ => Color::Gray,
                 };
+                let radius = body.data.radius * scale;
+                // let (radius, mut color) = match body.data.body_type {
+                //     BodyType::Star => (min_dim / 30., Color::Yellow),
+                //     BodyType::Planet => (
+                //         min_dim / 70.,
+                //         if body.data.apoapsis < 800000000 {
+                //             Color::Blue
+                //         } else {
+                //             Color::Red
+                //         },
+                //     ),
+                //     _ => (min_dim / 150., Color::Gray),
+                // };
+                // if body == app.selected_body() {
+                //     color = Color::White
+                // }
                 ctx.draw(&Circle {
                     x,
                     y,
