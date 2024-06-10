@@ -1,7 +1,7 @@
 use body::Body;
 use body_data::BodyType;
 use body_id::BodyID;
-use std::io::Result;
+use std::{cell::RefCell, io::Result, rc::Rc};
 
 use crate::utils::de::read_main_bodies;
 
@@ -11,9 +11,11 @@ pub mod body;
 pub mod body_data;
 pub mod body_id;
 
-pub struct BodySystem {
-    pub bodies: Vec<Body>,
-    time: f64,
+#[derive(Default)]
+pub struct BodySystem<'a> {
+    pub main_body: Option<Body<'a>>,
+    pub bodies: Vec<&'a Body<'a>>,
+    pub time: f64,
 }
 
 impl BodySystem {
@@ -23,6 +25,14 @@ impl BodySystem {
             .filter(|data| matches!(data.body_type, BodyType::Planet | BodyType::Star))
             .collect();
         all_data.sort_by(|a, b| a.periapsis.cmp(&b.periapsis));
+        let mut sun = all_data[0];
+        sun.orbiting_bodies = all_data[1..].iter().map(|planet| planet.id).collect();
+        all_data[1..]
+            .iter_mut()
+            .for_each(|planet| planet.host_body = sun.id);
+
+        let system = Rc::new(RefCell::new(BodySystem::default()));
+        let mut sun = Body::new_loner(sun, Rc::clone(&system));
 
         Ok(Self {
             bodies: all_data.into_iter().map(|data| data.into()).collect(),
@@ -35,7 +45,7 @@ impl BodySystem {
     }
 
     pub fn get_body_names(&self) -> Vec<&str> {
-        self.bodies.iter().map(|b| &b.data.name[..]).collect()
+        self.bodies.iter().map(|b| &b.info.name[..]).collect()
     }
 
     pub fn number(&self) -> usize {
