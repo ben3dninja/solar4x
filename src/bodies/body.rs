@@ -271,6 +271,7 @@ mod tests {
             apoapsis: 405500,
             revolution_period: 27.32170,
             rotation_period: 655.72800,
+            radius: 1737.,
         });
         for i in 0..27 {
             moon.set_time(i.into());

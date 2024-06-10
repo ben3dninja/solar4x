@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 use serde::Deserialize;
 
 use super::body_id::BodyID;
@@ -14,6 +16,19 @@ pub enum BodyType {
     #[serde(alias = "Dwarf Planet")]
     DwarfPlanet,
     Comet,
+}
+
+impl Display for BodyType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Star => "Star",
+            Self::Planet => "Planet",
+            Self::Moon => "Moon",
+            Self::Asteroid => "Asteroid",
+            Self::DwarfPlanet => "Dwarf Planet",
+            Self::Comet => "Comet",
+        })
+    }
 }
 
 #[derive(Deserialize, PartialEq, Debug, Clone, Default)]

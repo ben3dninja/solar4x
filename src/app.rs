@@ -86,9 +86,13 @@ impl App {
                             KeyCode::Char('<') => {
                                 self.speed /= 1.5;
                             }
+                            KeyCode::Char(' ') => self.current_screen = AppScreen::Info,
                             _ => (),
                         },
-                        AppScreen::Info => todo!(),
+                        AppScreen::Info => match event.code {
+                            KeyCode::Char(' ') => self.current_screen = AppScreen::Main,
+                            _ => (),
+                        },
                     }
                 }
             }

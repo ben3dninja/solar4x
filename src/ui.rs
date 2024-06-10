@@ -5,31 +5,20 @@ use ratatui::{
     widgets::{
         block::Title,
         canvas::{Canvas, Circle},
-        Block, List,
+        Block, Borders, Clear, List, Paragraph, Widget,
     },
     Frame,
 };
 
-use crate::{app::App, bodies::body_data::BodyType};
+use crate::{
+    app::{App, AppScreen},
+    bodies::body_data::BodyType,
+    utils::ui::centered_rect,
+};
 
 pub fn ui(f: &mut Frame, app: &mut App) {
     let chunks =
         Layout::horizontal([Constraint::Percentage(25), Constraint::Fill(1)]).split(f.size());
-
-    //     let body_name = if let Some(body) = app.bodies.get_body_data(&app.main_body) {
-    //         &body.data.name[..]
-    //     } else {
-    //         "Unknown body"
-    //     };
-
-    //     let list = app
-    //         .bodies
-    //         .get_body_names()
-    //         .into_iter()
-    //         .skip(1)
-    //         .collect::<List>()
-    //         .block(Block::bordered().title(Title::from(body_name.bold()).alignment(Alignment::Center)))
-    //         .highlight_style(Style::default().red());
     let names = app.system.get_body_names();
     let texts: Vec<Text> = vec![Text::styled(names[0], Style::default().bold())]
         .into_iter()
@@ -53,10 +42,11 @@ pub fn ui(f: &mut Frame, app: &mut App) {
     let scale = app.zoom_level * 0.9 * min_dim / max_dist;
     for body in &mut app.system.bodies {
         body.update_xyz();
-        // dbg!(body.time, body.update_state.clone());
     }
     let canvas = Canvas::default()
-        .block(Block::bordered().title("Space map"))
+        .block(
+            Block::bordered().title(Title::from("Space map".bold()).alignment(Alignment::Center)),
+        )
         .x_bounds([-width / 2., width / 2.])
         .y_bounds([-height, height])
         .paint(|ctx| {
@@ -76,21 +66,6 @@ pub fn ui(f: &mut Frame, app: &mut App) {
                     _ => Color::Gray,
                 };
                 let radius = body.data.radius * scale;
-                // let (radius, mut color) = match body.data.body_type {
-                //     BodyType::Star => (min_dim / 30., Color::Yellow),
-                //     BodyType::Planet => (
-                //         min_dim / 70.,
-                //         if body.data.apoapsis < 800000000 {
-                //             Color::Blue
-                //         } else {
-                //             Color::Red
-                //         },
-                //     ),
-                //     _ => (min_dim / 150., Color::Gray),
-                // };
-                // if body == app.selected_body() {
-                //     color = Color::White
-                // }
                 ctx.draw(&Circle {
                     x,
                     y,
@@ -100,4 +75,25 @@ pub fn ui(f: &mut Frame, app: &mut App) {
             }
         });
     f.render_widget(canvas, chunks[1]);
+    if matches!(app.current_screen, AppScreen::Info) {
+        let data = &app.selected_body().data;
+        let popup_block = Block::default()
+            .title(&data.name[..])
+            .borders(Borders::ALL)
+            .style(Style::default().bg(Color::DarkGray));
+        let area = centered_rect(25, 25, f.size());
+        Clear.render(area, f.buffer_mut());
+        let info = Paragraph::new(format!(
+            "Body type: {}\n\
+            N of orbiting bodies: {}\n\
+            Radius: {} km\n\
+            Revolution period: {} earth days",
+            data.body_type,
+            data.orbiting_bodies.len(),
+            data.radius,
+            data.revolution_period,
+        ))
+        .block(popup_block);
+        f.render_widget(info, area);
+    }
 }
