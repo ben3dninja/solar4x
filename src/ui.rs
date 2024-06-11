@@ -66,6 +66,19 @@ pub fn ui(f: &mut Frame, app: &mut App) {
                     _ => Color::Gray,
                 };
                 let radius = body.data.radius * scale;
+                #[cfg(feature = "radius")]
+                let radius = scale
+                    * match body.data.body_type {
+                        BodyType::Star => 20000000.,
+                        BodyType::Planet => {
+                            if body.data.apoapsis < 800000000 {
+                                10000000.
+                            } else {
+                                100000000.
+                            }
+                        }
+                        _ => 500000.,
+                    };
                 ctx.draw(&Circle {
                     x,
                     y,
