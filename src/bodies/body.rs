@@ -16,13 +16,13 @@ const E_TOLERANCE: f64 = 1e-6;
 
 // pub type RefBody = Rc<RefCell<Body>>;
 
-pub struct Body<'a> {
+pub struct Body {
     pub id: BodyID,
     pub orbit: Orbit,
     pub system: Rc<RefCell<BodySystem>>,
     pub info: BodyInfo,
-    pub orbiting_bodies: Vec<&'a Body<'a>>,
-    pub host_body: Option<&'a Body<'a>>,
+    pub orbiting_bodies: Vec<BodyID>,
+    pub host_body: Option<BodyID>,
 }
 
 // Stores orbital parameters and calculates the position in the host body's frame
@@ -136,13 +136,13 @@ impl Orbit {
     }
 }
 
-impl PartialEq for Body<'_> {
+impl PartialEq for Body {
     fn eq(&self, other: &Self) -> bool {
         self.id == other.id
     }
 }
 
-impl<'a> Body<'a> {
+impl Body {
     pub fn new_loner<'b>(data: &'b BodyData, system: Rc<RefCell<BodySystem>>) -> Self {
         Self {
             id: data.id.clone(),
@@ -168,13 +168,13 @@ impl<'a> Body<'a> {
         }
     }
 
-    pub fn with_host_body(self, host_body: &'a Body) -> Self {
+    pub fn with_host_body(self, host_body: BodyID) -> Self {
         let mut new = self;
         new.host_body = Some(host_body);
         new
     }
 
-    pub fn with_orbiting_bodies(self, orbiting_bodies: Vec<&'a Body>) -> Self {
+    pub fn with_orbiting_bodies(self, orbiting_bodies: Vec<BodyID>) -> Self {
         let mut new = self;
         new.orbiting_bodies = orbiting_bodies;
         new
