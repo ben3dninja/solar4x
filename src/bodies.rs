@@ -5,7 +5,10 @@ use std::{cell::RefCell, collections::HashMap, io::Result, mem, rc::Rc};
 
 use crate::utils::de::read_main_bodies;
 
-use self::{body::BodyInfo, body_data::BodyData};
+use self::{
+    body::{BodyInfo, UpdateState},
+    body_data::BodyData,
+};
 
 pub mod body;
 pub mod body_data;
@@ -35,27 +38,22 @@ impl BodySystem {
             .for_each(|planet| planet.host_body = sun_data.id.clone());
 
         let system = Rc::new(RefCell::new(BodySystem::default()));
-        system.borrow_mut().bodies.insert(
-            sun_data.id.clone(),
-            Body::new_loner(&sun_data, Rc::clone(&system)),
-        );
+        {
+            let mut mut_system = system.borrow_mut();
+            mut_system.bodies.insert(
+                sun_data.id.clone(),
+                Body::new_loner(&sun_data, Rc::clone(&system)),
+            );
 
-        let planets = planets_data.iter().map(|data| {
-            (
-                data.id.clone(),
-                Body::new_loner(data, Rc::clone(&system)).with_host_body(sun_data.id.clone()),
-            )
-        });
-        system.borrow_mut().bodies.extend(planets.into_iter());
+            let planets = planets_data.iter().map(|data| {
+                (
+                    data.id.clone(),
+                    Body::new_loner(data, Rc::clone(&system)).with_host_body(sun_data.id.clone()),
+                )
+            });
+            mut_system.bodies.extend(planets.into_iter());
+        }
         Ok(system)
-    }
-
-    pub fn get_body_data(&self, id: &BodyID) -> Option<BodyInfo> {
-        self.bodies.get(id).map(|body| body.info.clone())
-    }
-
-    pub fn get_body_names(&self) -> Vec<String> {
-        self.bodies.values().map(|b| b.info.name.clone()).collect()
     }
 
     pub fn number(&self) -> usize {
@@ -69,10 +67,35 @@ impl BodySystem {
             .max()
             .unwrap()
     }
+
+    pub fn bodies_by_distance(&self) -> Vec<BodyID> {
+        let mut list: Vec<&Body> = self.bodies.values().collect();
+        list.sort_by(|a, b| a.info.periapsis.cmp(&b.info.periapsis));
+        list.iter().map(|body| body.id.clone()).collect()
+    }
+
+    pub fn update_orbits(&mut self) {
+        self.bodies
+            .values_mut()
+            .for_each(|body| body.orbit.update_pos(self.time))
+    }
+
+    pub fn set_time(&mut self, new_time: f64) {
+        self.time = new_time;
+        self.bodies
+            .values_mut()
+            .for_each(|body| body.orbit.update_state = UpdateState::None)
+    }
+
+    pub fn elapse_time(&mut self, dt: f64) {
+        self.set_time(self.time + dt)
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::bodies::body_id::BodyID;
+
     use super::BodySystem;
 
     #[test]
@@ -85,5 +108,20 @@ mod tests {
     fn test_max_distance() {
         let system = BodySystem::simple_solar_system().unwrap();
         assert_eq!(system.take().get_max_distance(), 4537039826)
+    }
+
+    #[test]
+    fn test_bodies_by_distance() {
+        let system = BodySystem::simple_solar_system().unwrap();
+        assert_eq!(
+            system.take().bodies_by_distance(),
+            vec![
+                "soleil", "mercure", "venus", "terre", "mars", "jupiter", "saturne", "uranus",
+                "neptune"
+            ]
+            .into_iter()
+            .map(Into::<BodyID>::into)
+            .collect::<Vec<_>>()
+        )
     }
 }

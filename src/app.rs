@@ -9,7 +9,7 @@ use crossterm::event::{self, KeyCode, KeyEventKind};
 use ratatui::{backend::CrosstermBackend, widgets::ListState, Terminal};
 
 use crate::{
-    bodies::{body::Body, body_id::BodyID, BodySystem},
+    bodies::{body_id::BodyID, BodySystem},
     ui::ui,
 };
 
@@ -29,8 +29,9 @@ pub struct App {
     pub current_screen: AppScreen,
     pub main_body: BodyID,
     pub system: Rc<RefCell<BodySystem>>,
-    list_state: ListState,
-    list_mapping: Vec<BodyID>,
+    pub list_state: ListState,
+    // List of bodies ordered as a tree structure to be displayed
+    pub list_mapping: Vec<BodyID>,
     // 1 represents the level where all the system is seen,
     // higher values mean more zoom
     pub zoom_level: f64,
@@ -99,15 +100,14 @@ impl App {
                     }
                 }
             }
-            self.system.borrow_mut().time += self.speed / FRAME_RATE;
+            let mut system = self.system.borrow_mut();
+            system.elapse_time(self.speed / FRAME_RATE);
+            system.update_orbits();
         }
         Ok(())
     }
 
-    pub fn selected_body(&self) -> &Body {
-        self.system
-            .borrow()
-            .get(self.list_mapping[self.list_state.selected().unwrap_or_default()])
-            .unwrap()
+    pub fn selected_body_id(&self) -> BodyID {
+        self.list_mapping[self.list_state.selected().unwrap_or_default()].clone()
     }
 }
