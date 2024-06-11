@@ -10,7 +10,7 @@ use ratatui::{backend::CrosstermBackend, widgets::ListState, Terminal};
 
 use crate::{
     bodies::{body_id::BodyID, BodySystem},
-    ui::ui,
+    ui::{ui, ui_state::UiState},
 };
 
 type Tui = Terminal<CrosstermBackend<Stdout>>;
@@ -29,7 +29,7 @@ pub struct App {
     pub current_screen: AppScreen,
     pub main_body: BodyID,
     pub system: Rc<RefCell<BodySystem>>,
-    pub list_state: ListState,
+    pub ui_state: UiState,
     // List of bodies ordered as a tree structure to be displayed
     pub list_mapping: Vec<BodyID>,
     // 1 represents the level where all the system is seen,
@@ -42,12 +42,16 @@ pub struct App {
 impl App {
     pub fn new() -> Result<Self> {
         let system = Rc::clone(&BodySystem::simple_solar_system()?);
+        let ui_state = UiState {
+            list_state: ListState::default().with_selected(Some(0)),
+            system: Rc::clone(&system),
+        };
         let list_mapping = system.borrow().bodies_by_distance();
         Ok(Self {
             current_screen: AppScreen::Main,
             main_body: BodyID::from(DEFAULT_BODY),
             system,
-            list_state: ListState::default().with_selected(Some(1)),
+            ui_state,
             list_mapping,
             zoom_level: 1.,
             speed: DEFAULT_SPEED,
@@ -64,20 +68,8 @@ impl App {
                     match self.current_screen {
                         AppScreen::Main => match event.code {
                             KeyCode::Char('q') => break,
-                            KeyCode::Down => {
-                                self.list_state.select(match self.list_state.selected() {
-                                    Some(i) if i == self.system.borrow().number() - 1 => Some(i),
-                                    Some(i) => Some(i + 1),
-                                    None => Some(0),
-                                })
-                            }
-                            KeyCode::Up => {
-                                self.list_state.select(match self.list_state.selected() {
-                                    Some(0) => Some(0),
-                                    Some(i) => Some(i - 1),
-                                    None => None,
-                                })
-                            }
+                            KeyCode::Down => self.ui_state.select_next(),
+                            KeyCode::Up => self.ui_state.select_previous(),
                             KeyCode::Char('+') => {
                                 self.zoom_level *= 1.5;
                             }
@@ -108,6 +100,6 @@ impl App {
     }
 
     pub fn selected_body_id(&self) -> BodyID {
-        self.list_mapping[self.list_state.selected().unwrap_or_default()].clone()
+        self.list_mapping[self.ui_state.list_state.selected().unwrap_or_default()].clone()
     }
 }
