@@ -1,5 +1,7 @@
 use std::{
+    cell::RefCell,
     io::{Result, Stdout},
+    rc::Rc,
     time::Duration,
 };
 
@@ -26,8 +28,9 @@ pub enum AppScreen {
 pub struct App {
     pub current_screen: AppScreen,
     pub main_body: BodyID,
-    pub system: BodySystem,
-    pub list_state: ListState,
+    pub system: Rc<RefCell<BodySystem>>,
+    list_state: ListState,
+    list_mapping: Vec<BodyID>,
     // 1 represents the level where all the system is seen,
     // higher values mean more zoom
     pub zoom_level: f64,
@@ -37,19 +40,19 @@ pub struct App {
 
 impl App {
     pub fn new() -> Result<Self> {
+        let system = Rc::clone(&BodySystem::simple_solar_system()?);
+        let list_mapping = system.borrow().bodies_by_distance();
         Ok(Self {
             current_screen: AppScreen::Main,
             main_body: BodyID::from(DEFAULT_BODY),
-            system: BodySystem::simple_solar_system()?,
+            system,
             list_state: ListState::default().with_selected(Some(1)),
+            list_mapping,
             zoom_level: 1.,
             speed: DEFAULT_SPEED,
         })
     }
     pub fn run(&mut self, tui: &mut Tui) -> Result<()> {
-        for body in &mut self.system.bodies {
-            body.set_time(20000.);
-        }
         loop {
             tui.draw(|frame| ui(frame, self))?;
             if event::poll(Duration::from_secs_f64(1. / FRAME_RATE))? {
@@ -62,7 +65,7 @@ impl App {
                             KeyCode::Char('q') => break,
                             KeyCode::Down => {
                                 self.list_state.select(match self.list_state.selected() {
-                                    Some(i) if i == self.system.number() - 1 => Some(i),
+                                    Some(i) if i == self.system.borrow().number() - 1 => Some(i),
                                     Some(i) => Some(i + 1),
                                     None => Some(0),
                                 })
@@ -96,14 +99,15 @@ impl App {
                     }
                 }
             }
-            for body in &mut self.system.bodies {
-                body.set_time(body.time + self.speed / FRAME_RATE)
-            }
+            self.system.borrow_mut().time += self.speed / FRAME_RATE;
         }
         Ok(())
     }
 
     pub fn selected_body(&self) -> &Body {
-        &self.system.bodies[self.list_state.selected().unwrap_or_default()]
+        self.system
+            .borrow()
+            .get(self.list_mapping[self.list_state.selected().unwrap_or_default()])
+            .unwrap()
     }
 }
