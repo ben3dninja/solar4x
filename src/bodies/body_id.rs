@@ -3,7 +3,7 @@ use serde::{de::Visitor, Deserialize, Deserializer};
 const ID_PREFIX: &str = "https://api.le-systeme-solaire.net/rest/bodies/";
 
 // TODO : change default id
-#[derive(Default, PartialEq, Debug, Clone)]
+#[derive(Default, PartialEq, PartialOrd, Ord, Eq, Debug, Clone, Hash)]
 pub struct BodyID(String);
 
 impl std::fmt::Display for BodyID {
