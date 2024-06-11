@@ -1,3 +1,4 @@
+pub mod ui_state;
 use ratatui::{
     layout::{Alignment, Constraint, Layout},
     style::{Color, Style, Stylize},
@@ -38,7 +39,7 @@ pub fn ui(f: &mut Frame, app: &mut App) {
                 .title(Title::from("Celestial Bodies".bold()).alignment(Alignment::Center)),
         )
         .highlight_symbol("> ");
-    f.render_stateful_widget(list, chunks[0], &mut app.list_state);
+    f.render_stateful_widget(list, chunks[0], &mut app.ui_state.list_state);
     let max_dist = system.get_max_distance() as f64;
     let (width, height) = (chunks[1].width as f64, chunks[1].height as f64);
     let min_dim = width.min(height);
