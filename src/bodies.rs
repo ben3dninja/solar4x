@@ -5,10 +5,7 @@ use std::{cell::RefCell, collections::HashMap, io::Result, mem, rc::Rc};
 
 use crate::utils::de::read_main_bodies;
 
-use self::{
-    body::{BodyInfo, UpdateState},
-    body_data::BodyData,
-};
+use self::{body::UpdateState, body_data::BodyData};
 
 pub mod body;
 pub mod body_data;
@@ -28,36 +25,22 @@ impl BodySystem {
             .collect();
         all_data.sort_by(|a, b| a.periapsis.cmp(&b.periapsis));
         let planets_data = all_data.split_off(1);
-        let mut sun_data = mem::take(&mut all_data[0]);
-        sun_data.orbiting_bodies = planets_data
-            .iter()
-            .map(|planet| planet.id.clone())
-            .collect();
-        all_data[1..]
-            .iter_mut()
-            .for_each(|planet| planet.host_body = sun_data.id.clone());
+        let sun_data = mem::take(&mut all_data[0]);
 
         let system = Rc::new(RefCell::new(BodySystem::default()));
         {
+            let sun_id = sun_data.id.clone();
             let mut mut_system = system.borrow_mut();
-            mut_system.bodies.insert(
-                sun_data.id.clone(),
-                Body::new_loner(&sun_data, Rc::clone(&system)),
-            );
+            mut_system
+                .bodies
+                .insert(sun_id, Body::new(sun_data, Rc::clone(&system)));
 
-            let planets = planets_data.iter().map(|data| {
-                (
-                    data.id.clone(),
-                    Body::new_loner(data, Rc::clone(&system)).with_host_body(sun_data.id.clone()),
-                )
-            });
-            mut_system.bodies.extend(planets.into_iter());
+            let planets = planets_data
+                .into_iter()
+                .map(|data| (data.id.clone(), Body::new(data, Rc::clone(&system))));
+            mut_system.bodies.extend(planets);
         }
         Ok(system)
-    }
-
-    pub fn number(&self) -> usize {
-        self.bodies.len()
     }
 
     pub fn get_max_distance(&self) -> i64 {
@@ -89,6 +72,13 @@ impl BodySystem {
 
     pub fn elapse_time(&mut self, dt: f64) {
         self.set_time(self.time + dt)
+    }
+
+    pub fn primary_body_id(&self) -> Option<BodyID> {
+        self.bodies
+            .values()
+            .find(|body| body.host_body.is_none())
+            .map(|body| body.id.clone())
     }
 }
 
@@ -123,5 +113,11 @@ mod tests {
             .map(Into::<BodyID>::into)
             .collect::<Vec<_>>()
         )
+    }
+
+    #[test]
+    fn test_primary_body() {
+        let system = BodySystem::simple_solar_system().unwrap();
+        assert_eq!(system.take().primary_body_id().unwrap(), "soleil".into())
     }
 }
