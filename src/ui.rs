@@ -17,9 +17,12 @@ use crate::{
 };
 
 pub fn ui(f: &mut Frame, app: &mut App) {
+    let body_ids = &app.list_mapping;
     let chunks =
         Layout::horizontal([Constraint::Percentage(25), Constraint::Fill(1)]).split(f.size());
-    let names = app.system.get_body_names();
+    let system = app.system.borrow();
+    let bodies = body_ids.iter().map(|id| system.bodies.get(id).unwrap());
+    let names: Vec<_> = bodies.clone().map(|body| &body.info.name).collect();
     let texts: Vec<Text> = vec![Text::styled(names[0], Style::default().bold())]
         .into_iter()
         .chain(
@@ -36,13 +39,11 @@ pub fn ui(f: &mut Frame, app: &mut App) {
         )
         .highlight_symbol("> ");
     f.render_stateful_widget(list, chunks[0], &mut app.list_state);
-    let max_dist = app.system.get_max_distance() as f64;
+    let max_dist = system.get_max_distance() as f64;
     let (width, height) = (chunks[1].width as f64, chunks[1].height as f64);
     let min_dim = width.min(height);
     let scale = app.zoom_level * 0.9 * min_dim / max_dist;
-    for body in &mut app.system.bodies {
-        body.update_xyz();
-    }
+
     let canvas = Canvas::default()
         .block(
             Block::bordered().title(Title::from("Space map".bold()).alignment(Alignment::Center)),
@@ -50,14 +51,14 @@ pub fn ui(f: &mut Frame, app: &mut App) {
         .x_bounds([-width / 2., width / 2.])
         .y_bounds([-height, height])
         .paint(|ctx| {
-            for body in &app.system.bodies {
-                let (x, y, _) = body.get_raw_xyz();
+            for body in bodies.clone() {
+                let (x, y, _) = body.get_xyz();
                 let (x, y) = (x as f64 * scale, y as f64 * scale);
-                let color = match body.data.body_type {
-                    _ if body == app.selected_body() => Color::White,
+                let color = match body.info.body_type {
+                    _ if body.id == app.selected_body_id() => Color::White,
                     BodyType::Star => Color::Yellow,
                     BodyType::Planet => {
-                        if body.data.apoapsis < 800000000 {
+                        if body.info.apoapsis < 800000000 {
                             Color::Blue
                         } else {
                             Color::Red
@@ -65,16 +66,16 @@ pub fn ui(f: &mut Frame, app: &mut App) {
                     }
                     _ => Color::Gray,
                 };
-                let radius = body.data.radius * scale;
+                let radius = body.info.radius * scale;
                 #[cfg(feature = "radius")]
                 let radius = scale
-                    * match body.data.body_type {
+                    * match body.info.body_type {
                         BodyType::Star => 20000000.,
                         BodyType::Planet => {
-                            if body.data.apoapsis < 800000000 {
+                            if body.info.apoapsis < 800000000 {
                                 10000000.
                             } else {
-                                100000000.
+                                50000000.
                             }
                         }
                         _ => 500000.,
@@ -89,9 +90,9 @@ pub fn ui(f: &mut Frame, app: &mut App) {
         });
     f.render_widget(canvas, chunks[1]);
     if matches!(app.current_screen, AppScreen::Info) {
-        let data = &app.selected_body().data;
+        let main_body = system.bodies.get(&app.selected_body_id()).unwrap();
         let popup_block = Block::default()
-            .title(&data.name[..])
+            .title(&main_body.info.name[..])
             .borders(Borders::ALL)
             .style(Style::default().bg(Color::DarkGray));
         let area = centered_rect(25, 25, f.size());
@@ -101,10 +102,10 @@ pub fn ui(f: &mut Frame, app: &mut App) {
             N of orbiting bodies: {}\n\
             Radius: {} km\n\
             Revolution period: {} earth days",
-            data.body_type,
-            data.orbiting_bodies.len(),
-            data.radius,
-            data.revolution_period,
+            main_body.info.body_type,
+            main_body.orbiting_bodies.len(),
+            main_body.info.radius,
+            main_body.orbit.revolution_period,
         ))
         .block(popup_block);
         f.render_widget(info, area);
