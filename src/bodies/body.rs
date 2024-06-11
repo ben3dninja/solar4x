@@ -14,27 +14,29 @@ use super::{body_data::BodyData, body_id::BodyID, BodySystem};
 
 const E_TOLERANCE: f64 = 1e-6;
 
+// pub type RefBody = Rc<RefCell<Body>>;
+
 pub struct Body<'a> {
-    id: BodyID,
-    orbit: Orbit,
-    system: Rc<RefCell<BodySystem<'a>>>,
+    pub id: BodyID,
+    pub orbit: Orbit,
+    pub system: Rc<RefCell<BodySystem>>,
     pub info: BodyInfo,
-    pub orbiting_bodies: Vec<Self>,
-    pub host_body: Option<&'a Self>,
+    pub orbiting_bodies: Vec<&'a Body<'a>>,
+    pub host_body: Option<&'a Body<'a>>,
 }
 
 // Stores orbital parameters and calculates the position in the host body's frame
 #[derive(Default)]
-struct Orbit {
+pub struct Orbit {
     // lengths in km, angles in degrees and times in days
-    eccentricity: f64,
-    semimajor_axis: i64,
-    inclination: f64,
-    long_asc_node: f64,
-    arg_periapsis: f64,
-    initial_mean_anomaly: f64,
+    pub eccentricity: f64,
+    pub semimajor_axis: i64,
+    pub inclination: f64,
+    pub long_asc_node: f64,
+    pub arg_periapsis: f64,
+    pub initial_mean_anomaly: f64,
 
-    revolution_period: f64,
+    pub revolution_period: f64,
 
     mean_anomaly: f64,
     eccentric_anomaly: f64,
@@ -47,13 +49,16 @@ struct Orbit {
     last_update_time: f64,
 }
 
+#[derive(Debug, Clone)]
 pub struct BodyInfo {
     pub name: String,
+    pub apoapsis: i64,
+    pub periapsis: i64,
     // pub mass: BigInt,
 }
 
 // State corresponding to which elements are up to date (for example if the state is M, only the mean anomaly is up to date while if it is Orb,
-// then both the mean and eccentric anomalies are up to date, along with the orbital coordinates)
+// then both the mean atand eccentric anomalies are up to date, along with the orbital coordinates)
 #[derive(Default, PartialEq, PartialOrd, Clone, Debug)]
 pub enum UpdateState {
     #[default]
@@ -138,9 +143,9 @@ impl PartialEq for Body<'_> {
 }
 
 impl<'a> Body<'a> {
-    pub fn new_loner(data: BodyData, system: Rc<RefCell<BodySystem<'a>>>) -> Self {
+    pub fn new_loner<'b>(data: &'b BodyData, system: Rc<RefCell<BodySystem>>) -> Self {
         Self {
-            id: data.id,
+            id: data.id.clone(),
             orbit: Orbit {
                 eccentricity: data.eccentricity,
                 semimajor_axis: data.semimajor_axis,
@@ -153,9 +158,25 @@ impl<'a> Body<'a> {
                 ..Default::default()
             },
             system,
-            info: BodyInfo { name: data.name },
+            info: BodyInfo {
+                name: data.name.clone(),
+                apoapsis: data.apoapsis,
+                periapsis: data.periapsis,
+            },
             orbiting_bodies: Vec::new(),
             host_body: None,
         }
+    }
+
+    pub fn with_host_body(self, host_body: &'a Body) -> Self {
+        let mut new = self;
+        new.host_body = Some(host_body);
+        new
+    }
+
+    pub fn with_orbiting_bodies(self, orbiting_bodies: Vec<&'a Body>) -> Self {
+        let mut new = self;
+        new.orbiting_bodies = orbiting_bodies;
+        new
     }
 }
