@@ -2,9 +2,9 @@ use std::fmt::Display;
 
 use serde::Deserialize;
 
-use super::body_id::BodyID;
-
 use crate::utils::de::deserialize_options;
+
+use super::body_id::BodyID;
 
 #[derive(Deserialize, Clone, Copy, Debug, PartialEq, Default)]
 pub enum BodyType {
@@ -39,8 +39,8 @@ pub struct BodyData {
     #[serde(rename(deserialize = "englishName"))]
     pub name: String,
     pub body_type: BodyType,
-    #[serde(alias = "aroundPlanet", deserialize_with = "deserialize_options")]
-    pub host_body: BodyID,
+    #[serde(alias = "aroundPlanet")]
+    pub host_body: Option<BodyID>,
     #[serde(alias = "moons", deserialize_with = "deserialize_options")]
     pub orbiting_bodies: Vec<BodyID>,
 
@@ -131,7 +131,7 @@ mod tests {
                 id: "lune".into(),
                 name: "Moon".into(),
                 body_type: BodyType::Moon,
-                host_body: "terre".into(),
+                host_body: Some("terre".into()),
                 orbiting_bodies: Vec::new(),
                 semimajor_axis: 384400,
                 eccentricity: 0.0549,
