@@ -1,16 +1,14 @@
-// use std::{
-//     cell::RefCell,
-//     rc::{Rc, Weak},
-// };
-
 use std::{cell::RefCell, rc::Rc};
 
 use nalgebra::{Vector2, Vector3};
-use num_bigint::BigInt;
 
 use crate::utils::algebra::{degs, mod_180, rads};
 
-use super::{body_data::BodyData, body_id::BodyID, BodySystem};
+use super::{
+    body_data::{BodyData, BodyType},
+    body_id::BodyID,
+    BodySystem,
+};
 
 const E_TOLERANCE: f64 = 1e-6;
 
@@ -45,15 +43,17 @@ pub struct Orbit {
     position: Vector3<i64>,
     velocity: Vector3<i64>,
 
-    update_state: UpdateState,
+    pub update_state: UpdateState,
     last_update_time: f64,
 }
 
 #[derive(Debug, Clone)]
 pub struct BodyInfo {
     pub name: String,
-    pub apoapsis: i64,
     pub periapsis: i64,
+    pub apoapsis: i64,
+    pub body_type: BodyType,
+    pub radius: f64,
     // pub mass: BigInt,
 }
 
@@ -133,6 +133,7 @@ impl Orbit {
         let z_glob = ((o.sin() * I.sin()) * x + (o.cos() * I.sin()) * y).round() as i64;
         self.position = Vector3::new(x_glob, y_glob, z_glob);
         self.update_state = UpdateState::Glob;
+        self.last_update_time = time;
     }
 }
 
@@ -162,6 +163,8 @@ impl Body {
                 name: data.name.clone(),
                 apoapsis: data.apoapsis,
                 periapsis: data.periapsis,
+                body_type: data.body_type,
+                radius: data.radius,
             },
             orbiting_bodies: Vec::new(),
             host_body: None,
@@ -178,5 +181,10 @@ impl Body {
         let mut new = self;
         new.orbiting_bodies = orbiting_bodies;
         new
+    }
+
+    pub fn get_xyz(&self) -> (i64, i64, i64) {
+        let pos = self.orbit.position;
+        (pos.x, pos.y, pos.z)
     }
 }
