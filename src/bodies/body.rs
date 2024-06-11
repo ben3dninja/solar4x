@@ -144,7 +144,7 @@ impl PartialEq for Body {
 }
 
 impl Body {
-    pub fn new_loner<'b>(data: &'b BodyData, system: Rc<RefCell<BodySystem>>) -> Self {
+    pub fn new(data: BodyData, system: Rc<RefCell<BodySystem>>) -> Self {
         Self {
             id: data.id.clone(),
             orbit: Orbit {
@@ -166,8 +166,8 @@ impl Body {
                 body_type: data.body_type,
                 radius: data.radius,
             },
-            orbiting_bodies: Vec::new(),
-            host_body: None,
+            orbiting_bodies: data.orbiting_bodies,
+            host_body: data.host_body,
         }
     }
 
