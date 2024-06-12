@@ -1,5 +1,3 @@
-use nalgebra::{SimdPartialOrd, SimdValue};
-
 use crate::bodies::body_id::BodyID;
 
 use super::App;
@@ -45,18 +43,28 @@ impl App {
         let entry = &self.listed_bodies[index];
         if entry.is_expanded {
             let deepness = entry.deepness;
-            let mut i = 1;
+            let mut i = 0;
             for next in self.listed_bodies[(index + 1)..].iter() {
+                i += 1;
                 if next.deepness == deepness {
                     break;
                 }
-                i += 1
             }
-            self.listed_bodies = self.listed_bodies.drain((index + 1)..(index + i)).collect();
+            self.listed_bodies.drain((index + 1)..(index + i + 1));
         } else {
-            let bodies = self.system.borrow().bodies[&entry.id]
+            let system = self.system.borrow();
+            let mut bodies: Vec<_> = system.bodies[&entry.id]
                 .orbiting_bodies
-                .clone();
+                .clone()
+                .into_iter()
+                .filter(|id| system.bodies.get(&id).is_some())
+                .collect();
+            bodies.sort_by(|a, b| {
+                system.bodies[a]
+                    .info
+                    .periapsis
+                    .cmp(&system.bodies[b].info.periapsis)
+            });
             let children = entry.create_children(bodies.into_iter());
             let end = self.listed_bodies.split_off(index + 1);
             self.listed_bodies.extend(children);
@@ -69,6 +77,22 @@ impl App {
 
 #[cfg(test)]
 mod tests {
+    use crate::app::App;
+
     #[test]
-    fn test_toggle_entry_expansion() {}
+    fn test_toggle_entry_expansion() {
+        let mut app = App::new().unwrap();
+        app.toggle_selection_expansion().unwrap();
+        assert_eq!(app.listed_bodies.len(), 9);
+        assert!(app.listed_bodies[0].is_expanded);
+        for i in 1..9 {
+            assert_eq!(app.listed_bodies[i].deepness, 1);
+        }
+        for i in 1..9 {
+            app.toggle_entry_expansion(i);
+        }
+        app.toggle_selection_expansion().unwrap();
+        assert_eq!(app.listed_bodies.len(), 1);
+        assert!(!app.listed_bodies[0].is_expanded);
+    }
 }

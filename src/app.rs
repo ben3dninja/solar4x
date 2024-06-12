@@ -75,11 +75,11 @@ impl App {
                                 self.speed /= 1.5;
                             }
                             KeyCode::Char('i') => self.current_screen = AppScreen::Info,
-                            KeyCode::Char('e') => self.toggle_selection_expansion()?,
+                            KeyCode::Char(' ') => self.toggle_selection_expansion()?,
                             _ => (),
                         },
                         AppScreen::Info => match event.code {
-                            KeyCode::Char('q') => self.current_screen = AppScreen::Main,
+                            KeyCode::Char('i') => self.current_screen = AppScreen::Main,
                             _ => (),
                         },
                     }
