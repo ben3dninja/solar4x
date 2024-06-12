@@ -45,7 +45,7 @@ impl App {
             let deepness = entry.deepness;
             let mut i = 0;
             for next in self.listed_bodies[(index + 1)..].iter() {
-                if next.deepness == deepness {
+                if next.deepness <= deepness {
                     break;
                 }
                 i += 1;
