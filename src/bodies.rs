@@ -1,7 +1,7 @@
 use body::Body;
 use body_data::BodyType;
 use body_id::BodyID;
-use std::{cell::RefCell, collections::HashMap, io::Result, mem, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, io::Result, rc::Rc};
 
 use crate::utils::de::read_main_bodies;
 
@@ -19,27 +19,19 @@ pub struct BodySystem {
 
 impl BodySystem {
     pub fn simple_solar_system() -> Result<Rc<RefCell<Self>>> {
-        let mut all_data: Vec<BodyData> = read_main_bodies()?
-            .into_iter()
-            .filter(|data| matches!(data.body_type, BodyType::Planet | BodyType::Star))
-            .collect();
-        all_data.sort_by(|a, b| a.periapsis.cmp(&b.periapsis));
-        let planets_data = all_data.split_off(1);
-        let sun_data = mem::take(&mut all_data[0]);
+        Self::new_system_with_filter(|data| {
+            matches!(data.body_type, BodyType::Star | BodyType::Planet)
+        })
+    }
 
+    pub fn new_system_with_filter(f: impl FnMut(&BodyData) -> bool) -> Result<Rc<RefCell<Self>>> {
+        let all_data: Vec<BodyData> = read_main_bodies()?.into_iter().filter(f).collect();
         let system = Rc::new(RefCell::new(BodySystem::default()));
-        {
-            let sun_id = sun_data.id.clone();
-            let mut mut_system = system.borrow_mut();
-            mut_system
-                .bodies
-                .insert(sun_id, Body::new(sun_data, Rc::clone(&system)));
-
-            let planets = planets_data
-                .into_iter()
-                .map(|data| (data.id.clone(), Body::new(data, Rc::clone(&system))));
-            mut_system.bodies.extend(planets);
-        }
+        let bodies: HashMap<BodyID, Body> = all_data
+            .into_iter()
+            .map(|data| (data.id.clone(), Body::new(data, Rc::clone(&system))))
+            .collect();
+        system.borrow_mut().bodies = bodies;
         Ok(system)
     }
 
