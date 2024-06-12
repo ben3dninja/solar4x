@@ -21,9 +21,7 @@ pub enum AppScreen {
 
 pub struct App {
     pub current_screen: AppScreen,
-    pub main_body: BodyID,
     pub system: Rc<RefCell<BodySystem>>,
-    pub list_mapping: Vec<BodyID>,
     pub list_state: ListState,
     pub listed_bodies: Vec<ListEntry>,
     // 1 represents the level where all the system is seen,
@@ -36,16 +34,14 @@ pub struct App {
 impl App {
     pub fn new() -> Result<Self, Box<dyn Error>> {
         let system = Rc::clone(&BodySystem::simple_solar_system()?);
-        let list_mapping = system.borrow().bodies_by_distance();
+        // let list_mapping = system.borrow().bodies_by_distance();
         let main_body = system.borrow().primary_body_id().ok_or("No primary body")?;
         Ok(Self {
             current_screen: AppScreen::Main,
-            listed_bodies: vec![ListEntry::new_main_body(main_body.clone())],
-            main_body,
+            listed_bodies: vec![ListEntry::new_main_body(main_body)],
             system,
             list_state: ListState::default().with_selected(Some(0)),
             zoom_level: 1.,
-            list_mapping,
             speed: DEFAULT_SPEED,
         })
     }
