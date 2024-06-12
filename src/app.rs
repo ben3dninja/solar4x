@@ -4,7 +4,7 @@ use std::{cell::RefCell, error::Error, io::Stdout, rc::Rc, time::Duration};
 use crossterm::event::{self, KeyCode, KeyEventKind};
 use ratatui::{backend::CrosstermBackend, widgets::ListState, Terminal};
 
-use crate::bodies::{body_id::BodyID, BodySystem};
+use crate::bodies::{body_data::BodyType, body_id::BodyID, BodySystem};
 
 use self::list::ListEntry;
 
@@ -33,7 +33,12 @@ pub struct App {
 
 impl App {
     pub fn new() -> Result<Self, Box<dyn Error>> {
-        let system = Rc::clone(&BodySystem::simple_solar_system()?);
+        let system = Rc::clone(&BodySystem::new_system_with_filter(|data| {
+            matches!(
+                data.body_type,
+                BodyType::Star | BodyType::Planet | BodyType::Moon
+            )
+        })?);
         // let list_mapping = system.borrow().bodies_by_distance();
         let main_body = system.borrow().primary_body_id().ok_or("No primary body")?;
         Ok(Self {

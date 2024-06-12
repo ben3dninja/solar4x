@@ -1,3 +1,5 @@
+use std::rc::Rc;
+
 use ratatui::{
     layout::{Alignment, Constraint, Layout, Rect},
     style::{Color, Style, Stylize},
@@ -72,7 +74,7 @@ impl App {
             .y_bounds([-height, height])
             .paint(move |ctx| {
                 for body in self.system.borrow().bodies.values() {
-                    let (x, y, _) = body.get_xyz();
+                    let (x, y, _) = body.get_absolute_xyz(Rc::clone(&self.system));
                     let (x, y) = (x as f64 * scale, y as f64 * scale);
                     let color = match body.info.body_type {
                         _ if body.id == self.selected_body_id() => Color::White,
