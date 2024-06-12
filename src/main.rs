@@ -1,4 +1,4 @@
-use std::io::{stdout, Result};
+use std::{error::Error, io::stdout};
 
 use app::App;
 use crossterm::{
@@ -10,7 +10,7 @@ mod app;
 mod bodies;
 mod ui;
 mod utils;
-fn main() -> Result<()> {
+fn main() -> Result<(), Box<dyn Error>> {
     stdout().execute(EnterAlternateScreen)?;
     enable_raw_mode()?;
     let mut tui = Terminal::new(CrosstermBackend::new(stdout()))?;
