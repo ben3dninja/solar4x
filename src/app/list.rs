@@ -45,10 +45,10 @@ impl App {
             let deepness = entry.deepness;
             let mut i = 0;
             for next in self.listed_bodies[(index + 1)..].iter() {
-                i += 1;
                 if next.deepness == deepness {
                     break;
                 }
+                i += 1;
             }
             self.listed_bodies.drain((index + 1)..(index + i + 1));
         } else {
@@ -89,6 +89,7 @@ mod tests {
             assert_eq!(app.listed_bodies[i].deepness, 1);
         }
         for i in 1..9 {
+            app.toggle_entry_expansion(i);
             app.toggle_entry_expansion(i);
         }
         app.toggle_selection_expansion().unwrap();
