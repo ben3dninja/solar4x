@@ -17,48 +17,13 @@ use crate::{
 };
 
 impl App {
-    pub fn select_next(&mut self) {
-        self.list_state.select(match self.list_state.selected() {
-            Some(i) if i == self.listed_bodies.len() - 1 => Some(i),
-            Some(i) => Some(i + 1),
-            None => Some(0),
-        })
-    }
-
-    pub fn select_previous(&mut self) {
-        self.list_state.select(match self.list_state.selected() {
-            Some(0) => Some(0),
-            Some(i) => Some(i - 1),
-            None => None,
-        })
-    }
-
     pub fn draw_ui(&mut self, f: &mut Frame) {
         let chunks =
             Layout::horizontal([Constraint::Percentage(25), Constraint::Fill(1)]).split(f.size());
         self.draw_explorer(f, chunks[0]);
         self.draw_canvas(f, chunks[1]);
         if matches!(self.current_screen, AppScreen::Info) {
-            let system = self.system.borrow();
-            let main_body = system.bodies.get(&self.selected_body_id()).unwrap();
-            let popup_block = Block::default()
-                .title(&main_body.info.name[..])
-                .borders(Borders::ALL)
-                .style(Style::default().bg(Color::DarkGray));
-            let area = centered_rect(25, 25, f.size());
-            Clear.render(area, f.buffer_mut());
-            let info = Paragraph::new(format!(
-                "Body type: {}\n\
-            N of orbiting bodies: {}\n\
-            Radius: {} km\n\
-            Revolution period: {} earth days",
-                main_body.info.body_type,
-                main_body.orbiting_bodies.len(),
-                main_body.info.radius,
-                main_body.orbit.revolution_period,
-            ))
-            .block(popup_block);
-            f.render_widget(info, area);
+            self.draw_popup(f)
         }
     }
 
@@ -66,15 +31,12 @@ impl App {
         let names: Vec<_> = self
             .listed_bodies
             .iter()
-            .map(|body| {
+            .filter_map(|entry| {
                 self.system
                     .borrow()
                     .bodies
-                    .get(body)
-                    .unwrap()
-                    .info
-                    .name
-                    .clone()
+                    .get(&entry.id)
+                    .map(|body| body.info.name.clone())
             })
             .collect();
         let texts: Vec<Text> = vec![Text::styled(names[0].clone(), Style::default().bold())]
@@ -147,5 +109,28 @@ impl App {
                 }
             });
         f.render_widget(canvas, rect);
+    }
+
+    fn draw_popup(&self, f: &mut Frame) {
+        let system = self.system.borrow();
+        let main_body = system.bodies.get(&self.selected_body_id()).unwrap();
+        let popup_block = Block::default()
+            .title(&main_body.info.name[..])
+            .borders(Borders::ALL)
+            .style(Style::default().bg(Color::DarkGray));
+        let area = centered_rect(25, 25, f.size());
+        Clear.render(area, f.buffer_mut());
+        let info = Paragraph::new(format!(
+            "Body type: {}\n\
+            N of orbiting bodies: {}\n\
+            Radius: {} km\n\
+            Revolution period: {} earth days",
+            main_body.info.body_type,
+            main_body.orbiting_bodies.len(),
+            main_body.info.radius,
+            main_body.orbit.revolution_period,
+        ))
+        .block(popup_block);
+        f.render_widget(info, area);
     }
 }
