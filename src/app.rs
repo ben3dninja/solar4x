@@ -2,6 +2,7 @@ mod list;
 use std::{cell::RefCell, error::Error, io::Stdout, rc::Rc, time::Duration};
 
 use crossterm::event::{self, KeyCode, KeyEventKind};
+use nalgebra::Vector2;
 use ratatui::{backend::CrosstermBackend, widgets::ListState, Terminal};
 
 use crate::bodies::{body_data::BodyType, body_id::BodyID, BodySystem};
@@ -12,7 +13,9 @@ type Tui = Terminal<CrosstermBackend<Stdout>>;
 
 // frame rate in fps
 const FRAME_RATE: f64 = 60.;
+// Speed in days per second
 const DEFAULT_SPEED: f64 = 10.;
+const OFFSET_STEP: i64 = 1e8 as i64;
 
 pub enum AppScreen {
     Main,
@@ -29,6 +32,8 @@ pub struct App {
     pub zoom_level: f64,
     // 1 represents 1 day / second
     pub speed: f64,
+    pub offset: Vector2<i64>,
+    pub time_switch: bool,
 }
 
 impl App {
@@ -48,6 +53,8 @@ impl App {
             list_state: ListState::default().with_selected(Some(0)),
             zoom_level: 1.,
             speed: DEFAULT_SPEED,
+            offset: Vector2::zeros(),
+            time_switch: true,
         })
     }
     pub fn run(&mut self, tui: &mut Tui) -> Result<(), Box<dyn Error>> {
@@ -59,26 +66,63 @@ impl App {
                         continue;
                     }
                     match self.current_screen {
-                        AppScreen::Main => match event.code {
-                            KeyCode::Char('q') => break,
-                            KeyCode::Down => self.select_next(),
-                            KeyCode::Up => self.select_previous(),
-                            KeyCode::Char('+') => {
-                                self.zoom_level *= 1.5;
+                        AppScreen::Main => {
+                            match event.code {
+                                KeyCode::Esc => break,
+                                KeyCode::Down => self.select_next(),
+                                KeyCode::Up => self.select_previous(),
+                                KeyCode::Char('+') => {
+                                    self.zoom_level *= 1.5;
+                                }
+                                KeyCode::Char('-') => {
+                                    self.zoom_level /= 1.5;
+                                }
+                                KeyCode::Char('>') => {
+                                    self.speed *= 1.5;
+                                }
+                                KeyCode::Char('<') => {
+                                    self.speed /= 1.5;
+                                }
+                                KeyCode::Char('i') => self.current_screen = AppScreen::Info,
+                                KeyCode::Char(' ') => self.toggle_selection_expansion()?,
+                                KeyCode::Char('w') => {
+                                    self.offset += (OFFSET_STEP as f64 / self.zoom_level).round()
+                                        as i64
+                                        * Vector2::y()
+                                }
+                                KeyCode::Char('a') => {
+                                    self.offset += (-OFFSET_STEP as f64 / self.zoom_level).round()
+                                        as i64
+                                        * Vector2::x()
+                                }
+                                KeyCode::Char('s') => {
+                                    self.offset += (-OFFSET_STEP as f64 / self.zoom_level).round()
+                                        as i64
+                                        * Vector2::y()
+                                }
+                                KeyCode::Char('d') => {
+                                    self.offset += (OFFSET_STEP as f64 / self.zoom_level).round()
+                                        as i64
+                                        * Vector2::x()
+                                }
+                                KeyCode::Char('t') => self.toggle_time_switch(),
+                                _ => {}
                             }
-                            KeyCode::Char('-') => {
-                                self.zoom_level /= 1.5;
+                            #[cfg(feature = "azerty")]
+                            match event.code {
+                                KeyCode::Char('z') => {
+                                    self.offset += (OFFSET_STEP as f64 / self.zoom_level.round())
+                                        as i64
+                                        * Vector2::y()
+                                }
+                                KeyCode::Char('q') => {
+                                    self.offset += (-OFFSET_STEP as f64 / self.zoom_level).round()
+                                        as i64
+                                        * Vector2::x()
+                                }
+                                _ => {}
                             }
-                            KeyCode::Char('>') => {
-                                self.speed *= 1.5;
-                            }
-                            KeyCode::Char('<') => {
-                                self.speed /= 1.5;
-                            }
-                            KeyCode::Char('i') => self.current_screen = AppScreen::Info,
-                            KeyCode::Char(' ') => self.toggle_selection_expansion()?,
-                            _ => (),
-                        },
+                        }
                         AppScreen::Info => match event.code {
                             KeyCode::Char('i') => self.current_screen = AppScreen::Main,
                             _ => (),
@@ -87,8 +131,10 @@ impl App {
                 }
             }
             let mut system = self.system.borrow_mut();
-            system.elapse_time(self.speed / FRAME_RATE);
-            system.update_orbits();
+            if self.time_switch {
+                system.elapse_time(self.speed / FRAME_RATE);
+                system.update_orbits();
+            }
         }
         Ok(())
     }
@@ -112,5 +158,9 @@ impl App {
             Some(0) | None => Some(0),
             Some(i) => Some(i - 1),
         })
+    }
+
+    fn toggle_time_switch(&mut self) {
+        self.time_switch = !self.time_switch
     }
 }
