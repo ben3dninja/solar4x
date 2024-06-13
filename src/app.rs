@@ -44,6 +44,7 @@ pub struct App {
     // 1 represents 1 day / second
     pub speed: f64,
     pub offset: Vector2<i64>,
+    pub focus_body: BodyID,
     pub time_switch: bool,
 
     pub tree_entries: Vec<TreeEntry>,
@@ -73,13 +74,14 @@ impl App {
         Ok(Self {
             current_screen: AppScreen::default(),
             explorer_mode: ExplorerMode::default(),
-            tree_entries: vec![TreeEntry::new_main_body(main_body)],
+            tree_entries: vec![TreeEntry::new_main_body(main_body.clone())],
             tree_state: ListState::default().with_selected(Some(0)),
             search_state: ListState::default().with_selected(Some(0)),
             system,
             zoom_level: 1.,
             speed: DEFAULT_SPEED,
             offset: Vector2::zeros(),
+            focus_body: main_body,
             time_switch: true,
             search_entries,
             search_character_index: 0,
@@ -153,6 +155,9 @@ impl App {
                                 }
                                 KeyCode::Char('t') => self.toggle_time_switch(),
                                 KeyCode::Char('/') => self.enter_search_mode(),
+                                KeyCode::Char('f') => {
+                                    self.focus_body = self.selected_body_id_tree()
+                                }
                                 _ => {}
                             }
                             #[cfg(feature = "azerty")]

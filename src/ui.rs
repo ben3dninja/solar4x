@@ -33,25 +33,19 @@ impl App {
     }
 
     fn draw_tree(&mut self, f: &mut Frame, rect: Rect) {
-        let names: Vec<_> = self
+        let texts: Vec<_> = self
             .tree_entries
             .iter()
             .filter_map(|entry| {
-                self.system
-                    .borrow()
-                    .bodies
-                    .get(&entry.id)
-                    .map(|body| body.info.name.clone())
+                self.system.borrow().bodies.get(&entry.id).map(|body| {
+                    let style = if body.id == self.focus_body {
+                        Style::default().bold()
+                    } else {
+                        Style::default()
+                    };
+                    Text::styled(body.info.name.clone(), style)
+                })
             })
-            .collect();
-        let texts: Vec<Text> = vec![Text::styled(names[0].clone(), Style::default().bold())]
-            .into_iter()
-            .chain(
-                names
-                    .into_iter()
-                    .skip(1)
-                    .map(|s| Text::styled(s, Style::default())),
-            )
             .collect();
         let list = List::new(texts)
             .block(
@@ -95,7 +89,9 @@ impl App {
         let (width, height) = (rect.width as f64, rect.height as f64);
         let min_dim = width.min(height);
         let scale = self.zoom_level * 0.9 * min_dim / max_dist;
-
+        let system = &self.system;
+        let (focusx, focusy, _) =
+            system.borrow().bodies[&self.focus_body].get_absolute_xyz(Rc::clone(system));
         let canvas = Canvas::default()
             .block(
                 Block::bordered()
@@ -106,7 +102,7 @@ impl App {
             .paint(move |ctx| {
                 for body in self.system.borrow().bodies.values() {
                     let (x, y, _) = body.get_absolute_xyz(Rc::clone(&self.system));
-                    let (x, y) = (x - self.offset.x, y - self.offset.y);
+                    let (x, y) = (x - self.offset.x - focusx, y - self.offset.y - focusy);
                     let (x, y) = (x as f64 * scale, y as f64 * scale);
                     let color = match body.info.body_type {
                         _ if body.id == self.selected_body_id_tree() => Color::White,
