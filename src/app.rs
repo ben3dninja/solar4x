@@ -93,8 +93,11 @@ impl App {
             ExplorerMode::Search => self.search_entries = self.search(&self.search_input),
             _ => {}
         }
-        let mut system = self.system.borrow_mut();
+        if self.search_state.selected().is_none() && !self.search_entries.is_empty() {
+            self.search_state.select(Some(0));
+        }
         if self.time_switch {
+            let mut system = self.system.borrow_mut();
             system.elapse_time(self.speed / FRAME_RATE);
             system.update_orbits();
         }
@@ -118,6 +121,7 @@ impl App {
                                 }
                                 KeyCode::Char('-') => {
                                     self.zoom_level /= 1.5;
+                                    self.explorer_mode = ExplorerMode::Tree
                                 }
                                 KeyCode::Char('>') => {
                                     self.speed *= 1.5;
@@ -148,9 +152,7 @@ impl App {
                                         * Vector2::x()
                                 }
                                 KeyCode::Char('t') => self.toggle_time_switch(),
-                                KeyCode::Char('/') => {
-                                    self.explorer_mode = ExplorerMode::Search;
-                                }
+                                KeyCode::Char('/') => self.enter_search_mode(),
                                 _ => {}
                             }
                             #[cfg(feature = "azerty")]
@@ -174,7 +176,7 @@ impl App {
                             KeyCode::Right => self.move_cursor_right(),
                             KeyCode::Down => self.select_next_search(),
                             KeyCode::Up => self.select_previous_search(),
-                            KeyCode::Esc => self.explorer_mode = ExplorerMode::Tree,
+                            KeyCode::Esc => self.leave_search_mode(),
                             KeyCode::Enter => self.validate_search(),
                             KeyCode::Char(char) => self.enter_char(char),
                             _ => {}
@@ -204,7 +206,7 @@ impl App {
     fn select_body(&mut self, id: &BodyID) {
         let ancestors = self.system.borrow().get_body_ancestors(id);
         for body_id in ancestors {
-            self.expand_entry_by_id(&body_id)
+            self.expand_entry_by_id(&body_id);
         }
         self.tree_state
             .select(self.tree_entries.iter().position(|entry| &entry.id == id));

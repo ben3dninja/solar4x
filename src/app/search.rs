@@ -82,13 +82,14 @@ impl App {
                     .map(|score| (body.id.clone(), score))
             })
             .collect();
-        ids_score.sort_by(|a, b| a.1.cmp(&b.1));
+        ids_score.sort_by(|a, b| a.0.cmp(&b.0));
+        ids_score.sort_by(|a, b| a.1.cmp(&b.1).reverse());
         ids_score.into_iter().map(|(id, _)| id).collect()
     }
 
     pub fn selected_body_id_search(&self) -> Option<BodyID> {
         self.search_entries
-            .get(self.tree_state.selected().unwrap_or_default())
+            .get(self.search_state.selected().unwrap_or_default())
             .cloned()
     }
 
@@ -98,5 +99,16 @@ impl App {
 
     pub fn select_previous_search(&mut self) {
         select_previous_clamp(&mut self.search_state, 0)
+    }
+
+    pub fn leave_search_mode(&mut self) {
+        self.explorer_mode = ExplorerMode::Tree;
+    }
+
+    pub fn enter_search_mode(&mut self) {
+        self.search_character_index = 0;
+        self.search_input = String::new();
+        self.search_state.select(Some(0));
+        self.explorer_mode = ExplorerMode::Search;
     }
 }
