@@ -1,7 +1,7 @@
 use body::Body;
 use body_data::BodyType;
 use body_id::BodyID;
-use std::{cell::RefCell, collections::HashMap, io::Result, rc::Rc};
+use std::{borrow::Borrow, cell::RefCell, collections::HashMap, io::Result, rc::Rc};
 
 use crate::utils::de::read_main_bodies;
 
@@ -72,13 +72,30 @@ impl BodySystem {
             .find(|body| body.host_body.is_none())
             .map(|body| body.id.clone())
     }
+
+    pub fn get_body_ancestors(&self, id: &BodyID) -> Vec<BodyID> {
+        let bodies = &self.borrow().bodies;
+        let mut ancestors = Vec::new();
+        let mut body_option = bodies.get(id);
+        let mut id = id.clone();
+        while let Some(body) = body_option {
+            if body.host_body.is_none() {
+                break;
+            }
+            id = body.host_body.as_ref().unwrap().clone();
+            body_option = self.bodies.get(&id);
+            ancestors.push(id);
+        }
+        ancestors.reverse();
+        ancestors
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use crate::bodies::body_id::BodyID;
 
-    use super::BodySystem;
+    use super::{body_data::BodyType, BodySystem};
 
     #[test]
     fn test_simple_solar_system() {
@@ -111,5 +128,20 @@ mod tests {
     fn test_primary_body() {
         let system = BodySystem::simple_solar_system().unwrap();
         assert_eq!(system.take().primary_body_id().unwrap(), "soleil".into())
+    }
+
+    #[test]
+    fn test_get_body_ancestors() {
+        let system = BodySystem::new_system_with_filter(|data| {
+            matches!(
+                data.body_type,
+                BodyType::Planet | BodyType::Star | BodyType::Moon
+            )
+        })
+        .unwrap();
+        assert_eq!(
+            system.take().get_body_ancestors(&"lune".into()),
+            vec!["soleil".into(), "terre".into()]
+        );
     }
 }
