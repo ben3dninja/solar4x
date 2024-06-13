@@ -171,18 +171,6 @@ impl Body {
         }
     }
 
-    pub fn with_host_body(self, host_body: BodyID) -> Self {
-        let mut new = self;
-        new.host_body = Some(host_body);
-        new
-    }
-
-    pub fn with_orbiting_bodies(self, orbiting_bodies: Vec<BodyID>) -> Self {
-        let mut new = self;
-        new.orbiting_bodies = orbiting_bodies;
-        new
-    }
-
     pub fn get_xyz(&self) -> (i64, i64, i64) {
         let pos = self.orbit.position;
         (pos.x, pos.y, pos.z)
@@ -191,7 +179,7 @@ impl Body {
     pub fn get_absolute_xyz(&self, system: Rc<RefCell<BodySystem>>) -> (i64, i64, i64) {
         let pos = self.get_xyz();
         if let Some(host_id) = &self.host_body {
-            if let Some(host_body) = system.borrow().bodies.get(&host_id) {
+            if let Some(host_body) = system.borrow().bodies.get(host_id) {
                 let (x, y, z) = pos;
                 let (a, b, c) = host_body.get_absolute_xyz(Rc::clone(&system));
                 return (x + a, y + b, z + c);
