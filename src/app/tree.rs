@@ -84,6 +84,9 @@ impl App {
 
     pub fn collapse_entry(&mut self, index: usize) {
         let entry = &self.tree_entries[index];
+        if !entry.is_expanded {
+            return;
+        }
         let deepness = entry.deepness;
         let mut i = 0;
         for next in self.tree_entries[(index + 1)..].iter() {
