@@ -57,7 +57,7 @@ impl App {
                 .orbiting_bodies
                 .clone()
                 .into_iter()
-                .filter(|id| system.bodies.get(&id).is_some())
+                .filter(|id| system.bodies.contains_key(id))
                 .collect();
             bodies.sort_by(|a, b| {
                 system.bodies[a]
