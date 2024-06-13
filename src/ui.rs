@@ -13,7 +13,7 @@ use ratatui::{
 };
 
 use crate::{
-    app::{App, AppScreen},
+    app::{App, AppScreen, ExplorerMode},
     bodies::body_data::BodyType,
     utils::ui::centered_rect,
 };
@@ -22,16 +22,19 @@ impl App {
     pub fn draw_ui(&mut self, f: &mut Frame) {
         let chunks =
             Layout::horizontal([Constraint::Percentage(25), Constraint::Fill(1)]).split(f.size());
-        self.draw_explorer(f, chunks[0]);
+        match self.explorer_mode {
+            ExplorerMode::Tree => self.draw_tree(f, chunks[0]),
+            ExplorerMode::Search => self.draw_search(f, chunks[0]),
+        }
         self.draw_canvas(f, chunks[1]);
         if matches!(self.current_screen, AppScreen::Info) {
             self.draw_popup(f)
         }
     }
 
-    fn draw_explorer(&mut self, f: &mut Frame, rect: Rect) {
+    fn draw_tree(&mut self, f: &mut Frame, rect: Rect) {
         let names: Vec<_> = self
-            .listed_bodies
+            .tree_entries
             .iter()
             .filter_map(|entry| {
                 self.system
@@ -53,10 +56,38 @@ impl App {
         let list = List::new(texts)
             .block(
                 Block::bordered()
-                    .title(Title::from("Celestial Bodies".bold()).alignment(Alignment::Center)),
+                    .title(Title::from("Tree view".bold()).alignment(Alignment::Center)),
             )
             .highlight_symbol("> ");
-        f.render_stateful_widget(list, rect, &mut self.list_state);
+        f.render_stateful_widget(list, rect, &mut self.tree_state);
+    }
+
+    fn draw_search(&mut self, f: &mut Frame, rect: Rect) {
+        let names: Vec<_> = self
+            .search_entries
+            .iter()
+            .filter_map(|entry| {
+                self.system
+                    .borrow()
+                    .bodies
+                    .get(entry)
+                    .map(|body| body.info.name.clone())
+            })
+            .collect();
+        let texts: Vec<Text> = names
+            .into_iter()
+            .map(|s| Text::styled(s, Style::default()))
+            .collect();
+        let search_bar = Paragraph::new(&self.search_input[..]).block(Block::bordered());
+        let list = List::new(texts)
+            .block(
+                Block::bordered()
+                    .title(Title::from("Search view".bold()).alignment(Alignment::Center)),
+            )
+            .highlight_symbol("> ");
+        let chunks = Layout::vertical([Constraint::Length(3), Constraint::Fill(1)]).split(rect);
+        f.render_widget(search_bar, chunks[0]);
+        f.render_stateful_widget(list, chunks[1], &mut self.search_state);
     }
 
     fn draw_canvas(&self, f: &mut Frame, rect: Rect) {
@@ -78,7 +109,7 @@ impl App {
                     let (x, y) = (x - self.offset.x, y - self.offset.y);
                     let (x, y) = (x as f64 * scale, y as f64 * scale);
                     let color = match body.info.body_type {
-                        _ if body.id == self.selected_body_id() => Color::White,
+                        _ if body.id == self.selected_body_id_tree() => Color::White,
                         BodyType::Star => Color::Yellow,
                         BodyType::Planet => {
                             if body.info.apoapsis < 800000000 {
@@ -116,7 +147,7 @@ impl App {
 
     fn draw_popup(&self, f: &mut Frame) {
         let system = self.system.borrow();
-        let main_body = system.bodies.get(&self.selected_body_id()).unwrap();
+        let main_body = system.bodies.get(&self.selected_body_id_tree()).unwrap();
         let popup_block = Block::default()
             .title(&main_body.info.name[..])
             .borders(Borders::ALL)
