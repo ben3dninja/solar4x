@@ -3,7 +3,7 @@ use std::rc::Rc;
 use ratatui::{
     layout::{Alignment, Constraint, Layout, Rect},
     style::{Color, Style, Stylize},
-    text::Text,
+    text::{Line, Span, Text},
     widgets::{
         block::Title,
         canvas::{Canvas, Circle},
@@ -33,17 +33,28 @@ impl App {
     }
 
     fn draw_tree(&mut self, f: &mut Frame, rect: Rect) {
-        let texts: Vec<_> = self
+        let texts: Vec<Line<'_>> = self
             .tree_entries
             .iter()
-            .filter_map(|entry| {
+            .enumerate()
+            .filter_map(|(index, entry)| {
                 self.system.borrow().bodies.get(&entry.id).map(|body| {
                     let style = if body.id == self.focus_body {
                         Style::default().bold()
                     } else {
                         Style::default()
                     };
-                    Text::styled(body.info.name.clone(), style)
+                    let deepness_marker = Span::from(if entry.deepness == 0 {
+                        String::new()
+                    } else {
+                        "│ ".repeat(entry.deepness.saturating_sub(1))
+                            + if self.entry_is_last_child(index).unwrap() {
+                                "└─"
+                            } else {
+                                "├─"
+                            }
+                    });
+                    vec![deepness_marker, Span::styled(body.info.name.clone(), style)].into()
                 })
             })
             .collect();

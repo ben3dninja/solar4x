@@ -112,6 +112,16 @@ impl App {
             .id
             .clone()
     }
+
+    pub fn entry_is_last_child(&self, index: usize) -> Option<bool> {
+        if self.tree_entries.get(index + 1).is_none() {
+            Some(true)
+        } else {
+            self.tree_entries
+                .get(index)
+                .map(|entry1| entry1.deepness > self.tree_entries[index + 1].deepness)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -134,5 +144,15 @@ mod tests {
         app.toggle_selection_expansion().unwrap();
         assert_eq!(app.tree_entries.len(), 1);
         assert!(!app.tree_entries[0].is_expanded);
+    }
+
+    #[test]
+    fn test_entry_is_last_child() {
+        let mut app = App::new().unwrap();
+        app.toggle_selection_expansion().unwrap();
+        for i in 0..8 {
+            assert!(!app.entry_is_last_child(i).unwrap());
+        }
+        assert!(app.entry_is_last_child(8).unwrap())
     }
 }
