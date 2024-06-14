@@ -8,7 +8,11 @@ use fuzzy_matcher::skim::SkimMatcherV2;
 use nalgebra::Vector2;
 use ratatui::{backend::CrosstermBackend, widgets::ListState, Terminal};
 
-use crate::bodies::{body_data::BodyType, body_id::BodyID, BodySystem};
+use crate::bodies::{
+    body_data::{BodyData, BodyType},
+    body_id::BodyID,
+    BodySystem,
+};
 
 use self::tree::TreeEntry;
 
@@ -62,13 +66,8 @@ enum AppMessage {
 }
 
 impl App {
-    pub fn new() -> Result<Self, Box<dyn Error>> {
-        let system = Rc::clone(&BodySystem::new_system_with_filter(|data| {
-            matches!(
-                data.body_type,
-                BodyType::Star | BodyType::Planet | BodyType::Moon
-            )
-        })?);
+    pub fn new_from_filter(f: impl FnMut(&BodyData) -> bool) -> Result<Self, Box<dyn Error>> {
+        let system = Rc::clone(&BodySystem::new_system_with_filter(f)?);
         let search_entries: Vec<_> = system.borrow().bodies.keys().map(Clone::clone).collect();
         let main_body = system.borrow().primary_body_id().ok_or("No primary body")?;
         Ok(Self {
@@ -88,6 +87,21 @@ impl App {
             search_input: String::new(),
             search_matcher: SkimMatcherV2::default(),
         })
+    }
+
+    pub fn new_simple() -> Result<Self, Box<dyn Error>> {
+        Self::new_from_filter(|data| matches!(data.body_type, BodyType::Planet | BodyType::Star))
+    }
+    pub fn new_moons() -> Result<Self, Box<dyn Error>> {
+        Self::new_from_filter(|data| {
+            matches!(
+                data.body_type,
+                BodyType::Planet | BodyType::Star | BodyType::Moon
+            )
+        })
+    }
+    pub fn new_complete() -> Result<Self, Box<dyn Error>> {
+        Self::new_from_filter(|_| true)
     }
 
     fn run_logic(&mut self) {
@@ -228,20 +242,8 @@ mod tests {
 
     #[test]
     fn test_select_body() {
-        let mut app = App::new().unwrap();
+        let mut app = App::new_simple().unwrap();
         app.select_body(&"terre".into());
         assert_eq!(app.selected_body_id_tree(), "terre".into())
-    }
-
-    #[test]
-    fn test_search() {
-        let mut app = App::new().unwrap();
-        app.toggle_selection_expansion().unwrap();
-        app.select_next_tree();
-        app.explorer_mode = ExplorerMode::Search;
-        app.search_input = "Moo".into();
-        app.run_logic();
-        app.validate_search();
-        assert_eq!(app.selected_body_id_tree(), "lune".into())
     }
 }

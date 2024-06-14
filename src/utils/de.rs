@@ -2,7 +2,7 @@ use std::{fs::File, io::Read};
 
 use serde::{Deserialize, Deserializer};
 
-use crate::bodies::body_data::{BodyData, BodyType};
+use crate::bodies::body_data::BodyData;
 
 const MAIN_OBJECT_FILE_PATH: &str = "main_objects.json";
 const SUN_ID: &str = "soleil";
@@ -34,7 +34,7 @@ fn fix_bodies(mut bodies: Vec<BodyData>) -> std::io::Result<Vec<BodyData>> {
         .ok_or(std::io::Error::other("no sun"))?
         .orbiting_bodies = bodies
         .iter()
-        .filter(|data| matches!(data.body_type, BodyType::Planet))
+        .filter(|data| data.host_body.is_none() && data.id != SUN_ID.into())
         .map(|planet| planet.id.clone())
         .collect();
     bodies
@@ -61,7 +61,6 @@ mod tests {
         let bodies = read_main_bodies().unwrap();
         let sun = bodies.iter().find(|data| data.id == SUN_ID.into()).unwrap();
         assert!(sun.host_body.is_none());
-        assert_eq!(sun.orbiting_bodies.len(), 8);
         for planet in bodies
             .iter()
             .filter(|data| matches!(data.body_type, BodyType::Planet))

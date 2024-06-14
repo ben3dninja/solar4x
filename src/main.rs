@@ -15,7 +15,10 @@ fn main() -> Result<(), Box<dyn Error>> {
     enable_raw_mode()?;
     let mut tui = Terminal::new(CrosstermBackend::new(stdout()))?;
 
-    let res = App::new()?.run(&mut tui);
+    #[cfg(not(feature = "asteroids"))]
+    let res = App::new_moons()?.run(&mut tui);
+    #[cfg(feature = "asteroids")]
+    let res = App::new_complete()?.run(&mut tui);
 
     disable_raw_mode()?;
     stdout().execute(LeaveAlternateScreen)?;

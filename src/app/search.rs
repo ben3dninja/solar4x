@@ -112,3 +112,20 @@ impl App {
         self.explorer_mode = ExplorerMode::Search;
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::app::{App, ExplorerMode};
+
+    #[test]
+    fn test_search() {
+        let mut app = App::new_moons().unwrap();
+        app.toggle_selection_expansion().unwrap();
+        app.select_next_tree();
+        app.explorer_mode = ExplorerMode::Search;
+        app.search_input = "Moo".into();
+        app.run_logic();
+        app.validate_search();
+        assert_eq!(app.selected_body_id_tree(), "lune".into())
+    }
+}
