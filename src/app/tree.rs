@@ -71,9 +71,8 @@ impl App {
             .collect();
         bodies.sort_by(|a, b| {
             system.bodies[a]
-                .info
-                .periapsis
-                .cmp(&system.bodies[b].info.periapsis)
+                .mean_distance()
+                .cmp(&system.bodies[b].mean_distance())
         });
         let children = entry.create_children(bodies.into_iter());
         let end = self.tree_entries.split_off(index + 1);
@@ -130,7 +129,7 @@ mod tests {
 
     #[test]
     fn test_toggle_entry_expansion() {
-        let mut app = App::new().unwrap();
+        let mut app = App::new_simple().unwrap();
         app.toggle_selection_expansion().unwrap();
         assert_eq!(app.tree_entries.len(), 9);
         assert!(app.tree_entries[0].is_expanded);
@@ -148,7 +147,7 @@ mod tests {
 
     #[test]
     fn test_entry_is_last_child() {
-        let mut app = App::new().unwrap();
+        let mut app = App::new_simple().unwrap();
         app.toggle_selection_expansion().unwrap();
         for i in 0..8 {
             assert!(!app.entry_is_last_child(i).unwrap());

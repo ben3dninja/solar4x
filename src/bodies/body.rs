@@ -187,4 +187,8 @@ impl Body {
         }
         pos
     }
+
+    pub fn mean_distance(&self) -> i64 {
+        (self.info.periapsis + self.info.apoapsis) / 2
+    }
 }

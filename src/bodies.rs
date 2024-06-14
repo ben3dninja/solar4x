@@ -43,12 +43,6 @@ impl BodySystem {
             .unwrap()
     }
 
-    pub fn bodies_by_distance(&self) -> Vec<BodyID> {
-        let mut list: Vec<&Body> = self.bodies.values().collect();
-        list.sort_by(|a, b| a.info.periapsis.cmp(&b.info.periapsis));
-        list.iter().map(|body| body.id.clone()).collect()
-    }
-
     pub fn update_orbits(&mut self) {
         self.bodies
             .values_mut()
@@ -93,7 +87,6 @@ impl BodySystem {
 
 #[cfg(test)]
 mod tests {
-    use crate::bodies::body_id::BodyID;
 
     use super::{body_data::BodyType, BodySystem};
 
@@ -107,21 +100,6 @@ mod tests {
     fn test_max_distance() {
         let system = BodySystem::simple_solar_system().unwrap();
         assert_eq!(system.take().get_max_distance(), 4537039826)
-    }
-
-    #[test]
-    fn test_bodies_by_distance() {
-        let system = BodySystem::simple_solar_system().unwrap();
-        assert_eq!(
-            system.take().bodies_by_distance(),
-            vec![
-                "soleil", "mercure", "venus", "terre", "mars", "jupiter", "saturne", "uranus",
-                "neptune"
-            ]
-            .into_iter()
-            .map(Into::<BodyID>::into)
-            .collect::<Vec<_>>()
-        )
     }
 
     #[test]
