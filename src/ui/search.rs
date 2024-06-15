@@ -5,10 +5,10 @@ use crate::{
     utils::list::{select_next_clamp, select_previous_clamp},
 };
 
-use super::{App, ExplorerMode};
+use super::{ExplorerMode, UiState};
 
 // Code from https://ratatui.rs/examples/apps/user_input/
-impl App {
+impl UiState {
     pub fn move_cursor_left(&mut self) {
         let cursor_moved_left = self.search_character_index.saturating_sub(1);
         self.search_character_index = self.clamp_cursor(cursor_moved_left);
@@ -72,14 +72,13 @@ impl App {
 
     pub fn search(&self, pattern: &str) -> Vec<BodyID> {
         let mut ids_score: Vec<_> = self
-            .system
-            .borrow()
+            .shared_info
             .bodies
             .values()
             .filter_map(|body| {
                 self.search_matcher
-                    .fuzzy_match(&body.info.name, pattern)
-                    .map(|score| (body.id.clone(), score))
+                    .fuzzy_match(&body.name, pattern)
+                    .map(|score| (body.id, score))
             })
             .collect();
         ids_score.sort_by(|a, b| a.0.cmp(&b.0));
@@ -115,17 +114,18 @@ impl App {
 
 #[cfg(test)]
 mod tests {
-    use crate::app::{App, ExplorerMode};
+    use crate::{app::App, ui::ExplorerMode};
 
     #[test]
     fn test_search() {
-        let mut app = App::new_moons().unwrap();
-        app.toggle_selection_expansion().unwrap();
-        app.select_next_tree();
-        app.explorer_mode = ExplorerMode::Search;
-        app.search_input = "Moo".into();
-        app.run_logic();
-        app.validate_search();
+        let mut app = App::new_moons(true).unwrap();
+        let ui = app.ui;
+        ui.toggle_selection_expansion().unwrap();
+        ui.select_next_tree();
+        ui.explorer_mode = ExplorerMode::Search;
+        ui.search_input = "Moo".into();
+        ui.run_logic();
+        ui.validate_search();
         assert_eq!(app.selected_body_id_tree(), "lune".into())
     }
 }

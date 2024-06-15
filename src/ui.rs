@@ -1,177 +1,133 @@
-use std::rc::Rc;
+mod draw;
+pub mod events;
+mod search;
+mod tree;
 
-use ratatui::{
-    layout::{Alignment, Constraint, Layout, Rect},
-    style::{Color, Style, Stylize},
-    text::{Line, Span, Text},
-    widgets::{
-        block::Title,
-        canvas::{Canvas, Circle},
-        Block, Borders, Clear, List, Paragraph, Widget,
-    },
-    Frame,
+use std::{
+    io::{stdout, Result, Stdout},
+    sync::{Arc, Mutex},
 };
 
 use crate::{
-    app::{App, AppScreen, ExplorerMode},
-    bodies::body_data::BodyType,
-    utils::ui::centered_rect,
+    app::{GlobalMap, SystemInfo},
+    bodies::body_id::BodyID,
 };
+use crossterm::{
+    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
+    ExecutableCommand,
+};
+use fuzzy_matcher::skim::SkimMatcherV2;
+use nalgebra::Vector2;
+use ratatui::{backend::CrosstermBackend, widgets::ListState, Terminal};
 
-impl App {
-    pub fn draw_ui(&mut self, f: &mut Frame) {
-        let chunks =
-            Layout::horizontal([Constraint::Percentage(25), Constraint::Fill(1)]).split(f.size());
+use self::tree::TreeEntry;
+
+const OFFSET_STEP: i64 = 1e8 as i64;
+
+pub struct UiState {
+    pub current_screen: AppScreen,
+    pub explorer_mode: ExplorerMode,
+    // 1 represents the level where all the system is seen,
+    // higher values mean more zoom
+    zoom_level: f64,
+    offset: Vector2<i64>,
+    focus_body: BodyID,
+    tree_entries: Vec<TreeEntry>,
+    tree_state: ListState,
+    search_entries: Vec<BodyID>,
+    search_state: ListState,
+    search_character_index: usize,
+    search_input: String,
+    search_matcher: SkimMatcherV2,
+    shared_info: Arc<SystemInfo>,
+    global_map: Arc<Mutex<GlobalMap>>,
+}
+
+#[derive(Default)]
+pub enum AppScreen {
+    #[default]
+    Main,
+    Info,
+}
+
+#[derive(Default)]
+pub enum ExplorerMode {
+    #[default]
+    Tree,
+    Search,
+}
+
+pub type Tui = Terminal<CrosstermBackend<Stdout>>;
+
+impl UiState {
+    pub fn new(shared_info: Arc<SystemInfo>, global_map: Arc<Mutex<GlobalMap>>) -> Result<Self> {
+        let search_entries: Vec<BodyID> = shared_info.bodies.keys().cloned().collect();
+        let main_body = shared_info.primary_body;
+        Ok(Self {
+            current_screen: AppScreen::default(),
+            explorer_mode: ExplorerMode::default(),
+            tree_entries: vec![TreeEntry::new_main_body(main_body.clone())],
+            tree_state: ListState::default().with_selected(Some(0)),
+            search_state: ListState::default().with_selected(Some(0)),
+            zoom_level: 1.,
+            offset: Vector2::zeros(),
+            focus_body: main_body,
+            search_entries,
+            search_character_index: 0,
+            search_input: String::new(),
+            search_matcher: SkimMatcherV2::default(),
+            shared_info,
+            global_map,
+        })
+    }
+
+    pub fn render(&mut self, tui: &mut Tui) -> Result<()> {
         match self.explorer_mode {
-            ExplorerMode::Tree => self.draw_tree(f, chunks[0]),
-            ExplorerMode::Search => self.draw_search(f, chunks[0]),
+            ExplorerMode::Search => self.search_entries = self.search(&self.search_input),
+            _ => {}
         }
-        self.draw_canvas(f, chunks[1]);
-        if matches!(self.current_screen, AppScreen::Info) {
-            self.draw_popup(f)
+        if self.search_state.selected().is_none() && !self.search_entries.is_empty() {
+            self.search_state.select(Some(0));
+        }
+        tui.draw(|frame| self.draw_ui(frame))?;
+        Ok(())
+    }
+
+    pub fn setup_tui() -> Result<Tui> {
+        stdout().execute(EnterAlternateScreen)?;
+        enable_raw_mode()?;
+        Terminal::new(CrosstermBackend::new(stdout()))
+    }
+
+    pub fn reset_tui() -> Result<()> {
+        disable_raw_mode()?;
+        stdout().execute(LeaveAlternateScreen)?;
+        Ok(())
+    }
+
+    fn select_body(&mut self, id: &BodyID) {
+        let ancestors = self.system.borrow().get_body_ancestors(id);
+        for body_id in ancestors {
+            self.expand_entry_by_id(&body_id);
+        }
+        self.tree_state
+            .select(self.tree_entries.iter().position(|entry| &entry.id == id));
+    }
+    fn autoscale(&mut self) {
+        let bodies = self.shared_info.bodies;
+        if let Some(body) = bodies.get(&self.focus_body) {
+            if let Some(max_dist) = body
+                .orbiting_bodies
+                .iter()
+                .map(|id| bodies.get(id).map_or(0, |body| body.semimajor_axis))
+                .max()
+            {
+                self.zoom_level = self.shared_info.get_max_distance() as f64 / (max_dist as f64);
+            }
         }
     }
+}
 
-    fn draw_tree(&mut self, f: &mut Frame, rect: Rect) {
-        let texts: Vec<Line<'_>> = self
-            .tree_entries
-            .iter()
-            .enumerate()
-            .filter_map(|(index, entry)| {
-                self.system.borrow().bodies.get(&entry.id).map(|body| {
-                    let style = if body.id == self.focus_body {
-                        Style::default().bold()
-                    } else {
-                        Style::default()
-                    };
-                    let deepness_marker = Span::from(if entry.deepness == 0 {
-                        String::new()
-                    } else {
-                        "│ ".repeat(entry.deepness.saturating_sub(1))
-                            + if self.entry_is_last_child(index).unwrap() {
-                                "└─"
-                            } else {
-                                "├─"
-                            }
-                    });
-                    vec![deepness_marker, Span::styled(body.info.name.clone(), style)].into()
-                })
-            })
-            .collect();
-        let list = List::new(texts)
-            .block(
-                Block::bordered()
-                    .title(Title::from("Tree view".bold()).alignment(Alignment::Center)),
-            )
-            .highlight_symbol("> ");
-        f.render_stateful_widget(list, rect, &mut self.tree_state);
-    }
-
-    fn draw_search(&mut self, f: &mut Frame, rect: Rect) {
-        let names: Vec<_> = self
-            .search_entries
-            .iter()
-            .filter_map(|entry| {
-                self.system
-                    .borrow()
-                    .bodies
-                    .get(entry)
-                    .map(|body| body.info.name.clone())
-            })
-            .collect();
-        let texts: Vec<Text> = names
-            .into_iter()
-            .map(|s| Text::styled(s, Style::default()))
-            .collect();
-        let search_bar = Paragraph::new(&self.search_input[..]).block(Block::bordered());
-        let list = List::new(texts)
-            .block(
-                Block::bordered()
-                    .title(Title::from("Search view".bold()).alignment(Alignment::Center)),
-            )
-            .highlight_symbol("> ");
-        let chunks = Layout::vertical([Constraint::Length(3), Constraint::Fill(1)]).split(rect);
-        f.render_widget(search_bar, chunks[0]);
-        f.render_stateful_widget(list, chunks[1], &mut self.search_state);
-    }
-
-    fn draw_canvas(&self, f: &mut Frame, rect: Rect) {
-        let max_dist = self.system.borrow().get_max_distance() as f64;
-        let (width, height) = (rect.width as f64, rect.height as f64);
-        let min_dim = width.min(height);
-        let scale = self.zoom_level * 0.9 * min_dim / max_dist;
-        let system = &self.system;
-        let (focusx, focusy, _) =
-            system.borrow().bodies[&self.focus_body].get_absolute_xyz(Rc::clone(system));
-        let canvas = Canvas::default()
-            .block(
-                Block::bordered()
-                    .title(Title::from("Space map".bold()).alignment(Alignment::Center)),
-            )
-            .x_bounds([-width / 2., width / 2.])
-            .y_bounds([-height, height])
-            .paint(move |ctx| {
-                for body in self.system.borrow().bodies.values() {
-                    let (x, y, _) = body.get_absolute_xyz(Rc::clone(&self.system));
-                    let (x, y) = (x - self.offset.x - focusx, y - self.offset.y - focusy);
-                    let (x, y) = (x as f64 * scale, y as f64 * scale);
-                    let color = match body.info.body_type {
-                        _ if body.id == self.selected_body_id_tree() => Color::White,
-                        BodyType::Star => Color::Yellow,
-                        BodyType::Planet => {
-                            // if body.info.apoapsis < 800000000 {
-                            Color::Blue
-                            // } else {
-                            // Color::Red
-                            // }
-                        }
-                        _ => Color::Gray,
-                    };
-                    let radius = body.info.radius * scale;
-                    #[cfg(feature = "radius")]
-                    let radius = scale
-                        * match body.info.body_type {
-                            BodyType::Star => 20000000.,
-                            BodyType::Planet => {
-                                if body.info.apoapsis < 800000000 {
-                                    10000000.
-                                } else {
-                                    50000000.
-                                }
-                            }
-                            _ => 500000.,
-                        };
-                    ctx.draw(&Circle {
-                        x,
-                        y,
-                        radius,
-                        color,
-                    })
-                }
-            });
-        f.render_widget(canvas, rect);
-    }
-
-    fn draw_popup(&self, f: &mut Frame) {
-        let system = self.system.borrow();
-        let main_body = system.bodies.get(&self.selected_body_id_tree()).unwrap();
-        let popup_block = Block::default()
-            .title(&main_body.info.name[..])
-            .borders(Borders::ALL)
-            .style(Style::default().bg(Color::DarkGray));
-        let area = centered_rect(25, 25, f.size());
-        Clear.render(area, f.buffer_mut());
-        let info = Paragraph::new(format!(
-            "Body type: {}\n\
-            N of orbiting bodies: {}\n\
-            Radius: {} km\n\
-            Revolution period: {} earth days",
-            main_body.info.body_type,
-            main_body.orbiting_bodies.len(),
-            main_body.info.radius,
-            main_body.orbit.revolution_period,
-        ))
-        .block(popup_block);
-        f.render_widget(info, area);
-    }
+impl Drop for UiState {
+    fn drop(&mut self) {}
 }

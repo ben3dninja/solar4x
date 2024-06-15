@@ -4,57 +4,47 @@ use nalgebra::{Vector2, Vector3};
 
 use crate::utils::algebra::{degs, mod_180, rads};
 
-use super::{
-    body_data::{BodyData, BodyType},
-    body_id::BodyID,
-    BodySystem,
-};
+use super::{body_data::BodyData, BodySystem};
 
 const E_TOLERANCE: f64 = 1e-6;
 
-// pub type RefBody = Rc<RefCell<Body>>;
-
-pub struct Body {
-    pub id: BodyID,
-    pub orbit: Orbit,
-    pub system: Rc<RefCell<BodySystem>>,
-    pub info: BodyInfo,
-    pub orbiting_bodies: Vec<BodyID>,
-    pub host_body: Option<BodyID>,
-}
-
 // Stores orbital parameters and calculates the position in the host body's frame
 #[derive(Default)]
-pub struct Orbit {
+pub struct Body {
     // lengths in km, angles in degrees and times in days
-    pub eccentricity: f64,
-    pub semimajor_axis: i64,
-    pub inclination: f64,
-    pub long_asc_node: f64,
-    pub arg_periapsis: f64,
-    pub initial_mean_anomaly: f64,
-
-    pub revolution_period: f64,
+    eccentricity: f64,
+    semimajor_axis: i64,
+    inclination: f64,
+    long_asc_node: f64,
+    arg_periapsis: f64,
+    initial_mean_anomaly: f64,
+    revolution_period: f64,
 
     mean_anomaly: f64,
     eccentric_anomaly: f64,
     orbital_position: Vector2<i64>,
     orbital_velocity: Vector2<i64>,
-    position: Vector3<i64>,
-    velocity: Vector3<i64>,
+    pub position: Vector3<i64>,
+    pub velocity: Vector3<i64>,
 
     pub update_state: UpdateState,
     last_update_time: f64,
 }
 
-#[derive(Debug, Clone)]
-pub struct BodyInfo {
-    pub name: String,
-    pub periapsis: i64,
-    pub apoapsis: i64,
-    pub body_type: BodyType,
-    pub radius: f64,
-    // pub mass: BigInt,
+impl From<&BodyData> for Body {
+    fn from(data: &BodyData) -> Self {
+        Self {
+            eccentricity: data.eccentricity,
+            semimajor_axis: data.semimajor_axis,
+            inclination: data.inclination,
+            long_asc_node: data.long_asc_node,
+            arg_periapsis: data.arg_periapsis,
+            initial_mean_anomaly: data.initial_mean_anomaly,
+            revolution_period: data.revolution_period,
+            mean_anomaly: data.initial_mean_anomaly,
+            ..Default::default()
+        }
+    }
 }
 
 // State corresponding to which elements are up to date (for example if the state is M, only the mean anomaly is up to date while if it is Orb,
@@ -71,7 +61,7 @@ pub enum UpdateState {
 
 // see https://ssd.jpl.nasa.gov/planets/approx_pos.html
 #[allow(non_snake_case)]
-impl Orbit {
+impl Body {
     fn update_M(&mut self, time: f64) {
         self.mean_anomaly =
             mod_180(self.initial_mean_anomaly + 360. * time / self.revolution_period);
@@ -137,42 +127,9 @@ impl Orbit {
     }
 }
 
-impl PartialEq for Body {
-    fn eq(&self, other: &Self) -> bool {
-        self.id == other.id
-    }
-}
-
 impl Body {
-    pub fn new(data: BodyData, system: Rc<RefCell<BodySystem>>) -> Self {
-        Self {
-            id: data.id.clone(),
-            orbit: Orbit {
-                eccentricity: data.eccentricity,
-                semimajor_axis: data.semimajor_axis,
-                inclination: data.inclination,
-                long_asc_node: data.long_asc_node,
-                arg_periapsis: data.arg_periapsis,
-                initial_mean_anomaly: data.initial_mean_anomaly,
-                revolution_period: data.revolution_period,
-                mean_anomaly: data.initial_mean_anomaly,
-                ..Default::default()
-            },
-            system,
-            info: BodyInfo {
-                name: data.name.clone(),
-                apoapsis: data.apoapsis,
-                periapsis: data.periapsis,
-                body_type: data.body_type,
-                radius: data.radius,
-            },
-            orbiting_bodies: data.orbiting_bodies,
-            host_body: data.host_body,
-        }
-    }
-
     pub fn get_xyz(&self) -> (i64, i64, i64) {
-        let pos = self.orbit.position;
+        let pos = self.position;
         (pos.x, pos.y, pos.z)
     }
 
@@ -190,6 +147,6 @@ impl Body {
 
     pub fn mean_distance(&self) -> i64 {
         // (self.info.periapsis + self.info.apoapsis) / 2
-        self.orbit.semimajor_axis
+        self.semimajor_axis
     }
 }
