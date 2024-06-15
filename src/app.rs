@@ -172,6 +172,7 @@ impl App {
                                 KeyCode::Char('f') => {
                                     self.focus_body = self.selected_body_id_tree()
                                 }
+                                KeyCode::Char('x') => self.autoscale(),
                                 _ => {}
                             }
                             #[cfg(feature = "azerty")]
@@ -234,11 +235,25 @@ impl App {
     fn toggle_time_switch(&mut self) {
         self.time_switch = !self.time_switch
     }
+
+    fn autoscale(&mut self) {
+        let system = self.system.borrow();
+        if let Some(body) = system.bodies.get(&self.focus_body) {
+            if let Some(max_apo) = body
+                .orbiting_bodies
+                .iter()
+                .map(|id| system.bodies.get(id).map_or(0, |body| body.info.apoapsis))
+                .max()
+            {
+                self.zoom_level = system.get_max_distance() as f64 / (max_apo as f64);
+            }
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{App, ExplorerMode};
+    use super::App;
 
     #[test]
     fn test_select_body() {
