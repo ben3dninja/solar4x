@@ -8,19 +8,14 @@ use crossterm::{
 use ratatui::{backend::CrosstermBackend, Terminal};
 mod app;
 mod bodies;
+mod engine;
 mod ui;
 mod utils;
 fn main() -> Result<(), Box<dyn Error>> {
-    stdout().execute(EnterAlternateScreen)?;
-    enable_raw_mode()?;
-    let mut tui = Terminal::new(CrosstermBackend::new(stdout()))?;
-
     #[cfg(not(feature = "asteroids"))]
-    let res = App::new_moons()?.run(&mut tui);
+    let res = App::new_moons(false)?.run();
     #[cfg(feature = "asteroids")]
-    let res = App::new_complete()?.run(&mut tui);
+    let res = App::new_complete(false)?.run();
 
-    disable_raw_mode()?;
-    stdout().execute(LeaveAlternateScreen)?;
     res
 }

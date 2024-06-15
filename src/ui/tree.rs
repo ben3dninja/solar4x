@@ -3,7 +3,7 @@ use crate::{
     utils::list::{select_next_clamp, select_previous_clamp},
 };
 
-use super::App;
+use super::UiState;
 
 #[derive(Debug, Clone)]
 pub struct TreeEntry {
@@ -32,7 +32,7 @@ impl TreeEntry {
     }
 }
 
-impl App {
+impl UiState {
     pub fn toggle_selection_expansion(&mut self) -> Result<(), String> {
         let sel_id = self
             .tree_state
@@ -62,19 +62,15 @@ impl App {
         if entry.is_expanded {
             return;
         }
-        let system = self.system.borrow();
-        let mut bodies: Vec<_> = system.bodies[&entry.id]
+        let bodies = &self.shared_info.bodies;
+        let mut children: Vec<_> = bodies[&entry.id]
             .orbiting_bodies
             .clone()
             .into_iter()
-            .filter(|id| system.bodies.contains_key(id))
+            .filter(|id| bodies.contains_key(id))
             .collect();
-        bodies.sort_by(|a, b| {
-            system.bodies[a]
-                .mean_distance()
-                .cmp(&system.bodies[b].mean_distance())
-        });
-        let children = entry.create_children(bodies.into_iter());
+        children.sort_by(|a, b| bodies[a].semimajor_axis.cmp(&bodies[b].semimajor_axis));
+        let children = entry.create_children(children.into_iter());
         let end = self.tree_entries.split_off(index + 1);
         self.tree_entries.extend(children);
         self.tree_entries.extend(end);
@@ -129,29 +125,31 @@ mod tests {
 
     #[test]
     fn test_toggle_entry_expansion() {
-        let mut app = App::new_simple().unwrap();
-        app.toggle_selection_expansion().unwrap();
-        assert_eq!(app.tree_entries.len(), 9);
-        assert!(app.tree_entries[0].is_expanded);
+        let app = App::new_simple(true).unwrap();
+        let mut ui = app.ui;
+        ui.toggle_selection_expansion().unwrap();
+        assert_eq!(ui.tree_entries.len(), 9);
+        assert!(ui.tree_entries[0].is_expanded);
         for i in 1..9 {
-            assert_eq!(app.tree_entries[i].deepness, 1);
+            assert_eq!(ui.tree_entries[i].deepness, 1);
         }
         for i in 1..9 {
-            app.toggle_entry_expansion(i);
-            app.toggle_entry_expansion(i);
+            ui.toggle_entry_expansion(i);
+            ui.toggle_entry_expansion(i);
         }
-        app.toggle_selection_expansion().unwrap();
-        assert_eq!(app.tree_entries.len(), 1);
-        assert!(!app.tree_entries[0].is_expanded);
+        ui.toggle_selection_expansion().unwrap();
+        assert_eq!(ui.tree_entries.len(), 1);
+        assert!(!ui.tree_entries[0].is_expanded);
     }
 
     #[test]
     fn test_entry_is_last_child() {
-        let mut app = App::new_simple().unwrap();
-        app.toggle_selection_expansion().unwrap();
+        let app = App::new_simple(true).unwrap();
+        let mut ui = app.ui;
+        ui.toggle_selection_expansion().unwrap();
         for i in 0..8 {
-            assert!(!app.entry_is_last_child(i).unwrap());
+            assert!(!ui.entry_is_last_child(i).unwrap());
         }
-        assert!(app.entry_is_last_child(8).unwrap())
+        assert!(ui.entry_is_last_child(8).unwrap())
     }
 }

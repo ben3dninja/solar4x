@@ -1,10 +1,12 @@
 use serde::{de::Visitor, Deserialize, Deserializer};
 
+use crate::utils::hash::hash;
+
 const ID_PREFIX: &str = "https://api.le-systeme-solaire.net/rest/bodies/";
 
 // TODO : change default id
-#[derive(Default, PartialEq, PartialOrd, Ord, Eq, Debug, Clone, Hash)]
-pub struct BodyID(String);
+#[derive(Default, PartialEq, PartialOrd, Ord, Eq, Debug, Clone, Copy, Hash)]
+pub struct BodyID(u64);
 
 impl std::fmt::Display for BodyID {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -14,7 +16,7 @@ impl std::fmt::Display for BodyID {
 
 impl From<&str> for BodyID {
     fn from(value: &str) -> Self {
-        Self(value.into())
+        Self(hash(&value.to_owned()))
     }
 }
 
@@ -31,30 +33,29 @@ impl<'de> Visitor<'de> for IDVisitor {
     where
         A: serde::de::MapAccess<'de>,
     {
-        let mut id = BodyID::default();
+        let mut id = None;
         while let Some((key, value)) = map.next_entry::<&str, &str>()? {
             if key == "rel" {
                 id = strip_id_prefix(value);
             }
         }
-        Ok(id)
+        id.ok_or(serde::de::Error::custom(
+            "id could not be deserialized from map",
+        ))
     }
 
     fn visit_str<E>(self, v: &str) -> Result<Self::Value, E>
     where
         E: serde::de::Error,
     {
-        Ok(strip_id_prefix(v))
+        strip_id_prefix(v).ok_or(serde::de::Error::custom(
+            "id could not be deserialized from string",
+        ))
     }
 }
 
-fn strip_id_prefix(s: &str) -> BodyID {
-    // TODO : change default
-    if let Some(s) = s.strip_prefix(ID_PREFIX) {
-        BodyID(s.to_owned())
-    } else {
-        BodyID::default()
-    }
+fn strip_id_prefix(s: &str) -> Option<BodyID> {
+    s.strip_prefix(ID_PREFIX).map(BodyID::from)
 }
 
 impl<'de> Deserialize<'de> for BodyID {
@@ -79,7 +80,7 @@ mod tests {
         "#,
         )
         .unwrap();
-        assert_eq!(id.0, "terre");
+        assert_eq!(id, "terre".into());
     }
 
     #[test]
@@ -92,6 +93,6 @@ mod tests {
         }"#,
         )
         .unwrap();
-        assert_eq!(id.0, "terre");
+        assert_eq!(id, "terre".into());
     }
 }

@@ -1,253 +1,143 @@
-mod search;
-mod tree;
-
-use std::{cell::RefCell, error::Error, io::Stdout, rc::Rc, time::Duration};
-
-use crossterm::event::{self, KeyCode, KeyEventKind};
-use fuzzy_matcher::skim::SkimMatcherV2;
-use nalgebra::Vector2;
-use ratatui::{backend::CrosstermBackend, widgets::ListState, Terminal};
-
-use crate::bodies::{
-    body_data::{BodyData, BodyType},
-    body_id::BodyID,
-    BodySystem,
+mod events;
+use std::{
+    collections::HashMap,
+    error::Error,
+    io::Stdout,
+    rc::Rc,
+    sync::{Arc, Mutex},
+    time::{Duration, Instant},
 };
 
-use self::tree::TreeEntry;
+use crossterm::event::{self, KeyCode, KeyEventKind};
+use nalgebra::{Vector2, Vector3};
+use ratatui::{backend::CrosstermBackend, Terminal};
 
-type Tui = Terminal<CrosstermBackend<Stdout>>;
+use crate::{
+    bodies::{
+        body_data::{BodyData, BodyType},
+        body_id::BodyID,
+        BodySystem,
+    },
+    engine::Engine,
+    ui::{Tui, UiState},
+    utils::de::read_main_bodies,
+};
+
+use self::events::AppMessage;
 
 // frame rate in fps
 const FRAME_RATE: f64 = 60.;
-// Speed in days per second
-const DEFAULT_SPEED: f64 = 10.;
-const OFFSET_STEP: i64 = 1e8 as i64;
 
-#[derive(Default)]
-pub enum AppScreen {
-    #[default]
-    Main,
-    Info,
+// Fixed update time step
+pub const TIME_STEP: Duration = Duration::from_millis(12);
+
+pub struct SystemInfo {
+    pub bodies: HashMap<BodyID, BodyData>,
+    pub primary_body: BodyID,
 }
 
-#[derive(Default)]
-pub enum ExplorerMode {
-    #[default]
-    Tree,
-    Search,
+impl SystemInfo {
+    fn new<T: IntoIterator<Item = BodyData>>(bodies: T) -> Option<Self> {
+        let bodies: HashMap<BodyID, BodyData> =
+            bodies.into_iter().map(|data| (data.id, data)).collect();
+        if let Some(primary_body) = bodies
+            .values()
+            .find(|data| data.host_body.is_none())
+            .map(|data| data.id)
+        {
+            Some(SystemInfo {
+                bodies,
+                primary_body,
+            })
+        } else {
+            None
+        }
+    }
 }
+
+pub type GlobalMap = HashMap<BodyID, Vector3<i64>>;
 
 pub struct App {
-    pub current_screen: AppScreen,
-    pub explorer_mode: ExplorerMode,
-    pub system: Rc<RefCell<BodySystem>>,
-    // 1 represents the level where all the system is seen,
-    // higher values mean more zoom
-    pub zoom_level: f64,
-    // 1 represents 1 day / second
-    pub speed: f64,
-    pub offset: Vector2<i64>,
-    pub focus_body: BodyID,
+    pub engine: Engine,
+    pub tui: Option<Tui>,
+    pub ui: UiState,
+    pub shared_info: Arc<SystemInfo>,
+    pub current_map: Arc<Mutex<GlobalMap>>,
+    pub next_map: Arc<Mutex<GlobalMap>>,
     pub time_switch: bool,
-
-    pub tree_entries: Vec<TreeEntry>,
-    pub tree_state: ListState,
-    pub search_entries: Vec<BodyID>,
-    pub search_state: ListState,
-    pub search_character_index: usize,
-    pub search_input: String,
-    pub search_matcher: SkimMatcherV2,
-}
-
-enum AppMessage {
-    Quit,
-    Idle,
 }
 
 impl App {
-    pub fn new_from_filter(f: impl FnMut(&BodyData) -> bool) -> Result<Self, Box<dyn Error>> {
-        let system = Rc::clone(&BodySystem::new_system_with_filter(f)?);
-        let search_entries: Vec<_> = system.borrow().bodies.keys().map(Clone::clone).collect();
-        let main_body = system.borrow().primary_body_id().ok_or("No primary body")?;
+    pub fn new_from_filter(
+        f: impl FnMut(&BodyData) -> bool,
+        headless: bool,
+    ) -> std::io::Result<Self> {
+        let bodies = read_main_bodies()?.into_iter().filter(f);
+        let current_map = Arc::new(Mutex::new(GlobalMap::new()));
+        let next_map = Arc::new(Mutex::new(GlobalMap::new()));
+        let shared_info = Arc::new(
+            SystemInfo::new(bodies)
+                .ok_or(std::io::Error::other("no primary body found in data"))?,
+        );
+        let engine = Engine::new_from_data(Arc::clone(&next_map), Arc::clone(&shared_info));
         Ok(Self {
-            current_screen: AppScreen::default(),
-            explorer_mode: ExplorerMode::default(),
-            tree_entries: vec![TreeEntry::new_main_body(main_body.clone())],
-            tree_state: ListState::default().with_selected(Some(0)),
-            search_state: ListState::default().with_selected(Some(0)),
-            system,
-            zoom_level: 1.,
-            speed: DEFAULT_SPEED,
-            offset: Vector2::zeros(),
-            focus_body: main_body,
+            engine,
+            tui: if headless {
+                None
+            } else {
+                Some(UiState::setup_tui()?)
+            },
+            ui: UiState::new(Arc::clone(&shared_info), Arc::clone(&current_map))?,
+            current_map,
+            next_map,
+            shared_info,
             time_switch: true,
-            search_entries,
-            search_character_index: 0,
-            search_input: String::new(),
-            search_matcher: SkimMatcherV2::default(),
         })
     }
 
-    pub fn new_simple() -> Result<Self, Box<dyn Error>> {
-        Self::new_from_filter(|data| matches!(data.body_type, BodyType::Planet | BodyType::Star))
+    pub fn new_simple(headless: bool) -> std::io::Result<Self> {
+        Self::new_from_filter(
+            |data| matches!(data.body_type, BodyType::Planet | BodyType::Star),
+            headless,
+        )
     }
-    pub fn new_moons() -> Result<Self, Box<dyn Error>> {
-        Self::new_from_filter(|data| {
-            matches!(
-                data.body_type,
-                BodyType::Planet | BodyType::Star | BodyType::Moon
-            )
-        })
+    pub fn new_moons(headless: bool) -> std::io::Result<Self> {
+        Self::new_from_filter(
+            |data| {
+                matches!(
+                    data.body_type,
+                    BodyType::Planet | BodyType::Star | BodyType::Moon
+                )
+            },
+            headless,
+        )
     }
-    pub fn new_complete() -> Result<Self, Box<dyn Error>> {
-        Self::new_from_filter(|_| true)
-    }
-
-    fn run_logic(&mut self) {
-        match self.explorer_mode {
-            ExplorerMode::Search => self.search_entries = self.search(&self.search_input),
-            _ => {}
-        }
-        if self.search_state.selected().is_none() && !self.search_entries.is_empty() {
-            self.search_state.select(Some(0));
-        }
-        if self.time_switch {
-            let mut system = self.system.borrow_mut();
-            system.elapse_time(self.speed / FRAME_RATE);
-            system.update_orbits();
-        }
+    pub fn new_complete(headless: bool) -> std::io::Result<Self> {
+        Self::new_from_filter(|_| true, headless)
     }
 
-    fn handle_events(&mut self) -> Result<AppMessage, Box<dyn Error>> {
-        if event::poll(Duration::from_secs_f64(1. / FRAME_RATE))? {
-            if let event::Event::Key(event) = event::read()? {
-                if event.kind == KeyEventKind::Release {
-                    return Ok(AppMessage::Idle);
-                }
-                match self.current_screen {
-                    AppScreen::Main => match self.explorer_mode {
-                        ExplorerMode::Tree => {
-                            match event.code {
-                                KeyCode::Esc => return Ok(AppMessage::Quit),
-                                KeyCode::Down => self.select_next_tree(),
-                                KeyCode::Up => self.select_previous_tree(),
-                                KeyCode::Char('+') => {
-                                    self.zoom_level *= 1.5;
-                                }
-                                KeyCode::Char('-') => {
-                                    self.zoom_level /= 1.5;
-                                    self.explorer_mode = ExplorerMode::Tree
-                                }
-                                KeyCode::Char('>') => {
-                                    self.speed *= 1.5;
-                                }
-                                KeyCode::Char('<') => {
-                                    self.speed /= 1.5;
-                                }
-                                KeyCode::Char('i') => self.current_screen = AppScreen::Info,
-                                KeyCode::Char(' ') => self.toggle_selection_expansion()?,
-                                KeyCode::Char('w') => {
-                                    self.offset += (OFFSET_STEP as f64 / self.zoom_level).round()
-                                        as i64
-                                        * Vector2::y()
-                                }
-                                KeyCode::Char('a') => {
-                                    self.offset += (-OFFSET_STEP as f64 / self.zoom_level).round()
-                                        as i64
-                                        * Vector2::x()
-                                }
-                                KeyCode::Char('s') => {
-                                    self.offset += (-OFFSET_STEP as f64 / self.zoom_level).round()
-                                        as i64
-                                        * Vector2::y()
-                                }
-                                KeyCode::Char('d') => {
-                                    self.offset += (OFFSET_STEP as f64 / self.zoom_level).round()
-                                        as i64
-                                        * Vector2::x()
-                                }
-                                KeyCode::Char('t') => self.toggle_time_switch(),
-                                KeyCode::Char('/') => self.enter_search_mode(),
-                                KeyCode::Char('f') => {
-                                    self.focus_body = self.selected_body_id_tree()
-                                }
-                                KeyCode::Char('x') => self.autoscale(),
-                                _ => {}
-                            }
-                            #[cfg(feature = "azerty")]
-                            match event.code {
-                                KeyCode::Char('z') => {
-                                    self.offset += (OFFSET_STEP as f64 / self.zoom_level.round())
-                                        as i64
-                                        * Vector2::y()
-                                }
-                                KeyCode::Char('q') => {
-                                    self.offset += (-OFFSET_STEP as f64 / self.zoom_level).round()
-                                        as i64
-                                        * Vector2::x()
-                                }
-                                _ => {}
-                            }
-                        }
-                        ExplorerMode::Search => match event.code {
-                            KeyCode::Backspace => self.delete_char(),
-                            KeyCode::Left => self.move_cursor_left(),
-                            KeyCode::Right => self.move_cursor_right(),
-                            KeyCode::Down => self.select_next_search(),
-                            KeyCode::Up => self.select_previous_search(),
-                            KeyCode::Esc => self.leave_search_mode(),
-                            KeyCode::Enter => self.validate_search(),
-                            KeyCode::Char(char) => self.enter_char(char),
-                            _ => {}
-                        },
-                    },
-                    AppScreen::Info => match event.code {
-                        KeyCode::Char('i') => self.current_screen = AppScreen::Main,
-                        _ => (),
-                    },
-                }
-            }
-        }
-        Ok(AppMessage::Idle)
-    }
-
-    pub fn run(&mut self, tui: &mut Tui) -> Result<(), Box<dyn Error>> {
+    pub fn run(&mut self) -> Result<(), Box<dyn Error>> {
+        let mut previous_time = Instant::now();
+        let mut lag = Duration::ZERO;
         loop {
-            self.run_logic();
-            tui.draw(|frame| self.draw_ui(frame))?;
+            let current_time = Instant::now();
+            let elapsed = current_time - previous_time;
+            previous_time = current_time;
+            lag += elapsed;
             if let Ok(AppMessage::Quit) = self.handle_events() {
                 break;
             }
+            while lag >= TIME_STEP {
+                self.engine.update();
+                lag -= TIME_STEP;
+            }
+            self.ui.render();
         }
         Ok(())
     }
 
-    fn select_body(&mut self, id: &BodyID) {
-        let ancestors = self.system.borrow().get_body_ancestors(id);
-        for body_id in ancestors {
-            self.expand_entry_by_id(&body_id);
-        }
-        self.tree_state
-            .select(self.tree_entries.iter().position(|entry| &entry.id == id));
-    }
-
     fn toggle_time_switch(&mut self) {
         self.time_switch = !self.time_switch
-    }
-
-    fn autoscale(&mut self) {
-        let system = self.system.borrow();
-        if let Some(body) = system.bodies.get(&self.focus_body) {
-            if let Some(max_dist) = body
-                .orbiting_bodies
-                .iter()
-                .map(|id| system.bodies.get(id).map_or(0, |body| body.mean_distance()))
-                .max()
-            {
-                self.zoom_level = system.get_max_distance() as f64 / (max_dist as f64);
-            }
-        }
     }
 }
 
