@@ -38,7 +38,7 @@ impl BodySystem {
     pub fn get_max_distance(&self) -> i64 {
         self.bodies
             .values()
-            .map(|body| body.info.apoapsis)
+            .map(|body| body.mean_distance())
             .max()
             .unwrap()
     }

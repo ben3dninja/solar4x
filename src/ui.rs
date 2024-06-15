@@ -119,11 +119,11 @@ impl App {
                         _ if body.id == self.selected_body_id_tree() => Color::White,
                         BodyType::Star => Color::Yellow,
                         BodyType::Planet => {
-                            if body.info.apoapsis < 800000000 {
-                                Color::Blue
-                            } else {
-                                Color::Red
-                            }
+                            // if body.info.apoapsis < 800000000 {
+                            Color::Blue
+                            // } else {
+                            // Color::Red
+                            // }
                         }
                         _ => Color::Gray,
                     };

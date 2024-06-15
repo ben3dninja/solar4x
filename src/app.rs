@@ -239,13 +239,13 @@ impl App {
     fn autoscale(&mut self) {
         let system = self.system.borrow();
         if let Some(body) = system.bodies.get(&self.focus_body) {
-            if let Some(max_apo) = body
+            if let Some(max_dist) = body
                 .orbiting_bodies
                 .iter()
-                .map(|id| system.bodies.get(id).map_or(0, |body| body.info.apoapsis))
+                .map(|id| system.bodies.get(id).map_or(0, |body| body.mean_distance()))
                 .max()
             {
-                self.zoom_level = system.get_max_distance() as f64 / (max_apo as f64);
+                self.zoom_level = system.get_max_distance() as f64 / (max_dist as f64);
             }
         }
     }

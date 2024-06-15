@@ -189,6 +189,7 @@ impl Body {
     }
 
     pub fn mean_distance(&self) -> i64 {
-        (self.info.periapsis + self.info.apoapsis) / 2
+        // (self.info.periapsis + self.info.apoapsis) / 2
+        self.orbit.semimajor_axis
     }
 }
