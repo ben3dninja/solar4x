@@ -34,7 +34,7 @@ impl App {
                             },
                             _ => (),
                         }
-                        self.ui.handle_main_screen_events(&event);
+                        self.ui.handle_main_screen_events(&event)?;
                     }
                     AppScreen::Info => self.ui.handle_info_events(&event),
                 }

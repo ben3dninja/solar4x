@@ -1,7 +1,11 @@
 use std::f64::consts::PI;
 
-pub fn norm(x: i64, y: i64, z: i64) -> i64 {
-    ((x * x + y * y + z * z) as f64).sqrt().round() as i64
+use nalgebra::Vector3;
+
+pub fn inorm(v: Vector3<i64>) -> i64 {
+    ((v.x.pow(2) + v.y.pow(2) + v.z.pow(2)) as f64)
+        .sqrt()
+        .round() as i64
 }
 
 pub fn rads(x: f64) -> f64 {

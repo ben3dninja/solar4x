@@ -1,7 +1,7 @@
 use fuzzy_matcher::FuzzyMatcher;
 
 use crate::{
-    bodies::body_id::BodyID,
+    app::body_id::BodyID,
     utils::list::{select_next_clamp, select_previous_clamp},
 };
 
@@ -65,7 +65,7 @@ impl UiState {
 
     pub fn validate_search(&mut self) {
         self.explorer_mode = ExplorerMode::Tree;
-        if let Some(id) = &self.selected_body_id_search() {
+        if let Some(id) = self.selected_body_id_search() {
             self.select_body(id)
         }
     }
@@ -119,13 +119,13 @@ mod tests {
     #[test]
     fn test_search() {
         let mut app = App::new_moons(true).unwrap();
-        let ui = app.ui;
+        let ui = &mut app.ui;
         ui.toggle_selection_expansion().unwrap();
         ui.select_next_tree();
         ui.explorer_mode = ExplorerMode::Search;
         ui.search_input = "Moo".into();
-        ui.run_logic();
+        ui.update_search_selection();
         ui.validate_search();
-        assert_eq!(app.selected_body_id_tree(), "lune".into())
+        assert_eq!(ui.selected_body_id_tree(), "lune".into())
     }
 }

@@ -1,59 +1,31 @@
+pub mod body_data;
+pub mod body_id;
 mod events;
+pub mod info;
+
 use std::{
     collections::HashMap,
     error::Error,
-    io::Stdout,
-    rc::Rc,
     sync::{Arc, Mutex},
     time::{Duration, Instant},
 };
 
-use crossterm::event::{self, KeyCode, KeyEventKind};
-use nalgebra::{Vector2, Vector3};
-use ratatui::{backend::CrosstermBackend, Terminal};
+use nalgebra::Vector3;
 
 use crate::{
-    bodies::{
-        body_data::{BodyData, BodyType},
-        body_id::BodyID,
-        BodySystem,
-    },
+    app::body_data::BodyType,
     engine::Engine,
     ui::{Tui, UiState},
     utils::de::read_main_bodies,
 };
 
-use self::events::AppMessage;
+use self::{body_data::BodyData, body_id::BodyID, events::AppMessage, info::SystemInfo};
 
 // frame rate in fps
 const FRAME_RATE: f64 = 60.;
 
 // Fixed update time step
 pub const TIME_STEP: Duration = Duration::from_millis(12);
-
-pub struct SystemInfo {
-    pub bodies: HashMap<BodyID, BodyData>,
-    pub primary_body: BodyID,
-}
-
-impl SystemInfo {
-    fn new<T: IntoIterator<Item = BodyData>>(bodies: T) -> Option<Self> {
-        let bodies: HashMap<BodyID, BodyData> =
-            bodies.into_iter().map(|data| (data.id, data)).collect();
-        if let Some(primary_body) = bodies
-            .values()
-            .find(|data| data.host_body.is_none())
-            .map(|data| data.id)
-        {
-            Some(SystemInfo {
-                bodies,
-                primary_body,
-            })
-        } else {
-            None
-        }
-    }
-}
 
 pub type GlobalMap = HashMap<BodyID, Vector3<i64>>;
 
@@ -129,9 +101,12 @@ impl App {
             }
             while lag >= TIME_STEP {
                 self.engine.update();
+                self.swap_buffers();
                 lag -= TIME_STEP;
             }
-            self.ui.render();
+            if let Some(tui) = &mut self.tui {
+                self.ui.render(tui)?;
+            }
         }
         Ok(())
     }
@@ -139,16 +114,41 @@ impl App {
     fn toggle_time_switch(&mut self) {
         self.time_switch = !self.time_switch
     }
+
+    fn swap_buffers(&mut self) {
+        let buf = Arc::clone(&self.current_map);
+        self.current_map = Arc::clone(&self.next_map);
+        self.next_map = buf;
+        self.engine.global_map = Arc::clone(&self.next_map);
+        self.ui.global_map = Arc::clone(&self.current_map);
+    }
+}
+impl Drop for App {
+    fn drop(&mut self) {
+        if self.tui.is_some() {
+            UiState::reset_tui().unwrap();
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::utils::algebra::inorm;
+
     use super::App;
 
     #[test]
-    fn test_select_body() {
-        let mut app = App::new_simple().unwrap();
-        app.select_body(&"terre".into());
-        assert_eq!(app.selected_body_id_tree(), "terre".into())
+    fn test_swap_buffers() {
+        let mut app = App::new_moons(true).unwrap();
+        app.engine.update();
+        app.swap_buffers();
+
+        let global = app.ui.global_map.lock().unwrap();
+        let local = &app.engine.bodies;
+        let moon = "lune".into();
+        assert!(
+            (inorm(global[&moon]) - inorm(local[&"terre".into()].position)).abs()
+                <= inorm(local[&moon].position)
+        )
     }
 }

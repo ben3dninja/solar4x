@@ -1,10 +1,9 @@
-use std::{cell::RefCell, rc::Rc};
-
 use nalgebra::{Vector2, Vector3};
 
-use crate::utils::algebra::{degs, mod_180, rads};
-
-use super::{body_data::BodyData, BodySystem};
+use crate::{
+    app::body_data::BodyData,
+    utils::algebra::{degs, mod_180, rads},
+};
 
 const E_TOLERANCE: f64 = 1e-6;
 
@@ -124,29 +123,5 @@ impl Body {
         self.position = Vector3::new(x_glob, y_glob, z_glob);
         self.update_state = UpdateState::Glob;
         self.last_update_time = time;
-    }
-}
-
-impl Body {
-    pub fn get_xyz(&self) -> (i64, i64, i64) {
-        let pos = self.position;
-        (pos.x, pos.y, pos.z)
-    }
-
-    pub fn get_absolute_xyz(&self, system: Rc<RefCell<BodySystem>>) -> (i64, i64, i64) {
-        let pos = self.get_xyz();
-        if let Some(host_id) = &self.host_body {
-            if let Some(host_body) = system.borrow().bodies.get(host_id) {
-                let (x, y, z) = pos;
-                let (a, b, c) = host_body.get_absolute_xyz(Rc::clone(&system));
-                return (x + a, y + b, z + c);
-            }
-        }
-        pos
-    }
-
-    pub fn mean_distance(&self) -> i64 {
-        // (self.info.periapsis + self.info.apoapsis) / 2
-        self.semimajor_axis
     }
 }

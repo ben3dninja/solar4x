@@ -1,5 +1,5 @@
 use crate::{
-    bodies::body_id::BodyID,
+    app::body_id::BodyID,
     utils::list::{select_next_clamp, select_previous_clamp},
 };
 
@@ -42,8 +42,8 @@ impl UiState {
         Ok(())
     }
 
-    pub fn expand_entry_by_id(&mut self, id: &BodyID) {
-        if let Some(index) = self.tree_entries.iter().position(|entry| &entry.id == id) {
+    pub fn expand_entry_by_id(&mut self, id: BodyID) {
+        if let Some(index) = self.tree_entries.iter().position(|entry| entry.id == id) {
             self.expand_entry(index);
         }
     }
@@ -103,9 +103,7 @@ impl UiState {
     }
 
     pub fn selected_body_id_tree(&self) -> BodyID {
-        self.tree_entries[self.tree_state.selected().unwrap_or_default()]
-            .id
-            .clone()
+        self.tree_entries[self.tree_state.selected().unwrap_or_default()].id
     }
 
     pub fn entry_is_last_child(&self, index: usize) -> Option<bool> {
@@ -125,8 +123,8 @@ mod tests {
 
     #[test]
     fn test_toggle_entry_expansion() {
-        let app = App::new_simple(true).unwrap();
-        let mut ui = app.ui;
+        let mut app = App::new_simple(true).unwrap();
+        let ui = &mut app.ui;
         ui.toggle_selection_expansion().unwrap();
         assert_eq!(ui.tree_entries.len(), 9);
         assert!(ui.tree_entries[0].is_expanded);
@@ -144,8 +142,8 @@ mod tests {
 
     #[test]
     fn test_entry_is_last_child() {
-        let app = App::new_simple(true).unwrap();
-        let mut ui = app.ui;
+        let mut app = App::new_simple(true).unwrap();
+        let ui = &mut app.ui;
         ui.toggle_selection_expansion().unwrap();
         for i in 0..8 {
             assert!(!ui.entry_is_last_child(i).unwrap());

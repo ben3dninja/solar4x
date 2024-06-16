@@ -1,13 +1,7 @@
-use std::{error::Error, io::stdout};
+use std::error::Error;
 
 use app::App;
-use crossterm::{
-    terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
-    ExecutableCommand,
-};
-use ratatui::{backend::CrosstermBackend, Terminal};
 mod app;
-mod bodies;
 mod engine;
 mod ui;
 mod utils;
