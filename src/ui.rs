@@ -9,8 +9,8 @@ use std::{
 };
 
 use crate::{
-    app::{GlobalMap, SystemInfo},
-    bodies::body_id::BodyID,
+    app::body_id::BodyID,
+    app::{info::SystemInfo, GlobalMap},
 };
 use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
@@ -40,7 +40,7 @@ pub struct UiState {
     search_input: String,
     search_matcher: SkimMatcherV2,
     shared_info: Arc<SystemInfo>,
-    global_map: Arc<Mutex<GlobalMap>>,
+    pub global_map: Arc<Mutex<GlobalMap>>,
 }
 
 #[derive(Default)]
@@ -66,7 +66,7 @@ impl UiState {
         Ok(Self {
             current_screen: AppScreen::default(),
             explorer_mode: ExplorerMode::default(),
-            tree_entries: vec![TreeEntry::new_main_body(main_body.clone())],
+            tree_entries: vec![TreeEntry::new_main_body(main_body)],
             tree_state: ListState::default().with_selected(Some(0)),
             search_state: ListState::default().with_selected(Some(0)),
             zoom_level: 1.,
@@ -81,7 +81,7 @@ impl UiState {
         })
     }
 
-    pub fn render(&mut self, tui: &mut Tui) -> Result<()> {
+    pub fn update_search_selection(&mut self) {
         match self.explorer_mode {
             ExplorerMode::Search => self.search_entries = self.search(&self.search_input),
             _ => {}
@@ -89,6 +89,10 @@ impl UiState {
         if self.search_state.selected().is_none() && !self.search_entries.is_empty() {
             self.search_state.select(Some(0));
         }
+    }
+
+    pub fn render(&mut self, tui: &mut Tui) -> Result<()> {
+        self.update_search_selection();
         tui.draw(|frame| self.draw_ui(frame))?;
         Ok(())
     }
@@ -105,16 +109,16 @@ impl UiState {
         Ok(())
     }
 
-    fn select_body(&mut self, id: &BodyID) {
-        let ancestors = self.system.borrow().get_body_ancestors(id);
+    pub fn select_body(&mut self, id: BodyID) {
+        let ancestors = self.shared_info.get_body_ancestors(id);
         for body_id in ancestors {
-            self.expand_entry_by_id(&body_id);
+            self.expand_entry_by_id(body_id);
         }
         self.tree_state
-            .select(self.tree_entries.iter().position(|entry| &entry.id == id));
+            .select(self.tree_entries.iter().position(|entry| entry.id == id));
     }
     fn autoscale(&mut self) {
-        let bodies = self.shared_info.bodies;
+        let bodies = &self.shared_info.bodies;
         if let Some(body) = bodies.get(&self.focus_body) {
             if let Some(max_dist) = body
                 .orbiting_bodies
@@ -128,6 +132,14 @@ impl UiState {
     }
 }
 
-impl Drop for UiState {
-    fn drop(&mut self) {}
+#[cfg(test)]
+mod tests {
+    use crate::app::App;
+
+    #[test]
+    fn test_select_body() {
+        let mut app = App::new_simple(true).unwrap();
+        app.ui.select_body("terre".into());
+        assert_eq!(app.ui.selected_body_id_tree(), "terre".into())
+    }
 }
