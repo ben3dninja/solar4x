@@ -57,6 +57,7 @@ impl App {
                     KeyCode::Char(c) if c == a => MapOffset(Left),
                     KeyCode::Char('s') => MapOffset(Back),
                     KeyCode::Char('d') => MapOffset(Right),
+                    KeyCode::Char('0') => MapOffsetReset,
                     KeyCode::Char('/') => EnterSearchView,
                     KeyCode::Char('f') => FocusBody,
                     KeyCode::Char('x') => Autoscale,

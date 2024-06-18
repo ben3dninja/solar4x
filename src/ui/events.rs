@@ -15,6 +15,7 @@ pub enum TreeViewEvent {
     BodyInfo,
     ToggleTreeExpansion,
     MapOffset(Direction4),
+    MapOffsetReset,
     EnterSearchView,
     FocusBody,
     Autoscale,
@@ -80,6 +81,7 @@ impl UiState {
                         _ => Vector2::x(),
                     }
             }
+            MapOffsetReset => self.offset = Vector2::zeros(),
             // KeyCode::Char('w') => {
             //     self.offset +=
             //         (OFFSET_STEP as f64 / self.zoom_level).round() as i64 * Vector2::y()
