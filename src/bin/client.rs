@@ -1,12 +1,7 @@
 use std::{env, error::Error};
 
-use app::App;
-use keyboard::Keymap;
-mod app;
-mod engine;
-mod keyboard;
-mod ui;
-mod utils;
+use rust_space_trading::app::App;
+
 fn main() -> Result<(), Box<dyn Error>> {
     let mut args = env::args();
     let mut keymap = Keymap::default();
