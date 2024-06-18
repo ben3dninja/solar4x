@@ -4,9 +4,9 @@ use crossterm::event::{self, KeyCode, KeyEvent, KeyEventKind};
 
 use crate::ui::{events::UiEvent, AppScreen, ExplorerMode};
 
-use super::{App, AppMessage};
+use super::{AppMessage, GuiApp};
 
-impl App {
+impl GuiApp {
     pub fn handle_input(&mut self) -> Result<AppMessage, Box<dyn Error>> {
         if event::poll(Duration::ZERO)? {
             if let event::Event::Key(event) = event::read()? {
@@ -21,12 +21,12 @@ impl App {
                     match &event {
                         e if codes.quit.matches(e) => return Ok(AppMessage::Quit),
                         e if codes.speed_up.matches(e) => {
-                            self.engine.speed *= 1.5;
+                            self.core.engine.speed *= 1.5;
                         }
                         e if codes.slow_down.matches(e) => {
-                            self.engine.speed /= 1.5;
+                            self.core.engine.speed /= 1.5;
                         }
-                        e if codes.toggle_time.matches(e) => self.toggle_time_switch(),
+                        e if codes.toggle_time.matches(e) => self.core.toggle_time_switch(),
                         _ => (),
                     }
                 }

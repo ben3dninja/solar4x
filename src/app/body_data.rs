@@ -6,15 +6,15 @@ use crate::utils::de::deserialize_options;
 
 use super::body_id::BodyID;
 
-#[derive(Deserialize, Clone, Copy, Debug, PartialEq, Default)]
+#[derive(Deserialize, Clone, Copy, Debug, PartialEq, Default, PartialOrd)]
 pub enum BodyType {
     Star,
     #[default]
     Planet,
     Moon,
-    Asteroid,
     #[serde(alias = "Dwarf Planet")]
     DwarfPlanet,
+    Asteroid,
     Comet,
 }
 
