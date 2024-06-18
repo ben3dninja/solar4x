@@ -5,13 +5,10 @@ mod tree;
 
 use std::{
     io::{stdout, Result, Stdout},
-    sync::{Arc, Mutex},
+    sync::{mpsc::Receiver, Arc, Mutex},
 };
 
-use crate::{
-    app::body_id::BodyID,
-    app::{info::SystemInfo, GlobalMap},
-};
+use crate::app::{body_id::BodyID, info::SystemInfo, AppMessage, GlobalMap};
 use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
@@ -20,7 +17,7 @@ use fuzzy_matcher::skim::SkimMatcherV2;
 use nalgebra::Vector2;
 use ratatui::{backend::CrosstermBackend, widgets::ListState, Terminal};
 
-use self::tree::TreeEntry;
+use self::{events::UiEvent, tree::TreeEntry};
 
 const OFFSET_STEP: i64 = 1e8 as i64;
 
@@ -41,6 +38,7 @@ pub struct UiState {
     search_matcher: SkimMatcherV2,
     shared_info: Arc<SystemInfo>,
     pub global_map: Arc<Mutex<GlobalMap>>,
+    ui_event_receiver: Receiver<UiEvent>,
 }
 
 #[derive(Default)]
@@ -60,7 +58,11 @@ pub enum ExplorerMode {
 pub type Tui = Terminal<CrosstermBackend<Stdout>>;
 
 impl UiState {
-    pub fn new(shared_info: Arc<SystemInfo>, global_map: Arc<Mutex<GlobalMap>>) -> Result<Self> {
+    pub fn new(
+        shared_info: Arc<SystemInfo>,
+        global_map: Arc<Mutex<GlobalMap>>,
+        ui_event_receiver: Receiver<UiEvent>,
+    ) -> Result<Self> {
         let search_entries: Vec<BodyID> = shared_info.bodies.keys().cloned().collect();
         let main_body = shared_info.primary_body;
         Ok(Self {
@@ -78,6 +80,7 @@ impl UiState {
             search_matcher: SkimMatcherV2::default(),
             shared_info,
             global_map,
+            ui_event_receiver,
         })
     }
 
@@ -90,6 +93,17 @@ impl UiState {
             self.search_state.select(Some(0));
         }
     }
+
+    // pub fn run(&mut self) -> Result<()> {
+    //     loop {
+    //         if matches!(self.handle_events()?, AppMessage::Quit) {
+    //             break;
+    //         }
+    //         self.update_search_selection();
+    //         self.render()
+    //     }
+    //     Ok(())
+    // }
 
     pub fn render(&mut self, tui: &mut Tui) -> Result<()> {
         self.update_search_selection();

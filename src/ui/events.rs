@@ -1,79 +1,130 @@
-use std::error::Error;
-
-use crossterm::event::{KeyCode, KeyEvent};
 use nalgebra::Vector2;
 
-use super::{AppScreen, ExplorerMode, UiState, OFFSET_STEP};
+use crate::{
+    app::AppMessage,
+    utils::ui::{Direction2, Direction4},
+};
+
+use super::{AppScreen, UiState, OFFSET_STEP};
+
+use std::io::Result;
+
+pub enum TreeViewEvent {
+    SelectTree(Direction2),
+    Zoom(Direction2),
+    BodyInfo,
+    ToggleTreeExpansion,
+    MapOffset(Direction4),
+    EnterSearchView,
+    FocusBody,
+    Autoscale,
+}
+
+pub enum SearchViewEvent {
+    MoveCursor(Direction2),
+    SelectSearch(Direction2),
+    LeaveSearchView,
+    ValidateSearch,
+    WriteChar(char),
+    DeleteChar,
+}
+
+pub enum InfoViewEvent {
+    LeaveInfoView,
+}
+
+pub enum UiEvent {
+    Tree(TreeViewEvent),
+    Search(SearchViewEvent),
+    Info(InfoViewEvent),
+    Quit,
+}
 
 impl UiState {
-    pub fn handle_main_screen_events(&mut self, event: &KeyEvent) -> Result<(), Box<dyn Error>> {
-        match self.explorer_mode {
-            ExplorerMode::Tree => {
-                match event.code {
-                    KeyCode::Down => self.select_next_tree(),
-                    KeyCode::Up => self.select_previous_tree(),
-                    KeyCode::Char('+') => {
-                        self.zoom_level *= 1.5;
-                    }
-                    KeyCode::Char('-') => {
-                        self.zoom_level /= 1.5;
-                        self.explorer_mode = ExplorerMode::Tree
-                    }
-                    KeyCode::Char('i') => self.current_screen = AppScreen::Info,
-                    KeyCode::Char(' ') => self.toggle_selection_expansion()?,
-                    KeyCode::Char('w') => {
-                        self.offset +=
-                            (OFFSET_STEP as f64 / self.zoom_level).round() as i64 * Vector2::y()
-                    }
-                    KeyCode::Char('a') => {
-                        self.offset +=
-                            (-OFFSET_STEP as f64 / self.zoom_level).round() as i64 * Vector2::x()
-                    }
-                    KeyCode::Char('s') => {
-                        self.offset +=
-                            (-OFFSET_STEP as f64 / self.zoom_level).round() as i64 * Vector2::y()
-                    }
-                    KeyCode::Char('d') => {
-                        self.offset +=
-                            (OFFSET_STEP as f64 / self.zoom_level).round() as i64 * Vector2::x()
-                    }
-                    KeyCode::Char('/') => self.enter_search_mode(),
-                    KeyCode::Char('f') => self.focus_body = self.selected_body_id_tree(),
-                    KeyCode::Char('x') => self.autoscale(),
-                    _ => {}
-                }
-                #[cfg(feature = "azerty")]
-                match event.code {
-                    KeyCode::Char('z') => {
-                        self.offset +=
-                            (OFFSET_STEP as f64 / self.zoom_level.round()) as i64 * Vector2::y()
-                    }
-                    KeyCode::Char('q') => {
-                        self.offset +=
-                            (-OFFSET_STEP as f64 / self.zoom_level).round() as i64 * Vector2::x()
-                    }
-                    _ => {}
-                }
+    pub fn handle_events(&mut self) -> Result<AppMessage> {
+        while let Ok(event) = self.ui_event_receiver.try_recv() {
+            match event {
+                UiEvent::Quit => return Ok(AppMessage::Quit),
+                UiEvent::Search(e) => self.handle_search_event(e),
+                UiEvent::Tree(e) => self.handle_tree_event(e),
+                UiEvent::Info(e) => self.handle_info_events(e),
             }
-            ExplorerMode::Search => match event.code {
-                KeyCode::Backspace => self.delete_char(),
-                KeyCode::Left => self.move_cursor_left(),
-                KeyCode::Right => self.move_cursor_right(),
-                KeyCode::Down => self.select_next_search(),
-                KeyCode::Up => self.select_previous_search(),
-                KeyCode::Esc => self.leave_search_mode(),
-                KeyCode::Enter => self.validate_search(),
-                KeyCode::Char(char) => self.enter_char(char),
-                _ => {}
-            },
         }
-        Ok(())
+        Ok(AppMessage::Idle)
     }
 
-    pub fn handle_info_events(&mut self, event: &KeyEvent) {
-        match event.code {
-            KeyCode::Char('i') => self.current_screen = AppScreen::Main,
-            _ => (),
+    pub fn handle_tree_event(&mut self, event: TreeViewEvent) {
+        use Direction2::*;
+        use Direction4::*;
+        use TreeViewEvent::*;
+        match event {
+            SelectTree(d) => match d {
+                Down => self.select_next_tree(),
+                Up => self.select_previous_tree(),
+            },
+            Zoom(d) => match d {
+                Down => self.zoom_level /= 1.5,
+                Up => self.zoom_level *= 1.5,
+            },
+            BodyInfo => self.current_screen = AppScreen::Info,
+            ToggleTreeExpansion => self.toggle_selection_expansion(),
+            MapOffset(d) => {
+                self.offset += (match d {
+                    Front | Right => 1.,
+                    _ => -1.,
+                } * OFFSET_STEP as f64
+                    / self.zoom_level)
+                    .round() as i64
+                    * match d {
+                        Front | Back => Vector2::y(),
+                        _ => Vector2::x(),
+                    }
+            }
+            // KeyCode::Char('w') => {
+            //     self.offset +=
+            //         (OFFSET_STEP as f64 / self.zoom_level).round() as i64 * Vector2::y()
+            // }
+            // KeyCode::Char('a') => {
+            //     self.offset +=
+            //         (-OFFSET_STEP as f64 / self.zoom_level).round() as i64 * Vector2::x()
+            // }
+            // KeyCode::Char('s') => {
+            //     self.offset +=
+            //         (-OFFSET_STEP as f64 / self.zoom_level).round() as i64 * Vector2::y()
+            // }
+            // KeyCode::Char('d') => {
+            //     self.offset +=
+            //         (OFFSET_STEP as f64 / self.zoom_level).round() as i64 * Vector2::x()
+            // }
+            EnterSearchView => self.enter_search_mode(),
+            FocusBody => self.focus_body = self.selected_body_id_tree(),
+            Autoscale => self.autoscale(),
+        }
+    }
+
+    pub fn handle_search_event(&mut self, event: SearchViewEvent) {
+        use Direction2::*;
+        use SearchViewEvent::*;
+        match event {
+            DeleteChar => self.delete_char(),
+            MoveCursor(d) => match d {
+                Down => self.move_cursor_left(),
+                Up => self.move_cursor_right(),
+            },
+            SelectSearch(d) => match d {
+                Down => self.select_next_search(),
+                Up => self.select_previous_search(),
+            },
+            LeaveSearchView => self.leave_search_mode(),
+            ValidateSearch => self.validate_search(),
+            WriteChar(char) => self.enter_char(char),
+        }
+    }
+
+    pub fn handle_info_events(&mut self, event: InfoViewEvent) {
+        use InfoViewEvent::*;
+        match event {
+            LeaveInfoView => self.current_screen = AppScreen::Main,
         }
     }
 }
