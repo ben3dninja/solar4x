@@ -85,7 +85,7 @@ mod tests {
 
     #[test]
     fn test_update_global() {
-        let mut app = App::new_moons(true).unwrap();
+        let (mut app, _) = App::new_moons_testing().unwrap();
         app.engine.update();
         let global = app.next_map.lock().unwrap();
         let local = &app.engine.bodies;
@@ -98,7 +98,7 @@ mod tests {
 
     #[test]
     fn test_speed() {
-        let mut app = App::new_moons(true).unwrap();
+        let (mut app, _) = App::new_moons_testing().unwrap();
         app.engine.speed = 10.;
         let mut time = 0.;
         let moon = BodyID::from("lune");

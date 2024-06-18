@@ -7,9 +7,9 @@ mod ui;
 mod utils;
 fn main() -> Result<(), Box<dyn Error>> {
     #[cfg(not(feature = "asteroids"))]
-    let res = App::new_moons(false)?.run();
+    let res = App::new_moons_client()?.run();
     #[cfg(feature = "asteroids")]
-    let res = App::new_complete(false)?.run();
+    let res = App::new_complete_client()?.run();
 
     res
 }

@@ -64,7 +64,7 @@ impl UiState {
     }
 
     pub fn validate_search(&mut self) {
-        self.explorer_mode = ExplorerMode::Tree;
+        self.set_explorer_mode(ExplorerMode::Tree);
         if let Some(id) = self.selected_body_id_search() {
             self.select_body(id)
         }
@@ -101,14 +101,14 @@ impl UiState {
     }
 
     pub fn leave_search_mode(&mut self) {
-        self.explorer_mode = ExplorerMode::Tree;
+        self.set_explorer_mode(ExplorerMode::Tree);
     }
 
     pub fn enter_search_mode(&mut self) {
         self.search_character_index = 0;
         self.search_input = String::new();
         self.search_state.select(Some(0));
-        self.explorer_mode = ExplorerMode::Search;
+        self.set_explorer_mode(ExplorerMode::Search);
     }
 }
 
@@ -118,11 +118,10 @@ mod tests {
 
     #[test]
     fn test_search() {
-        let mut app = App::new_moons(true).unwrap();
-        let ui = &mut app.ui;
+        let (_, mut ui) = App::new_moons_testing().unwrap();
         ui.toggle_selection_expansion();
         ui.select_next_tree();
-        ui.explorer_mode = ExplorerMode::Search;
+        ui.set_explorer_mode(ExplorerMode::Search);
         ui.search_input = "Moo".into();
         ui.update_search_selection();
         ui.validate_search();

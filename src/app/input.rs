@@ -4,17 +4,17 @@ use crossterm::event::{self, KeyCode, KeyEvent, KeyEventKind};
 
 use crate::ui::{events::UiEvent, AppScreen, ExplorerMode};
 
-use super::{App, AppMessage, FRAME_RATE};
+use super::{App, AppMessage};
 
 impl App {
     pub fn handle_input(&mut self) -> Result<AppMessage, Box<dyn Error>> {
-        if event::poll(Duration::from_secs_f64(1. / FRAME_RATE))? {
+        if event::poll(Duration::ZERO)? {
             if let event::Event::Key(event) = event::read()? {
                 if event.kind == KeyEventKind::Release {
                     return Ok(AppMessage::Idle);
                 }
                 if matches!(
-                    (&self.ui.current_screen, &self.ui.explorer_mode),
+                    (self.get_current_screen(), self.get_explorer_mode()),
                     (AppScreen::Main, ExplorerMode::Tree)
                 ) {
                     match event.code {
@@ -44,8 +44,8 @@ impl App {
         let (w, a) = ('w', 'a');
         #[cfg(feature = "azerty")]
         let (w, a) = ('z', 'q');
-        self.ui_event_sender.send(match self.ui.current_screen {
-            AppScreen::Main => match self.ui.explorer_mode {
+        self.ui_event_sender.send(match self.get_current_screen() {
+            AppScreen::Main => match self.get_explorer_mode() {
                 ExplorerMode::Tree => UiEvent::Tree(match event.code {
                     KeyCode::Down => SelectTree(Down),
                     KeyCode::Up => SelectTree(Up),

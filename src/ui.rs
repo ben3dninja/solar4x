@@ -5,10 +5,13 @@ mod tree;
 
 use std::{
     io::{stdout, Result, Stdout},
-    sync::{mpsc::Receiver, Arc, Mutex},
+    sync::{
+        mpsc::{Receiver, Sender},
+        Arc, Mutex,
+    },
 };
 
-use crate::app::{body_id::BodyID, info::SystemInfo, AppMessage, GlobalMap};
+use crate::app::{body_id::BodyID, info::SystemInfo, AppError, AppMessage, GlobalMap};
 use crossterm::{
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
     ExecutableCommand,
@@ -22,8 +25,7 @@ use self::{events::UiEvent, tree::TreeEntry};
 const OFFSET_STEP: i64 = 1e8 as i64;
 
 pub struct UiState {
-    pub current_screen: AppScreen,
-    pub explorer_mode: ExplorerMode,
+    ctx: Arc<Mutex<UiContext>>,
     // 1 represents the level where all the system is seen,
     // higher values mean more zoom
     zoom_level: f64,
@@ -39,20 +41,27 @@ pub struct UiState {
     shared_info: Arc<SystemInfo>,
     pub global_map: Arc<Mutex<GlobalMap>>,
     ui_event_receiver: Receiver<UiEvent>,
+    error_sender: Sender<AppError>,
 }
 
-#[derive(Default)]
+#[derive(Default, Copy, Clone)]
 pub enum AppScreen {
     #[default]
     Main,
     Info,
 }
 
-#[derive(Default)]
+#[derive(Default, Copy, Clone)]
 pub enum ExplorerMode {
     #[default]
     Tree,
     Search,
+}
+
+#[derive(Default)]
+pub struct UiContext {
+    pub current_screen: AppScreen,
+    pub explorer_mode: ExplorerMode,
 }
 
 pub type Tui = Terminal<CrosstermBackend<Stdout>>;
@@ -62,12 +71,13 @@ impl UiState {
         shared_info: Arc<SystemInfo>,
         global_map: Arc<Mutex<GlobalMap>>,
         ui_event_receiver: Receiver<UiEvent>,
+        error_sender: Sender<AppError>,
+        ctx: Arc<Mutex<UiContext>>,
     ) -> Result<Self> {
         let search_entries: Vec<BodyID> = shared_info.bodies.keys().cloned().collect();
         let main_body = shared_info.primary_body;
         Ok(Self {
-            current_screen: AppScreen::default(),
-            explorer_mode: ExplorerMode::default(),
+            ctx,
             tree_entries: vec![TreeEntry::new_main_body(main_body)],
             tree_state: ListState::default().with_selected(Some(0)),
             search_state: ListState::default().with_selected(Some(0)),
@@ -81,11 +91,25 @@ impl UiState {
             shared_info,
             global_map,
             ui_event_receiver,
+            error_sender,
         })
     }
 
+    pub fn get_explorer_mode(&self) -> ExplorerMode {
+        self.ctx.lock().unwrap().explorer_mode
+    }
+    pub fn get_current_screen(&self) -> AppScreen {
+        self.ctx.lock().unwrap().current_screen
+    }
+    pub fn set_explorer_mode(&self, value: ExplorerMode) {
+        self.ctx.lock().unwrap().explorer_mode = value;
+    }
+    pub fn set_current_screen(&self, value: AppScreen) {
+        self.ctx.lock().unwrap().current_screen = value;
+    }
+
     pub fn update_search_selection(&mut self) {
-        match self.explorer_mode {
+        match self.get_explorer_mode() {
             ExplorerMode::Search => self.search_entries = self.search(&self.search_input),
             _ => {}
         }
@@ -94,19 +118,25 @@ impl UiState {
         }
     }
 
-    // pub fn run(&mut self) -> Result<()> {
-    //     loop {
-    //         if matches!(self.handle_events()?, AppMessage::Quit) {
-    //             break;
-    //         }
-    //         self.update_search_selection();
-    //         self.render()
-    //     }
-    //     Ok(())
-    // }
+    pub fn run(&mut self, mut tui: Option<Tui>) {
+        loop {
+            if matches!(self.handle_events(), AppMessage::Quit) {
+                break;
+            }
+            self.update_search_selection();
+            if let Some(tui) = &mut tui {
+                if let Err(err) = self.render(tui) {
+                    self.error_sender.send(Box::new(err)).unwrap();
+                    break;
+                }
+            }
+        }
+        if tui.is_some() {
+            UiState::reset_tui().unwrap();
+        }
+    }
 
     pub fn render(&mut self, tui: &mut Tui) -> Result<()> {
-        self.update_search_selection();
         tui.draw(|frame| self.draw_ui(frame))?;
         Ok(())
     }
@@ -152,8 +182,8 @@ mod tests {
 
     #[test]
     fn test_select_body() {
-        let mut app = App::new_simple(true).unwrap();
-        app.ui.select_body("terre".into());
-        assert_eq!(app.ui.selected_body_id_tree(), "terre".into())
+        let (_, mut ui) = App::new_simple_testing().unwrap();
+        ui.select_body("terre".into());
+        assert_eq!(ui.selected_body_id_tree(), "terre".into())
     }
 }
