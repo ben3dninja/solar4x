@@ -7,8 +7,7 @@ use crate::{
 
 use super::{AppScreen, UiState, OFFSET_STEP};
 
-use std::io::Result;
-
+#[derive(Debug)]
 pub enum TreeViewEvent {
     SelectTree(Direction2),
     Zoom(Direction2),
@@ -21,6 +20,7 @@ pub enum TreeViewEvent {
     Autoscale,
 }
 
+#[derive(Debug)]
 pub enum SearchViewEvent {
     MoveCursor(Direction2),
     SelectSearch(Direction2),
@@ -30,10 +30,12 @@ pub enum SearchViewEvent {
     DeleteChar,
 }
 
+#[derive(Debug)]
 pub enum InfoViewEvent {
     LeaveInfoView,
 }
 
+#[derive(Debug)]
 pub enum UiEvent {
     Tree(TreeViewEvent),
     Search(SearchViewEvent),
@@ -42,16 +44,16 @@ pub enum UiEvent {
 }
 
 impl UiState {
-    pub fn handle_events(&mut self) -> Result<AppMessage> {
+    pub fn handle_events(&mut self) -> AppMessage {
         while let Ok(event) = self.ui_event_receiver.try_recv() {
             match event {
-                UiEvent::Quit => return Ok(AppMessage::Quit),
+                UiEvent::Quit => return AppMessage::Quit,
                 UiEvent::Search(e) => self.handle_search_event(e),
                 UiEvent::Tree(e) => self.handle_tree_event(e),
-                UiEvent::Info(e) => self.handle_info_events(e),
+                UiEvent::Info(e) => self.handle_info_event(e),
             }
         }
-        Ok(AppMessage::Idle)
+        AppMessage::Idle
     }
 
     pub fn handle_tree_event(&mut self, event: TreeViewEvent) {
@@ -67,7 +69,7 @@ impl UiState {
                 Down => self.zoom_level /= 1.5,
                 Up => self.zoom_level *= 1.5,
             },
-            BodyInfo => self.current_screen = AppScreen::Info,
+            BodyInfo => self.set_current_screen(AppScreen::Info),
             ToggleTreeExpansion => self.toggle_selection_expansion(),
             MapOffset(d) => {
                 self.offset += (match d {
@@ -123,10 +125,10 @@ impl UiState {
         }
     }
 
-    pub fn handle_info_events(&mut self, event: InfoViewEvent) {
+    pub fn handle_info_event(&mut self, event: InfoViewEvent) {
         use InfoViewEvent::*;
         match event {
-            LeaveInfoView => self.current_screen = AppScreen::Main,
+            LeaveInfoView => self.set_current_screen(AppScreen::Main),
         }
     }
 }

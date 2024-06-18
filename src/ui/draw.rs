@@ -18,12 +18,12 @@ impl UiState {
     pub fn draw_ui(&mut self, f: &mut Frame) {
         let chunks =
             Layout::horizontal([Constraint::Percentage(25), Constraint::Fill(1)]).split(f.size());
-        match self.explorer_mode {
+        match self.get_explorer_mode() {
             ExplorerMode::Tree => self.draw_tree(f, chunks[0]),
             ExplorerMode::Search => self.draw_search(f, chunks[0]),
         }
         self.draw_canvas(f, chunks[1]);
-        if matches!(self.current_screen, AppScreen::Info) {
+        if matches!(self.get_current_screen(), AppScreen::Info) {
             self.draw_popup(f)
         }
     }

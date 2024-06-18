@@ -120,8 +120,7 @@ mod tests {
 
     #[test]
     fn test_toggle_entry_expansion() {
-        let mut app = App::new_simple(true).unwrap();
-        let ui = &mut app.ui;
+        let (_, mut ui) = App::new_simple_testing().unwrap();
         ui.toggle_selection_expansion();
         assert_eq!(ui.tree_entries.len(), 9);
         assert!(ui.tree_entries[0].is_expanded);
@@ -139,8 +138,7 @@ mod tests {
 
     #[test]
     fn test_entry_is_last_child() {
-        let mut app = App::new_simple(true).unwrap();
-        let ui = &mut app.ui;
+        let (_, mut ui) = App::new_simple_testing().unwrap();
         ui.toggle_selection_expansion();
         for i in 0..8 {
             assert!(!ui.entry_is_last_child(i).unwrap());

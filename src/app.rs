@@ -6,10 +6,12 @@ mod input;
 use std::{
     collections::HashMap,
     error::Error,
+    io::Result as IoResult,
     sync::{
-        mpsc::{self, Sender},
+        mpsc::{self, Receiver, Sender},
         Arc, Mutex,
     },
+    thread::{self, JoinHandle},
     time::{Duration, Instant},
 };
 
@@ -18,29 +20,29 @@ use nalgebra::Vector3;
 use crate::{
     app::body_data::BodyType,
     engine::Engine,
-    ui::{events::UiEvent, Tui, UiState},
+    ui::{events::UiEvent, AppScreen, ExplorerMode, UiContext, UiState},
     utils::de::read_main_bodies,
 };
 
 use self::{body_data::BodyData, body_id::BodyID, info::SystemInfo};
-
-// frame rate in fps
-const FRAME_RATE: f64 = 60.;
 
 // Fixed update time step
 pub const TIME_STEP: Duration = Duration::from_millis(12);
 
 pub type GlobalMap = HashMap<BodyID, Vector3<i64>>;
 
+pub type AppError = Box<dyn Error + Send>;
+
 pub struct App {
     pub engine: Engine,
-    pub tui: Option<Tui>,
-    pub ui: UiState,
     pub shared_info: Arc<SystemInfo>,
     pub current_map: Arc<Mutex<GlobalMap>>,
     pub next_map: Arc<Mutex<GlobalMap>>,
     pub time_switch: bool,
     ui_event_sender: Sender<UiEvent>,
+    ui_handle: Option<JoinHandle<()>>,
+    error_receiver: Receiver<AppError>,
+    ui_context: Arc<Mutex<UiContext>>,
 }
 
 pub enum AppMessage {
@@ -49,10 +51,11 @@ pub enum AppMessage {
 }
 
 impl App {
-    pub fn new_from_filter(
+    fn new_from_filter(
         f: impl FnMut(&BodyData) -> bool,
         headless: bool,
-    ) -> std::io::Result<Self> {
+        manual: bool,
+    ) -> IoResult<(Self, Option<UiState>)> {
         let bodies = read_main_bodies()?.into_iter().filter(f);
         let current_map = Arc::new(Mutex::new(GlobalMap::new()));
         let next_map = Arc::new(Mutex::new(GlobalMap::new()));
@@ -62,33 +65,52 @@ impl App {
         );
         let engine = Engine::new_from_data(Arc::clone(&next_map), Arc::clone(&shared_info));
         let (ui_event_sender, ui_event_receiver) = mpsc::channel();
-        Ok(Self {
-            engine,
-            tui: if headless {
-                None
-            } else {
-                Some(UiState::setup_tui()?)
+        let (error_sender, error_receiver) = mpsc::channel();
+        let ui_context = Arc::new(Mutex::new(UiContext::default()));
+        let tui = if headless {
+            None
+        } else {
+            Some(UiState::setup_tui()?)
+        };
+        let mut ui = Some(UiState::new(
+            Arc::clone(&shared_info),
+            Arc::clone(&current_map),
+            ui_event_receiver,
+            error_sender,
+            Arc::clone(&ui_context),
+        )?);
+        let ui_handle = if manual {
+            None
+        } else {
+            let handle = Some(thread::spawn(move || ui.unwrap().run(tui)));
+            ui = None;
+            handle
+        };
+        Ok((
+            Self {
+                engine,
+                current_map,
+                next_map,
+                shared_info,
+                time_switch: true,
+                ui_event_sender,
+                ui_handle,
+                error_receiver,
+                ui_context,
             },
-            ui: UiState::new(
-                Arc::clone(&shared_info),
-                Arc::clone(&current_map),
-                ui_event_receiver,
-            )?,
-            current_map,
-            next_map,
-            shared_info,
-            time_switch: true,
-            ui_event_sender,
-        })
+            ui,
+        ))
     }
 
-    pub fn new_simple(headless: bool) -> std::io::Result<Self> {
+    fn new_simple(headless: bool, manual: bool) -> IoResult<(Self, Option<UiState>)> {
         Self::new_from_filter(
             |data| matches!(data.body_type, BodyType::Planet | BodyType::Star),
             headless,
+            manual,
         )
     }
-    pub fn new_moons(headless: bool) -> std::io::Result<Self> {
+
+    fn new_moons(headless: bool, manual: bool) -> IoResult<(Self, Option<UiState>)> {
         Self::new_from_filter(
             |data| {
                 matches!(
@@ -97,18 +119,53 @@ impl App {
                 )
             },
             headless,
+            manual,
         )
     }
-    pub fn new_complete(headless: bool) -> std::io::Result<Self> {
-        Self::new_from_filter(|_| true, headless)
+    fn new_complete(headless: bool, manual: bool) -> IoResult<(Self, Option<UiState>)> {
+        Self::new_from_filter(|_| true, headless, manual)
+    }
+
+    pub fn new_simple_client() -> IoResult<Self> {
+        Self::new_simple(false, false).map(|a| a.0)
+    }
+    pub fn new_moons_client() -> IoResult<Self> {
+        Self::new_moons(false, false).map(|a| a.0)
+    }
+    pub fn new_complete_client() -> IoResult<Self> {
+        Self::new_moons(false, false).map(|a| a.0)
+    }
+
+    pub fn new_simple_testing() -> IoResult<(Self, UiState)> {
+        Self::new_simple(true, true).map(|a| (a.0, a.1.unwrap()))
+    }
+    pub fn new_moons_testing() -> IoResult<(Self, UiState)> {
+        Self::new_moons(true, true).map(|a| (a.0, a.1.unwrap()))
     }
 
     pub fn run(&mut self) -> Result<(), Box<dyn Error>> {
         let mut previous_time = Instant::now();
         let mut lag = Duration::ZERO;
+        // eprintln!(
+        //     "Starting app at {}",
+        //     std::time::SystemTime::now()
+        //         .duration_since(std::time::UNIX_EPOCH)
+        //         .unwrap()
+        //         .as_secs()
+        // );
         loop {
             if let Ok(AppMessage::Quit) = self.handle_input() {
+                self.ui_event_sender.send(UiEvent::Quit)?;
+                if let Some(handle) = self.ui_handle.take() {
+                    handle.join().unwrap();
+                }
                 break;
+            }
+            if let Ok(err) = self.error_receiver.try_recv() {
+                if let Some(handle) = self.ui_handle.take() {
+                    handle.join().unwrap();
+                }
+                return Err(err);
             }
             let current_time = Instant::now();
             let elapsed = current_time - previous_time;
@@ -117,13 +174,9 @@ impl App {
                 lag += elapsed;
                 while lag >= TIME_STEP {
                     self.engine.update();
-                    self.swap_buffers();
+                    self.copy_buffer();
                     lag -= TIME_STEP;
                 }
-            }
-            if let Some(tui) = &mut self.tui {
-                self.ui.handle_events()?;
-                self.ui.render(tui)?;
             }
         }
         Ok(())
@@ -133,19 +186,18 @@ impl App {
         self.time_switch = !self.time_switch
     }
 
-    fn swap_buffers(&mut self) {
-        let buf = Arc::clone(&self.current_map);
-        self.current_map = Arc::clone(&self.next_map);
-        self.next_map = buf;
-        self.engine.global_map = Arc::clone(&self.next_map);
-        self.ui.global_map = Arc::clone(&self.current_map);
+    fn copy_buffer(&mut self) {
+        self.current_map
+            .lock()
+            .unwrap()
+            .clone_from(&*self.next_map.lock().unwrap());
     }
-}
-impl Drop for App {
-    fn drop(&mut self) {
-        if self.tui.is_some() {
-            UiState::reset_tui().unwrap();
-        }
+
+    pub fn get_current_screen(&self) -> AppScreen {
+        self.ui_context.lock().unwrap().current_screen
+    }
+    pub fn get_explorer_mode(&self) -> ExplorerMode {
+        self.ui_context.lock().unwrap().explorer_mode
     }
 }
 
@@ -156,12 +208,12 @@ mod tests {
     use super::App;
 
     #[test]
-    fn test_swap_buffers() {
-        let mut app = App::new_moons(true).unwrap();
+    fn test_copy_buffers() {
+        let (mut app, ui) = App::new_moons_testing().unwrap();
         app.engine.update();
-        app.swap_buffers();
+        app.copy_buffer();
 
-        let global = app.ui.global_map.lock().unwrap();
+        let global = ui.global_map.lock().unwrap();
         let local = &app.engine.bodies;
         let moon = "lune".into();
         assert!(
