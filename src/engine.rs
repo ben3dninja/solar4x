@@ -41,7 +41,7 @@ impl Engine {
     }
 
     pub fn update(&mut self) {
-        self.time += self.speed / TIME_STEP.as_secs_f64();
+        self.time += self.speed * TIME_STEP.as_secs_f64();
         self.update_local();
         self.update_global();
     }
@@ -78,7 +78,10 @@ impl Engine {
 
 #[cfg(test)]
 mod tests {
-    use crate::{app::App, utils::algebra::inorm};
+    use crate::{
+        app::{body_id::BodyID, App, TIME_STEP},
+        utils::algebra::inorm,
+    };
 
     #[test]
     fn test_update_global() {
@@ -91,5 +94,24 @@ mod tests {
             (inorm(global[&moon]) - inorm(local[&"terre".into()].position)).abs()
                 <= inorm(local[&moon].position)
         )
+    }
+
+    #[test]
+    fn test_speed() {
+        let mut app = App::new_moons(true).unwrap();
+        app.engine.speed = 10.;
+        let mut time = 0.;
+        let moon = BodyID::from("lune");
+        app.engine.update();
+        let initial_pos = app.engine.bodies[&moon].position;
+
+        let period = app.shared_info.bodies[&moon].revolution_period;
+        while time < period {
+            time += 10. * TIME_STEP.as_secs_f64();
+            app.engine.update();
+        }
+        let final_pos = app.engine.bodies[&moon].position;
+        dbg!(final_pos, initial_pos);
+        assert!(inorm(final_pos - initial_pos) < 5000)
     }
 }

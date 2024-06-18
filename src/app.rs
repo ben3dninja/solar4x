@@ -1,12 +1,15 @@
 pub mod body_data;
 pub mod body_id;
-mod events;
 pub mod info;
+mod input;
 
 use std::{
     collections::HashMap,
     error::Error,
-    sync::{Arc, Mutex},
+    sync::{
+        mpsc::{self, Sender},
+        Arc, Mutex,
+    },
     time::{Duration, Instant},
 };
 
@@ -15,11 +18,11 @@ use nalgebra::Vector3;
 use crate::{
     app::body_data::BodyType,
     engine::Engine,
-    ui::{Tui, UiState},
+    ui::{events::UiEvent, Tui, UiState},
     utils::de::read_main_bodies,
 };
 
-use self::{body_data::BodyData, body_id::BodyID, events::AppMessage, info::SystemInfo};
+use self::{body_data::BodyData, body_id::BodyID, info::SystemInfo};
 
 // frame rate in fps
 const FRAME_RATE: f64 = 60.;
@@ -37,6 +40,12 @@ pub struct App {
     pub current_map: Arc<Mutex<GlobalMap>>,
     pub next_map: Arc<Mutex<GlobalMap>>,
     pub time_switch: bool,
+    ui_event_sender: Sender<UiEvent>,
+}
+
+pub enum AppMessage {
+    Quit,
+    Idle,
 }
 
 impl App {
@@ -52,6 +61,7 @@ impl App {
                 .ok_or(std::io::Error::other("no primary body found in data"))?,
         );
         let engine = Engine::new_from_data(Arc::clone(&next_map), Arc::clone(&shared_info));
+        let (ui_event_sender, ui_event_receiver) = mpsc::channel();
         Ok(Self {
             engine,
             tui: if headless {
@@ -59,11 +69,16 @@ impl App {
             } else {
                 Some(UiState::setup_tui()?)
             },
-            ui: UiState::new(Arc::clone(&shared_info), Arc::clone(&current_map))?,
+            ui: UiState::new(
+                Arc::clone(&shared_info),
+                Arc::clone(&current_map),
+                ui_event_receiver,
+            )?,
             current_map,
             next_map,
             shared_info,
             time_switch: true,
+            ui_event_sender,
         })
     }
 
@@ -92,19 +107,22 @@ impl App {
         let mut previous_time = Instant::now();
         let mut lag = Duration::ZERO;
         loop {
+            if let Ok(AppMessage::Quit) = self.handle_input() {
+                break;
+            }
             let current_time = Instant::now();
             let elapsed = current_time - previous_time;
             previous_time = current_time;
-            lag += elapsed;
-            if let Ok(AppMessage::Quit) = self.handle_events() {
-                break;
-            }
-            while lag >= TIME_STEP {
-                self.engine.update();
-                self.swap_buffers();
-                lag -= TIME_STEP;
+            if self.time_switch {
+                lag += elapsed;
+                while lag >= TIME_STEP {
+                    self.engine.update();
+                    self.swap_buffers();
+                    lag -= TIME_STEP;
+                }
             }
             if let Some(tui) = &mut self.tui {
+                self.ui.handle_events()?;
                 self.ui.render(tui)?;
             }
         }

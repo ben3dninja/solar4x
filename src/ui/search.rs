@@ -120,7 +120,7 @@ mod tests {
     fn test_search() {
         let mut app = App::new_moons(true).unwrap();
         let ui = &mut app.ui;
-        ui.toggle_selection_expansion().unwrap();
+        ui.toggle_selection_expansion();
         ui.select_next_tree();
         ui.explorer_mode = ExplorerMode::Search;
         ui.search_input = "Moo".into();

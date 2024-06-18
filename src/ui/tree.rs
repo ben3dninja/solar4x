@@ -33,13 +33,10 @@ impl TreeEntry {
 }
 
 impl UiState {
-    pub fn toggle_selection_expansion(&mut self) -> Result<(), String> {
-        let sel_id = self
-            .tree_state
-            .selected()
-            .ok_or("no selected body".to_owned())?;
-        self.toggle_entry_expansion(sel_id);
-        Ok(())
+    pub fn toggle_selection_expansion(&mut self) {
+        if let Some(sel_id) = self.tree_state.selected() {
+            self.toggle_entry_expansion(sel_id);
+        }
     }
 
     pub fn expand_entry_by_id(&mut self, id: BodyID) {
@@ -125,7 +122,7 @@ mod tests {
     fn test_toggle_entry_expansion() {
         let mut app = App::new_simple(true).unwrap();
         let ui = &mut app.ui;
-        ui.toggle_selection_expansion().unwrap();
+        ui.toggle_selection_expansion();
         assert_eq!(ui.tree_entries.len(), 9);
         assert!(ui.tree_entries[0].is_expanded);
         for i in 1..9 {
@@ -135,7 +132,7 @@ mod tests {
             ui.toggle_entry_expansion(i);
             ui.toggle_entry_expansion(i);
         }
-        ui.toggle_selection_expansion().unwrap();
+        ui.toggle_selection_expansion();
         assert_eq!(ui.tree_entries.len(), 1);
         assert!(!ui.tree_entries[0].is_expanded);
     }
@@ -144,7 +141,7 @@ mod tests {
     fn test_entry_is_last_child() {
         let mut app = App::new_simple(true).unwrap();
         let ui = &mut app.ui;
-        ui.toggle_selection_expansion().unwrap();
+        ui.toggle_selection_expansion();
         for i in 0..8 {
             assert!(!ui.entry_is_last_child(i).unwrap());
         }
