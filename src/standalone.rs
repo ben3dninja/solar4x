@@ -1,9 +1,12 @@
-use std::error::Error;
+use std::{
+    error::Error,
+    time::{Duration, Instant},
+};
 
 use crate::{
-    app::{body_data::BodyType, App, GuiApp},
+    app::{body_data::BodyType, App, AppMessage, GuiApp, TIME_STEP},
     keyboard::Keymap,
-    ui::UiState,
+    ui::{events::UiEvent, UiState},
 };
 
 pub struct Standalone {
@@ -21,10 +24,36 @@ impl Standalone {
     }
 
     pub fn run(&mut self) -> Result<(), Box<dyn Error>> {
-        self.app.run(|app| {
-            app.core.engine.update();
-            app.core.copy_buffer();
-        })
+        let mut previous_time = Instant::now();
+        let mut lag = Duration::ZERO;
+        loop {
+            let app = &mut self.app;
+            if let Ok(AppMessage::Quit) = app.handle_input() {
+                app.ui_event_sender.send(UiEvent::Quit)?;
+                if let Some(handle) = app.ui_handle.take() {
+                    handle.join().unwrap();
+                }
+                break;
+            }
+            if let Ok(err) = app.error_receiver.try_recv() {
+                if let Some(handle) = app.ui_handle.take() {
+                    handle.join().unwrap();
+                }
+                return Err(err);
+            }
+            let current_time = Instant::now();
+            let elapsed = current_time - previous_time;
+            previous_time = current_time;
+            if app.core.time_switch {
+                lag += elapsed;
+                while lag >= TIME_STEP {
+                    app.core.engine.update();
+                    app.core.copy_buffer();
+                    lag -= TIME_STEP;
+                }
+            }
+        }
+        Ok(())
     }
 
     pub fn core_mut(&mut self) -> &mut App {

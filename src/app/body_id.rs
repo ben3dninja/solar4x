@@ -1,11 +1,11 @@
-use serde::{de::Visitor, Deserialize, Deserializer};
+use serde::{de::Visitor, Deserialize, Deserializer, Serialize};
 
 use crate::utils::hash::hash;
 
 const ID_PREFIX: &str = "https://api.le-systeme-solaire.net/rest/bodies/";
 
 // TODO : change default id
-#[derive(Default, PartialEq, PartialOrd, Ord, Eq, Debug, Clone, Copy, Hash)]
+#[derive(Default, PartialEq, PartialOrd, Ord, Eq, Debug, Clone, Copy, Hash, Serialize)]
 pub struct BodyID(u64);
 
 impl std::fmt::Display for BodyID {
@@ -51,6 +51,13 @@ impl<'de> Visitor<'de> for IDVisitor {
         strip_id_prefix(v).ok_or(serde::de::Error::custom(
             "id could not be deserialized from string",
         ))
+    }
+
+    fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
+    where
+        E: serde::de::Error,
+    {
+        Ok(BodyID(v))
     }
 }
 
