@@ -36,13 +36,19 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c4b4d0bd25bd0b74681c0ad21497610ce1b7c91b1022cd21c80c6fbdd9476b0"
 
 [[package]]
+name = "bincode"
+version = "1.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b1f45e9417d87227c7a56d22e471c6206462cba514c7590c09aff4cf6d1ddcad"
+dependencies = [
+ "serde",
+]
+
+[[package]]
 name = "bitflags"
 version = "2.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf4b9d6a944f767f8e5e0db018570623c85f3d925ac718db4e06d0187adb21c1"
-dependencies = [
- "serde",
-]
 
 [[package]]
 name = "bytemuck"
@@ -95,7 +101,6 @@ dependencies = [
  "libc",
  "mio",
  "parking_lot",
- "serde",
  "signal-hook",
  "signal-hook-mio",
  "winapi",
@@ -397,6 +402,7 @@ dependencies = [
 name = "rust_space_trading"
 version = "0.1.0"
 dependencies = [
+ "bincode",
  "crossterm",
  "fuzzy-matcher",
  "nalgebra",
