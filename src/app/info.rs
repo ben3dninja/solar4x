@@ -48,25 +48,25 @@ impl SystemInfo {
 
 #[cfg(test)]
 mod tests {
-    use crate::app::App;
+    use crate::{app::body_data::BodyType, standalone::Standalone};
 
     #[test]
     fn test_max_distance() {
-        let (app, _) = App::new_simple_testing().unwrap();
-        assert_eq!(app.shared_info.get_max_distance(), 4498396441)
+        let (app, _) = Standalone::new_testing(BodyType::Planet).unwrap();
+        assert_eq!(app.core().shared_info.get_max_distance(), 4498396441)
     }
 
     #[test]
     fn test_primary_body() {
-        let (app, _) = App::new_simple_testing().unwrap();
-        assert_eq!(app.shared_info.primary_body, "soleil".into())
+        let (app, _) = Standalone::new_testing(BodyType::Planet).unwrap();
+        assert_eq!(app.core().shared_info.primary_body, "soleil".into())
     }
 
     #[test]
     fn test_get_body_ancestors() {
-        let (app, _) = App::new_moons_testing().unwrap();
+        let (app, _) = Standalone::new_testing(BodyType::Moon).unwrap();
         assert_eq!(
-            app.shared_info.get_body_ancestors("lune".into()),
+            app.core().shared_info.get_body_ancestors("lune".into()),
             vec!["soleil".into(), "terre".into()]
         );
     }

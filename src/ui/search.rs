@@ -114,11 +114,11 @@ impl UiState {
 
 #[cfg(test)]
 mod tests {
-    use crate::{app::App, ui::ExplorerMode};
+    use crate::{app::body_data::BodyType, standalone::Standalone, ui::ExplorerMode};
 
     #[test]
     fn test_search() {
-        let (_, mut ui) = App::new_moons_testing().unwrap();
+        let (_, mut ui) = Standalone::new_testing(BodyType::Moon).unwrap();
         ui.toggle_selection_expansion();
         ui.select_next_tree();
         ui.set_explorer_mode(ExplorerMode::Search);

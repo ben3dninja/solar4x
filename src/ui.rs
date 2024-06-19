@@ -178,11 +178,11 @@ impl UiState {
 
 #[cfg(test)]
 mod tests {
-    use crate::app::App;
+    use crate::{app::body_data::BodyType, standalone::Standalone};
 
     #[test]
     fn test_select_body() {
-        let (_, mut ui) = App::new_simple_testing().unwrap();
+        let (_, mut ui) = Standalone::new_testing(BodyType::Planet).unwrap();
         ui.select_body("terre".into());
         assert_eq!(ui.selected_body_id_tree(), "terre".into())
     }
