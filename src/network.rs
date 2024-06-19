@@ -1,35 +1,38 @@
-use std::{
-    error::Error,
-    io::{Read, Write},
-};
+use std::error::Error;
 
 use bincode::ErrorKind;
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
+    net::TcpStream,
+};
 
-use crate::app::body_data::BodyData;
+use crate::app::body_id::BodyID;
 
-// #[derive(Serialize)]
-// pub enum Request {
-//     SystemData,
-// }
+pub trait NetworkMessage: Serialize + DeserializeOwned {
+    async fn send(&self, stream: &mut TcpStream) -> Result<(), Box<dyn Error>> {
+        Ok(stream.write_all(&bincode::serialize(&self)?).await?)
+    }
+
+    async fn read(stream: &mut TcpStream) -> Result<Self, Box<ErrorKind>> {
+        let mut buf = Vec::new();
+        stream.read_to_end(&mut buf).await?;
+        bincode::deserialize(&buf)
+    }
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct SystemDataRequest;
 
-pub trait Request: Serialize {
-    type Response: DeserializeOwned;
-    fn send(&self, stream: &mut impl Write) -> Result<(), Box<dyn Error>> {
-        stream.write_all(&bincode::serialize(&self)?)?;
-        stream.flush()?;
-        Ok(())
-    }
+#[derive(Serialize, Deserialize)]
+pub struct SystemDataResponse(pub Vec<BodyID>);
 
-    fn await_response(&self, stream: &mut impl Read) -> Result<Self::Response, Box<ErrorKind>> {
-        let mut buf = Vec::new();
-        stream.read_to_end(&mut buf)?;
-        bincode::deserialize(&mut buf)
-    }
+impl NetworkMessage for SystemDataRequest {}
+impl NetworkMessage for SystemDataResponse {}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum ServerToClientMessage {
+    UpdateTime { game_time: f64 },
 }
 
-impl Request for SystemDataRequest {
-    type Response = Vec<BodyData>;
-}
+impl NetworkMessage for ServerToClientMessage {}
