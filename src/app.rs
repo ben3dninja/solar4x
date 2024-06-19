@@ -101,7 +101,15 @@ impl GuiApp {
         f: impl FnMut(&BodyData) -> bool,
         testing: bool,
     ) -> IoResult<(Self, Option<UiState>)> {
-        let core = App::new_from_filter(f)?;
+        let bodies = read_main_bodies()?.into_iter().filter(f);
+        Self::new_from_bodies(bodies, testing)
+    }
+
+    pub fn new_from_bodies(
+        bodies: impl IntoIterator<Item = BodyData>,
+        testing: bool,
+    ) -> IoResult<(Self, Option<UiState>)> {
+        let core = App::new_from_bodies(bodies)?;
         let (ui_event_sender, ui_event_receiver) = mpsc::channel();
         let (error_sender, error_receiver) = mpsc::channel();
         let ui_context = Arc::new(Mutex::new(UiContext::default()));
