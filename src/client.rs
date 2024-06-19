@@ -1,4 +1,5 @@
-use crate::{app::App, utils::hash::hash};
+use crate::app::GuiApp;
+use crate::utils::hash::hash;
 use std::io::Result;
 use std::net::{TcpStream, ToSocketAddrs};
 
@@ -10,13 +11,13 @@ impl From<&str> for ClientID {
     }
 }
 
-pub struct Client {
-    id: ClientID,
-    app: GuiApp,
-}
+// pub struct Client {
+//     id: ClientID,
+//     app: GuiApp,
+// }
 
-impl Client {
-    pub fn new_from_connection(name: String, server_adress: impl ToSocketAddrs) -> Result<Self> {
-        let stream = TcpStream::connect(server_adress)?;
-    }
-}
+// impl Client {
+//     pub fn new_from_connection(name: String, server_adress: impl ToSocketAddrs) -> Result<Self> {
+//         let stream = TcpStream::connect(server_adress)?;
+//     }
+// }

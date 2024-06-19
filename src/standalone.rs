@@ -2,6 +2,7 @@ use std::error::Error;
 
 use crate::{
     app::{body_data::BodyType, App, GuiApp},
+    keyboard::Keymap,
     ui::UiState,
 };
 
@@ -32,5 +33,14 @@ impl Standalone {
 
     pub fn core(&self) -> &App {
         &self.app.core
+    }
+
+    pub fn set_keymap(&mut self, keymap: Keymap) {
+        self.app.keymap = keymap;
+    }
+
+    pub fn with_keymap(mut self, keymap: Keymap) -> Self {
+        self.set_keymap(keymap);
+        self
     }
 }

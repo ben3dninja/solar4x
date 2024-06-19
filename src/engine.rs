@@ -78,17 +78,18 @@ impl Engine {
 
 #[cfg(test)]
 mod tests {
+    use crate::{app::body_data::BodyType, standalone::Standalone};
     use crate::{
-        app::{body_id::BodyID, App, TIME_STEP},
+        app::{body_id::BodyID, TIME_STEP},
         utils::algebra::inorm,
     };
 
     #[test]
     fn test_update_global() {
-        let (mut app, _) = App::new_moons_testing().unwrap();
-        app.engine.update();
-        let global = app.next_map.lock().unwrap();
-        let local = &app.engine.bodies;
+        let (mut app, _) = Standalone::new_testing(BodyType::Moon).unwrap();
+        app.core_mut().engine.update();
+        let global = app.core().next_map.lock().unwrap();
+        let local = &app.core().engine.bodies;
         let moon = "lune".into();
         assert!(
             (inorm(global[&moon]) - inorm(local[&"terre".into()].position)).abs()
@@ -98,19 +99,19 @@ mod tests {
 
     #[test]
     fn test_speed() {
-        let (mut app, _) = App::new_moons_testing().unwrap();
-        app.engine.speed = 10.;
+        let (mut app, _) = Standalone::new_testing(BodyType::Moon).unwrap();
+        app.core_mut().engine.speed = 10.;
         let mut time = 0.;
         let moon = BodyID::from("lune");
-        app.engine.update();
-        let initial_pos = app.engine.bodies[&moon].position;
+        app.core_mut().engine.update();
+        let initial_pos = app.core().engine.bodies[&moon].position;
 
-        let period = app.shared_info.bodies[&moon].revolution_period;
+        let period = app.core().shared_info.bodies[&moon].revolution_period;
         while time < period {
             time += 10. * TIME_STEP.as_secs_f64();
-            app.engine.update();
+            app.core_mut().engine.update();
         }
-        let final_pos = app.engine.bodies[&moon].position;
+        let final_pos = app.core().engine.bodies[&moon].position;
         dbg!(final_pos, initial_pos);
         assert!(inorm(final_pos - initial_pos) < 5000)
     }

@@ -116,11 +116,11 @@ impl UiState {
 
 #[cfg(test)]
 mod tests {
-    use crate::app::App;
+    use crate::{app::body_data::BodyType, standalone::Standalone};
 
     #[test]
     fn test_toggle_entry_expansion() {
-        let (_, mut ui) = App::new_simple_testing().unwrap();
+        let (_, mut ui) = Standalone::new_testing(BodyType::Planet).unwrap();
         ui.toggle_selection_expansion();
         assert_eq!(ui.tree_entries.len(), 9);
         assert!(ui.tree_entries[0].is_expanded);
@@ -138,7 +138,7 @@ mod tests {
 
     #[test]
     fn test_entry_is_last_child() {
-        let (_, mut ui) = App::new_simple_testing().unwrap();
+        let (_, mut ui) = Standalone::new_testing(BodyType::Planet).unwrap();
         ui.toggle_selection_expansion();
         for i in 0..8 {
             assert!(!ui.entry_is_last_child(i).unwrap());
