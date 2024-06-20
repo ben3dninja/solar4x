@@ -1,13 +1,14 @@
 use crate::app::body_id::BodyID;
 use crate::app::{AppMessage, GuiApp, TIME_STEP};
-use crate::network::{
-    NetworkMessage, ServerToClientMessage, SystemDataRequest, SystemDataResponse,
-};
+use crate::network::{ServerReliableMessage, ServerUnreliableMessage};
 use crate::ui::events::UiEvent;
+use renet::transport::{ClientAuthentication, NetcodeClientTransport};
 // use crate::utils::hash::hash;
+use renet::{ConnectionConfig, DefaultChannel, RenetClient};
 use std::error::Error;
-use std::time::{Duration, Instant};
-use tokio::net::{TcpStream, ToSocketAddrs};
+use std::net::{SocketAddr, UdpSocket};
+use std::thread;
+use std::time::{Duration, Instant, SystemTime};
 
 // struct ClientID(u64);
 
@@ -20,30 +21,82 @@ use tokio::net::{TcpStream, ToSocketAddrs};
 pub struct Client {
     // id: ClientID,
     app: GuiApp,
-    stream: TcpStream,
+    client: RenetClient,
+    transport: NetcodeClientTransport,
 }
 
 impl Client {
-    pub async fn new_from_connection(
+    pub fn new(
         // name: String,
-        server_adress: impl ToSocketAddrs,
+        client_addr: SocketAddr,
+        server_addr: SocketAddr,
     ) -> Result<Self, Box<dyn Error>> {
-        let mut stream = TcpStream::connect(server_adress).await?;
-        // let id = name.into();
-        SystemDataRequest.send(&mut stream).await?;
-        let ids = SystemDataResponse::read(&mut stream).await?.0;
-        println!("Received ids, building app");
+        let mut client = RenetClient::new(ConnectionConfig::default());
+
+        // Setup transport layer
+        let socket = UdpSocket::bind(client_addr)?;
+        let current_time = SystemTime::now().duration_since(SystemTime::UNIX_EPOCH)?;
+        let authentication = ClientAuthentication::Unsecure {
+            server_addr,
+            client_id: 0,
+            user_data: None,
+            protocol_id: 0,
+        };
+
+        let mut transport = NetcodeClientTransport::new(current_time, authentication, socket)?;
+
+        let tick = Duration::from_millis(5);
+
+        while !client.is_connected() {
+            client.update(tick);
+            transport.update(tick, &mut client)?;
+            thread::sleep(tick);
+        }
+        let mut i = 0;
+        let mut previous = Instant::now();
+        let ids = loop {
+            if i == 5 {
+                break Vec::new();
+            }
+            let current = Instant::now();
+            let elapsed = current - previous;
+            previous = current;
+            transport.update(elapsed, &mut client)?;
+            if let Some(message) = client.receive_message(DefaultChannel::ReliableOrdered) {
+                let message = bincode::deserialize::<ServerReliableMessage>(&message)?;
+                match message {
+                    ServerReliableMessage::BodyIDs(ids) => {
+                        break ids.into_iter().map(BodyID::from).collect()
+                    }
+                }
+            }
+            i += 1;
+            thread::sleep(Duration::from_millis(10));
+        };
         let (app, _) = GuiApp::new_from_filter(|data| ids.contains(&data.id), false)?;
-        let client = Client { app, stream };
+        let client = Client {
+            app,
+            client,
+            transport,
+        };
         Ok(client)
     }
 
-    pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
+    pub fn run(&mut self) -> Result<(), Box<dyn Error>> {
         let mut previous_time = Instant::now();
         let mut lag = Duration::ZERO;
         loop {
-            if let Ok(message) = ServerToClientMessage::read(&mut self.stream).await {
-                self.handle_server_message(message).await;
+            let current_time = Instant::now();
+            let elapsed = current_time - previous_time;
+            previous_time = current_time;
+            self.client.update(elapsed);
+            self.transport.update(elapsed, &mut self.client)?;
+            if self.client.is_connected() {
+                while let Some(message) = self.client.receive_message(DefaultChannel::Unreliable) {
+                    if let Ok(message) = bincode::deserialize::<ServerUnreliableMessage>(&message) {
+                        self.handle_server_message(message);
+                    }
+                }
             }
             let app = &mut self.app;
             if let Ok(AppMessage::Quit) = app.handle_input() {
@@ -51,6 +104,7 @@ impl Client {
                 if let Some(handle) = app.ui_handle.take() {
                     handle.join().unwrap();
                 }
+                self.transport.disconnect();
                 break;
             }
             if let Ok(err) = app.error_receiver.try_recv() {
@@ -59,9 +113,7 @@ impl Client {
                 }
                 return Err(err);
             }
-            let current_time = Instant::now();
-            let elapsed = current_time - previous_time;
-            previous_time = current_time;
+
             if app.core.time_switch {
                 lag += elapsed;
                 while lag >= TIME_STEP {
@@ -70,13 +122,14 @@ impl Client {
                     lag -= TIME_STEP;
                 }
             }
+            self.transport.send_packets(&mut self.client)?;
         }
         Ok(())
     }
 
-    pub async fn handle_server_message(&mut self, message: ServerToClientMessage) {
+    pub fn handle_server_message(&mut self, message: ServerUnreliableMessage) {
         match message {
-            ServerToClientMessage::UpdateTime { game_time } => {
+            ServerUnreliableMessage::UpdateTime { game_time } => {
                 self.app.core.engine.time = game_time;
             }
         }

@@ -1,87 +1,87 @@
+use renet::transport::{NetcodeServerTransport, ServerAuthentication, ServerConfig};
+use renet::{ConnectionConfig, DefaultChannel, RenetServer, ServerEvent};
 use std::error::Error;
-use std::io::Result as IoResult;
 use std::net::SocketAddr;
-use std::time::{Duration, Instant};
-use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};
-use tokio::sync::broadcast::{self, Receiver, Sender};
-use tokio::task::JoinHandle;
+use std::net::UdpSocket;
+use std::time::{Duration, Instant, SystemTime};
 
 use crate::app::body_data::BodyType;
 use crate::app::body_id::BodyID;
 use crate::app::{App, TIME_STEP};
-use crate::network::{
-    NetworkMessage, ServerToClientMessage, SystemDataRequest, SystemDataResponse,
-};
+use crate::network::{ServerReliableMessage, ServerUnreliableMessage};
 
 pub struct Server {
     app: App,
-    listener: TcpListener,
-    thread_handles: Vec<JoinHandle<()>>,
-    tx: Sender<ServerAction>,
+    net: (RenetServer, NetcodeServerTransport),
 }
 
-pub struct ServerTask {
-    stream: TcpStream,
-    rx: Receiver<ServerAction>,
-    client_address: SocketAddr,
-    body_ids: Vec<BodyID>,
-}
-
-const CLIENT_NUMBER: usize = 1;
 const UPDATE_TICK: Duration = Duration::from_secs(1);
 
 impl Server {
-    pub async fn new(address: impl ToSocketAddrs) -> IoResult<Self> {
-        let listener = TcpListener::bind(address).await?;
-        println!("Server bound to address {}", listener.local_addr()?);
+    pub fn new(address: SocketAddr) -> Result<Self, Box<dyn Error>> {
+        let server = RenetServer::new(ConnectionConfig::default());
+
+        let socket = UdpSocket::bind(address)?;
+        let server_config = ServerConfig {
+            current_time: SystemTime::now().duration_since(SystemTime::UNIX_EPOCH)?,
+            max_clients: 64,
+            protocol_id: 0,
+            public_addresses: vec![address],
+            authentication: ServerAuthentication::Unsecure,
+        };
+        let transport = NetcodeServerTransport::new(server_config, socket)?;
+
         let app = App::new_from_filter(|data| data.body_type <= BodyType::Moon)?;
-        let (tx, _) = broadcast::channel(32);
-        Ok(Self {
-            app,
-            listener,
-            thread_handles: vec![],
-            tx,
-        })
+        let net = (server, transport);
+        Ok(Self { app, net })
     }
 
-    pub async fn accept_connections(&mut self) -> IoResult<()> {
-        let mut counter = 0;
-        let body_ids: Vec<BodyID> = self.app.shared_info.bodies.keys().cloned().collect();
-        loop {
-            let (stream, client_address) = self.listener.accept().await?;
-            println!("receiving connection from address {client_address}");
-            let rx = self.tx.subscribe();
-            let body_ids = body_ids.clone();
-            self.thread_handles.push(tokio::spawn(async move {
-                ServerTask {
-                    stream,
-                    rx,
-                    client_address,
-                    body_ids,
-                }
-                .run()
-                .await
-                .expect(&format!(
-                    "Server task associated to client {client_address} panicked"
-                ));
-            }));
-            counter += 1;
-            if counter == CLIENT_NUMBER {
-                break;
-            }
-        }
-        Ok(())
-    }
-
-    pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
+    pub fn run(&mut self) -> Result<(), Box<dyn Error>> {
         let mut previous_time = Instant::now();
         let mut lag = Duration::ZERO;
         let mut tick_counter = Duration::ZERO;
+        let body_ids: Vec<u64> = self
+            .app
+            .shared_info
+            .bodies
+            .keys()
+            .map(|id| id.into())
+            .collect();
+        let (server, transport) = &mut self.net;
+        println!("Running server");
         loop {
             let current_time = Instant::now();
             let elapsed = current_time - previous_time;
             previous_time = current_time;
             tick_counter += elapsed;
+            server.update(elapsed);
+            transport.update(elapsed, server)?;
+            while let Some(event) = server.get_event() {
+                match event {
+                    ServerEvent::ClientConnected { client_id } => {
+                        println!("Client {client_id} connected");
+                        server.send_message(
+                            client_id,
+                            DefaultChannel::ReliableOrdered,
+                            bincode::serialize(&ServerReliableMessage::BodyIDs(body_ids.clone()))?,
+                        )
+                    }
+                    ServerEvent::ClientDisconnected { client_id, reason } => {
+                        println!("Client {client_id} disconnected: {reason}");
+                    }
+                }
+            }
+
+            // Receive message from channel
+            // for client_id in server.clients_id() {
+            //     // The enum DefaultChannel describe the channels used by the default configuration
+            //     while let Some(message) =
+            //         server.receive_message(client_id, DefaultChannel::ReliableOrdered)
+            //     {
+            //         // Handle received message
+            //         if let Ok(message) = bincode::deserialize::<ClientMessage>(&message) {}
+            //     }
+            // }
             if self.app.time_switch {
                 lag += elapsed;
                 while lag >= TIME_STEP {
@@ -91,40 +91,15 @@ impl Server {
                 }
             }
             if tick_counter >= UPDATE_TICK {
-                self.tx
-                    .send(ServerAction::UpdateTime(self.app.engine.time))?;
+                server.broadcast_message(
+                    DefaultChannel::Unreliable,
+                    bincode::serialize(&ServerUnreliableMessage::UpdateTime {
+                        game_time: self.app.engine.time,
+                    })?,
+                );
                 tick_counter = Duration::ZERO;
             }
+            transport.send_packets(server);
         }
     }
-}
-
-impl ServerTask {
-    pub async fn run(&mut self) -> Result<(), Box<dyn Error>> {
-        SystemDataRequest::read(&mut self.stream).await?;
-        SystemDataResponse(self.body_ids.clone())
-            .send(&mut self.stream)
-            .await?;
-        loop {
-            if let Ok(action) = self.rx.recv().await {
-                match action {
-                    ServerAction::UpdateTime(time) => {
-                        ServerToClientMessage::UpdateTime {game_time: time}
-                            .send(&mut self.stream)
-                            .await
-                            .unwrap_or_else(|err| {
-                                eprintln!(
-                                    "Encountered error {err} when sending update time message to client {}", self.client_address
-                                );
-                            });
-                    }
-                }
-            }
-        }
-    }
-}
-
-#[derive(Clone, Debug)]
-enum ServerAction {
-    UpdateTime(f64),
 }

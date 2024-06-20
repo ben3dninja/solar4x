@@ -20,6 +20,17 @@ impl From<&str> for BodyID {
     }
 }
 
+impl From<u64> for BodyID {
+    fn from(value: u64) -> Self {
+        Self(value)
+    }
+}
+impl Into<u64> for &BodyID {
+    fn into(self) -> u64 {
+        self.0
+    }
+}
+
 struct IDVisitor;
 
 impl<'de> Visitor<'de> for IDVisitor {
