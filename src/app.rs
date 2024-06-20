@@ -20,6 +20,7 @@ use nalgebra::Vector3;
 use crate::{
     app::body_data::BodyType,
     engine::Engine,
+    keyboard::Keymap,
     ui::{events::UiEvent, AppScreen, ExplorerMode, UiContext, UiState},
     utils::de::read_main_bodies,
 };
@@ -43,6 +44,7 @@ pub struct App {
     ui_handle: Option<JoinHandle<()>>,
     error_receiver: Receiver<AppError>,
     ui_context: Arc<Mutex<UiContext>>,
+    pub keymap: Keymap,
 }
 
 pub enum AppMessage {
@@ -97,6 +99,7 @@ impl App {
                 ui_handle,
                 error_receiver,
                 ui_context,
+                keymap: Keymap::default(),
             },
             ui,
         ))
@@ -198,6 +201,15 @@ impl App {
     }
     pub fn get_explorer_mode(&self) -> ExplorerMode {
         self.ui_context.lock().unwrap().explorer_mode
+    }
+
+    pub fn set_keymap(&mut self, keymap: Keymap) {
+        self.keymap = keymap;
+    }
+
+    pub fn with_keymap(mut self, keymap: Keymap) -> Self {
+        self.set_keymap(keymap);
+        self
     }
 }
 

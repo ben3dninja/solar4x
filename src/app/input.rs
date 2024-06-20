@@ -17,15 +17,16 @@ impl App {
                     (self.get_current_screen(), self.get_explorer_mode()),
                     (AppScreen::Main, ExplorerMode::Tree)
                 ) {
+                    let codes = &self.keymap.tree;
                     match event.code {
-                        KeyCode::Esc => return Ok(AppMessage::Quit),
-                        KeyCode::Char('>') => {
+                        c if c == codes.quit => return Ok(AppMessage::Quit),
+                        c if c == codes.speed_up => {
                             self.engine.speed *= 1.5;
                         }
-                        KeyCode::Char('<') => {
+                        c if c == codes.slow_down => {
                             self.engine.speed /= 1.5;
                         }
-                        KeyCode::Char('t') => self.toggle_time_switch(),
+                        c if c == codes.toggle_time => self.toggle_time_switch(),
                         _ => (),
                     }
                 }
@@ -41,43 +42,49 @@ impl App {
         use crate::ui::events::TreeViewEvent::*;
         use crate::utils::ui::Direction2::*;
         use crate::utils::ui::Direction4::*;
-        let (w, a) = ('w', 'a');
-        #[cfg(feature = "azerty")]
-        let (w, a) = ('z', 'q');
         self.ui_event_sender.send(match self.get_current_screen() {
             AppScreen::Main => match self.get_explorer_mode() {
-                ExplorerMode::Tree => UiEvent::Tree(match event.code {
-                    KeyCode::Down => SelectTree(Down),
-                    KeyCode::Up => SelectTree(Up),
-                    KeyCode::Char('+') => Zoom(Up),
-                    KeyCode::Char('-') => Zoom(Down),
-                    KeyCode::Char('i') => BodyInfo,
-                    KeyCode::Char(' ') => ToggleTreeExpansion,
-                    KeyCode::Char(c) if c == w => MapOffset(Front),
-                    KeyCode::Char(c) if c == a => MapOffset(Left),
-                    KeyCode::Char('s') => MapOffset(Back),
-                    KeyCode::Char('d') => MapOffset(Right),
-                    KeyCode::Char('0') => MapOffsetReset,
-                    KeyCode::Char('/') => EnterSearchView,
-                    KeyCode::Char('f') => FocusBody,
-                    KeyCode::Char('x') => Autoscale,
-                    _ => return Ok(()),
+                ExplorerMode::Tree => UiEvent::Tree({
+                    let codes = &self.keymap.tree;
+                    match event.code {
+                        c if c == codes.select_next => SelectTree(Down),
+                        c if c == codes.select_previous => SelectTree(Up),
+                        c if c == codes.zoom_in => Zoom(Up),
+                        c if c == codes.zoom_out => Zoom(Down),
+                        c if c == codes.display_info => BodyInfo,
+                        c if c == codes.toggle_expand => ToggleTreeExpansion,
+                        c if c == codes.map_offset_up => MapOffset(Front),
+                        c if c == codes.map_offset_left => MapOffset(Left),
+                        c if c == codes.map_offset_down => MapOffset(Back),
+                        c if c == codes.map_offset_right => MapOffset(Right),
+                        c if c == codes.map_offset_reset => MapOffsetReset,
+                        c if c == codes.enter_search => EnterSearchView,
+                        c if c == codes.focus => FocusBody,
+                        c if c == codes.autoscale => Autoscale,
+                        _ => return Ok(()),
+                    }
                 }),
-                ExplorerMode::Search => UiEvent::Search(match event.code {
-                    KeyCode::Backspace => DeleteChar,
-                    KeyCode::Enter => ValidateSearch,
-                    KeyCode::Left => MoveCursor(Down),
-                    KeyCode::Right => MoveCursor(Up),
-                    KeyCode::Down => SelectSearch(Down),
-                    KeyCode::Up => SelectSearch(Up),
-                    KeyCode::Esc => LeaveSearchView,
-                    KeyCode::Char(char) => WriteChar(char),
-                    _ => return Ok(()),
+                ExplorerMode::Search => UiEvent::Search({
+                    let codes = &self.keymap.search;
+                    match event.code {
+                        c if c == codes.delete_char => DeleteChar,
+                        c if c == codes.validate_search => ValidateSearch,
+                        c if c == codes.move_cursor_left => MoveCursor(Down),
+                        c if c == codes.move_cursor_right => MoveCursor(Up),
+                        c if c == codes.select_next => SelectSearch(Down),
+                        c if c == codes.select_previous => SelectSearch(Up),
+                        c if c == codes.leave_search => LeaveSearchView,
+                        KeyCode::Char(char) => WriteChar(char),
+                        _ => return Ok(()),
+                    }
                 }),
             },
-            AppScreen::Info => UiEvent::Info(match event.code {
-                KeyCode::Char('i') => LeaveInfoView,
-                _ => return Ok(()),
+            AppScreen::Info => UiEvent::Info({
+                let codes = &self.keymap.info;
+                match event.code {
+                    c if c == codes.leave_info => LeaveInfoView,
+                    _ => return Ok(()),
+                }
             }),
         })
     }
