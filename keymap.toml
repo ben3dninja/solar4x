@@ -1,0 +1,61 @@
+[tree]
+select_next = "Down"
+select_previous = "Up"
+quit = "Esc"
+
+[tree.zoom_in]
+Char = "+"
+
+[tree.zoom_out]
+Char = "-"
+
+[tree.display_info]
+Char = "i"
+
+[tree.toggle_expand]
+Char = " "
+
+[tree.map_offset_up]
+Char = "w"
+
+[tree.map_offset_down]
+Char = "s"
+
+[tree.map_offset_left]
+Char = "a"
+
+[tree.map_offset_right]
+Char = "d"
+
+[tree.map_offset_reset]
+Char = "0"
+
+[tree.enter_search]
+Char = "/"
+
+[tree.focus]
+Char = "f"
+
+[tree.autoscale]
+Char = "x"
+
+[tree.speed_up]
+Char = ">"
+
+[tree.slow_down]
+Char = "<"
+
+[tree.toggle_time]
+Char = "t"
+
+[search]
+move_cursor_right = "Right"
+move_cursor_left = "Left"
+select_next = "Down"
+select_previous = "Up"
+leave_search = "Esc"
+validate_search = "Enter"
+delete_char = "Backspace"
+
+[info.leave_info]
+Char = "i"
