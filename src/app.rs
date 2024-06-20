@@ -133,7 +133,7 @@ impl App {
         Self::new_moons(false, false).map(|a| a.0)
     }
     pub fn new_complete_client() -> IoResult<Self> {
-        Self::new_moons(false, false).map(|a| a.0)
+        Self::new_complete(false, false).map(|a| a.0)
     }
 
     pub fn new_simple_testing() -> IoResult<(Self, UiState)> {
