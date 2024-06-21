@@ -1,11 +1,11 @@
 use bevy::{
     math::{DVec2, DVec3},
     prelude::*,
-    utils::HashMap,
 };
 
 use crate::{
-    app::body_id::BodyID,
+    app::{body_data::BodyData, body_id::BodyID},
+    core_plugin::{EntityMapping, PrimaryBody},
     utils::algebra::{degs, mod_180, rads},
 };
 
@@ -17,7 +17,10 @@ impl Plugin for Engine {
     fn build(&self, app: &mut App) {
         app.insert_resource(GameTime::default())
             .insert_resource(GameSpeed::default())
-            .add_systems(FixedUpdate, (update_time, update_local, update_global));
+            .add_systems(
+                FixedUpdate,
+                (update_time, update_local, update_global).chain(),
+            );
     }
 }
 
@@ -61,15 +64,7 @@ fn update_global(
     }
 }
 
-#[derive(Resource)]
-pub struct EntityMapping {
-    id_mapping: HashMap<BodyID, Entity>,
-}
-
-#[derive(Resource)]
-pub struct PrimaryBody(BodyID);
-
-#[derive(Component)]
+#[derive(Component, Default)]
 pub struct Position(DVec3);
 
 #[derive(Component)]
@@ -77,7 +72,7 @@ pub struct ParentBody {
     children: Vec<BodyID>,
 }
 
-#[derive(Component)]
+#[derive(Component, Default, Clone)]
 pub struct EllipticalOrbit {
     eccentricity: f64,
     semimajor_axis: f64,
@@ -146,5 +141,21 @@ impl EllipticalOrbit {
             + (-o.sin() * O.sin() + o.cos() * O.cos() * I.cos()) * y;
         let z_glob = (o.sin() * I.sin()) * x + (o.cos() * I.sin()) * y;
         self.local_pos = DVec3::new(x_glob, y_glob, z_glob);
+    }
+}
+
+impl From<&BodyData> for EllipticalOrbit {
+    fn from(data: &BodyData) -> Self {
+        Self {
+            eccentricity: data.eccentricity,
+            semimajor_axis: data.semimajor_axis as f64,
+            inclination: data.inclination,
+            long_asc_node: data.long_asc_node,
+            arg_periapsis: data.arg_periapsis,
+            initial_mean_anomaly: data.initial_mean_anomaly,
+            revolution_period: data.revolution_period,
+            mean_anomaly: data.initial_mean_anomaly,
+            ..Default::default()
+        }
     }
 }
