@@ -1,61 +1,31 @@
 [tree]
-select_next = "Down"
-select_previous = "Up"
-quit = "Esc"
-
-[tree.zoom_in]
-Char = "+"
-
-[tree.zoom_out]
-Char = "-"
-
-[tree.display_info]
-Char = "i"
-
-[tree.toggle_expand]
-Char = " "
-
-[tree.map_offset_up]
-Char = "w"
-
-[tree.map_offset_down]
-Char = "s"
-
-[tree.map_offset_left]
-Char = "a"
-
-[tree.map_offset_right]
-Char = "d"
-
-[tree.map_offset_reset]
-Char = "0"
-
-[tree.enter_search]
-Char = "/"
-
-[tree.focus]
-Char = "f"
-
-[tree.autoscale]
-Char = "x"
-
-[tree.speed_up]
-Char = ">"
-
-[tree.slow_down]
-Char = "<"
-
-[tree.toggle_time]
-Char = "t"
+select_next = "down"
+select_previous = "up"
+zoom_in = "+"
+zoom_out = "-"
+display_info = "i"
+toggle_expand = "space"
+map_offset_up = "w"
+map_offset_down = "s"
+map_offset_left = "a"
+map_offset_right = "d"
+map_offset_reset = "0"
+enter_search = "/"
+focus = "f"
+autoscale = "x"
+quit = "esc"
+speed_up = ">"
+slow_down = "<"
+toggle_time = "t"
 
 [search]
-move_cursor_right = "Right"
-move_cursor_left = "Left"
-select_next = "Down"
-select_previous = "Up"
-leave_search = "Esc"
-validate_search = "Enter"
-delete_char = "Backspace"
+move_cursor_right = "right"
+move_cursor_left = "left"
+select_next = "down"
+select_previous = "up"
+leave_search = "esc"
+validate_search = "enter"
+delete_char = "backspace"
 
-[info.leave_info]
-Char = "i"
+[info]
+leave_info = "i"
