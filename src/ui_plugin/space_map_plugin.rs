@@ -1,14 +1,16 @@
 use bevy::prelude::*;
 use ratatui::{
     buffer::Buffer,
-    layout::Rect,
+    layout::{Alignment, Rect},
+    style::Color,
     widgets::{
+        block::Title,
         canvas::{Canvas, Circle},
-        Widget,
+        Block, Widget,
     },
 };
 
-use crate::engine_plugin::Position;
+use crate::{app::body_data::BodyType, engine_plugin::Position};
 
 pub struct SpaceMapPlugin;
 
@@ -22,6 +24,8 @@ impl Plugin for SpaceMapPlugin {
 #[derive(Resource, Default)]
 pub struct SpaceMap {
     circles: Vec<Circle>,
+    offset: DVec2,
+    focus_object: BodyID,
 }
 
 impl Widget for SpaceMap {
@@ -33,9 +37,9 @@ impl Widget for SpaceMap {
     }
 }
 
-fn update_space_map(map: ResMut<SpaceMap>, query: Query<&Position>) {}
-
-fn draw_canvas(&self, f: &mut Frame, rect: Rect) {
+fn update_space_map(mut map: ResMut<SpaceMap>, query: Query<&Position>) {
+    let mut circles = Vec::new();
+    map.circles = circles;
     let max_dist = self.shared_info.get_max_distance() as f64;
     let (width, height) = (rect.width as f64, rect.height as f64);
     let min_dim = width.min(height);
@@ -54,7 +58,7 @@ fn draw_canvas(&self, f: &mut Frame, rect: Rect) {
             for (id, pos) in positions.iter() {
                 let (x, y) = (pos.x, pos.y);
                 let (x, y) = (x - self.offset.x - focusx, y - self.offset.y - focusy);
-                let (x, y) = (x as f64 * scale, y as f64 * scale);
+                let (x, refy) = (x as f64 * scale, y as f64 * scale);
                 let data = self.shared_info.bodies.get(id);
                 let color = match data.map(|body| body.body_type) {
                     None => Color::DarkGray,
@@ -62,25 +66,10 @@ fn draw_canvas(&self, f: &mut Frame, rect: Rect) {
                         _ if *id == self.selected_body_id_tree() => Color::Red,
                         BodyType::Star => Color::Yellow,
                         BodyType::Planet => Color::Blue,
-                        _ => Color::Gray,
+                        _ => Color::DarkGray,
                     },
                 };
                 let radius = data.map_or(0., |d| d.radius * scale);
-                #[cfg(feature = "radius")]
-                if let Some(data) = data {
-                    let radius = scale
-                        * match data.body_type {
-                            BodyType::Star => 20000000.,
-                            BodyType::Planet => {
-                                if data.apoapsis < 800000000 {
-                                    10000000.
-                                } else {
-                                    50000000.
-                                }
-                            }
-                            _ => 500000.,
-                        };
-                }
                 ctx.draw(&Circle {
                     x,
                     y,
@@ -89,5 +78,4 @@ fn draw_canvas(&self, f: &mut Frame, rect: Rect) {
                 })
             }
         });
-    f.render_widget(canvas, rect);
 }
