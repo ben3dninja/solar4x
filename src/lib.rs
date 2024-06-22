@@ -8,5 +8,5 @@ pub mod network;
 pub mod server;
 pub mod standalone;
 pub mod ui;
-// pub mod ui_plugin;
+pub mod ui_plugin;
 pub mod utils;

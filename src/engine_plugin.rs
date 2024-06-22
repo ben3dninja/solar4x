@@ -5,15 +5,15 @@ use bevy::{
 
 use crate::{
     app::{body_data::BodyData, body_id::BodyID},
-    core_plugin::{EntityMapping, PrimaryBody},
+    core_plugin::{BodyInfo, EntityMapping, PrimaryBody},
     utils::algebra::{degs, mod_180, rads},
 };
 
 // Speed in days per second
 const DEFAULT_SPEED: f64 = 10.;
-pub struct Engine;
+pub struct EnginePlugin;
 
-impl Plugin for Engine {
+impl Plugin for EnginePlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(GameTime::default())
             .insert_resource(GameSpeed::default())
@@ -45,7 +45,7 @@ fn update_local(mut orbits: Query<&mut EllipticalOrbit>, time: Res<GameTime>) {
 }
 
 fn update_global(
-    mut query: Query<(&mut Position, &EllipticalOrbit, &ParentBody)>,
+    mut query: Query<(&mut Position, &EllipticalOrbit, &BodyInfo)>,
     primary: Res<PrimaryBody>,
     mapping: Res<EntityMapping>,
 ) {
@@ -54,10 +54,10 @@ fn update_global(
     while i < queue.len() {
         let (id, parent_pos) = queue[i];
         if let Some(entity) = mapping.id_mapping.get(&id) {
-            if let Ok((mut world_pos, orbit, node)) = query.get_mut(*entity) {
+            if let Ok((mut world_pos, orbit, info)) = query.get_mut(*entity) {
                 let pos = parent_pos + orbit.local_pos;
                 world_pos.0 = pos;
-                queue.extend(node.children.iter().map(|c| (*c, pos)));
+                queue.extend(info.0.orbiting_bodies.iter().map(|c| (*c, pos)));
             }
         }
         i += 1;
@@ -65,12 +65,7 @@ fn update_global(
 }
 
 #[derive(Component, Default)]
-pub struct Position(DVec3);
-
-#[derive(Component)]
-pub struct ParentBody {
-    children: Vec<BodyID>,
-}
+pub struct Position(pub DVec3);
 
 #[derive(Component, Default, Clone)]
 pub struct EllipticalOrbit {
@@ -158,4 +153,10 @@ impl From<&BodyData> for EllipticalOrbit {
             ..Default::default()
         }
     }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_update_global() {}
 }

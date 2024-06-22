@@ -1,7 +1,7 @@
 mod draw;
 pub mod events;
-mod search;
-mod tree;
+pub mod search;
+pub mod tree;
 
 use std::{
     io::{stdout, Result, Stdout},

@@ -9,7 +9,7 @@ use crate::{
     utils::de::read_main_bodies,
 };
 pub struct CorePlugin {
-    smallest_body_type: BodyType,
+    pub smallest_body_type: BodyType,
 }
 
 impl Default for CorePlugin {
@@ -51,7 +51,7 @@ pub struct EntityMapping {
 #[derive(Component)]
 pub struct BodyInfo(pub BodyData);
 
-fn build_system(mut commands: Commands, config: Res<CoreConfig>) {
+pub fn build_system(mut commands: Commands, config: Res<CoreConfig>) {
     let bodies = read_main_bodies()
         .expect("Failed to read bodies")
         .into_iter()
