@@ -1,4 +1,6 @@
-use bevy::{prelude::*, utils::HashMap};
+use std::time::Duration;
+
+use bevy::{app::FixedMain, prelude::*, time::TimePlugin, utils::HashMap};
 
 use crate::{
     app::{
@@ -36,6 +38,8 @@ impl From<&CorePlugin> for CoreConfig {
 impl Plugin for CorePlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(CoreConfig::from(self))
+            .insert_resource(Time::<Fixed>::from_duration(Duration::from_millis(10)))
+            .add_plugins(TimePlugin)
             .add_systems(Startup, (build_system).chain());
     }
 }
@@ -48,7 +52,7 @@ pub struct EntityMapping {
     pub id_mapping: HashMap<BodyID, Entity>,
 }
 
-#[derive(Component)]
+#[derive(Component, Debug)]
 pub struct BodyInfo(pub BodyData);
 
 pub fn build_system(mut commands: Commands, config: Res<CoreConfig>) {
@@ -79,7 +83,9 @@ pub fn build_system(mut commands: Commands, config: Res<CoreConfig>) {
 mod tests {
     use bevy::app::App;
 
-    use crate::{app::body_data::BodyType, core_plugin::EntityMapping};
+    use crate::{
+        app::body_data::BodyType, core_plugin::EntityMapping, engine_plugin::EllipticalOrbit,
+    };
 
     use super::{BodyInfo, CorePlugin};
 
@@ -93,5 +99,12 @@ mod tests {
         let mut world = app.world;
         assert_eq!(world.resource::<EntityMapping>().id_mapping.len(), 9);
         assert_eq!(world.query::<&BodyInfo>().iter(&world).len(), 9);
+        let (orbit, BodyInfo(data)) = world
+            .query::<(&EllipticalOrbit, &BodyInfo)>()
+            .iter(&world)
+            .find(|(_, BodyInfo(data))| data.id == "terre".into())
+            .unwrap();
+        assert_eq!(orbit.semimajor_axis, 149598023.);
+        assert_eq!(data.semimajor_axis, 149598023);
     }
 }
