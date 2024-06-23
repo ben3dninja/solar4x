@@ -4,7 +4,7 @@ use bevy::{
 };
 
 use crate::{
-    app::{body_data::BodyData, body_id::BodyID},
+    app::body_data::BodyData,
     core_plugin::{BodyInfo, EntityMapping, PrimaryBody},
     utils::algebra::{degs, mod_180, rads},
 };
@@ -67,10 +67,10 @@ fn update_global(
 #[derive(Component, Default)]
 pub struct Position(pub DVec3);
 
-#[derive(Component, Default, Clone)]
+#[derive(Component, Default, Clone, Debug)]
 pub struct EllipticalOrbit {
     eccentricity: f64,
-    semimajor_axis: f64,
+    pub semimajor_axis: f64,
     inclination: f64,
     long_asc_node: f64,
     arg_periapsis: f64,
@@ -91,6 +91,9 @@ const E_TOLERANCE: f64 = 1e-6;
 #[allow(non_snake_case)]
 impl EllipticalOrbit {
     fn update_M(&mut self, time: f64) {
+        if self.revolution_period == 0. {
+            return;
+        }
         self.mean_anomaly =
             mod_180(self.initial_mean_anomaly + 360. * time / self.revolution_period);
     }
@@ -157,6 +160,62 @@ impl From<&BodyData> for EllipticalOrbit {
 
 #[cfg(test)]
 mod tests {
+    use bevy::{
+        app::{App, Update},
+        ecs::schedule::IntoSystemConfigs,
+    };
+
+    use crate::{
+        app::body_data::BodyType,
+        core_plugin::{BodyInfo, CorePlugin, EntityMapping, PrimaryBody},
+        engine_plugin::{
+            update_global, update_local, update_time, EllipticalOrbit, EnginePlugin, Position,
+        },
+    };
+
     #[test]
-    fn test_update_global() {}
+    fn test_update_local() {
+        let mut app = App::new();
+        app.add_plugins((
+            CorePlugin {
+                smallest_body_type: BodyType::Planet,
+            },
+            EnginePlugin,
+        ));
+        app.add_systems(Update, (update_time, update_local).chain());
+        app.update();
+        let mut world = app.world;
+        let mut query = world.query::<(&EllipticalOrbit, &BodyInfo)>();
+        let (orbit, _) = query
+            .iter(&world)
+            .find(|(_, BodyInfo(data))| data.id == "terre".into())
+            .unwrap();
+        let earth_dist = orbit.local_pos.length();
+        assert!(147095000. <= earth_dist);
+        assert!(earth_dist <= 152100000.);
+    }
+
+    #[test]
+    fn test_update_global() {
+        let mut app = App::new();
+        app.add_plugins((
+            CorePlugin {
+                smallest_body_type: BodyType::Moon,
+            },
+            EnginePlugin,
+        ));
+        app.add_systems(Update, (update_time, update_local, update_global).chain());
+        app.update();
+        let mut world = app.world;
+        let mut query = world.query::<(&Position, &BodyInfo)>();
+        let (&Position(moon_pos), _) = query
+            .iter(&world)
+            .find(|(_, BodyInfo(data))| data.id == "lune".into())
+            .unwrap();
+        let moon_length = moon_pos.length();
+        let min = 147095000. - 405500.;
+        let max = 152100000. + 405500.;
+        assert!(min <= moon_length);
+        assert!(moon_length <= max)
+    }
 }
