@@ -6,13 +6,14 @@ use std::{
     path::Path,
 };
 
+use bevy::ecs::system::Resource;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use serde::{
     de::{value::StrDeserializer, IntoDeserializer, Visitor},
     Deserialize, Serialize,
 };
 
-#[derive(Default, Debug, Serialize, Deserialize)]
+#[derive(Default, Debug, Serialize, Deserialize, Resource)]
 pub struct Keymap {
     pub tree: TreeViewKeymap,
     pub search: SearchViewKeymap,

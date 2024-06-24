@@ -27,14 +27,14 @@ impl Plugin for UiPlugin {
     }
 }
 
-#[derive(Default, Copy, Clone, Resource)]
+#[derive(Default, Copy, Clone, Resource, PartialEq)]
 pub enum AppScreen {
     #[default]
     Main,
     Info,
 }
 
-#[derive(Default, Copy, Clone, Resource)]
+#[derive(Default, Copy, Clone, Resource, PartialEq)]
 pub enum ExplorerMode {
     #[default]
     Tree,
