@@ -13,33 +13,18 @@ use ratatui::{
     Frame,
 };
 
-use crate::{app::body_id::BodyID, ui::tree::TreeEntry, utils::ui::centered_rect};
-
+mod search_plugin;
 mod space_map_plugin;
+mod tree_plugin;
 
 pub struct UiPlugin;
 
-// impl Plugin for UiPlugin {
-//     fn build(&self, app: &mut App) {
-//         app.insert_resource(UiTreeState)
-//             .insert_resource(UiSearchState)
-//             .add_systems(Update, (update_search_entries, render));
-//     }
-// }
-
-#[derive(Resource)]
-pub struct UiTreeState {
-    tree_entries: Vec<TreeEntry>,
-    tree_state: ListState,
-}
-
-#[derive(Resource)]
-pub struct UiSearchState {
-    search_entries: Vec<BodyID>,
-    search_state: ListState,
-    search_character_index: usize,
-    search_input: String,
-    search_matcher: SkimMatcherV2,
+impl Plugin for UiPlugin {
+    fn build(&self, app: &mut App) {
+        app.insert_resource(AppScreen::default())
+            .insert_resource(ExplorerMode::default())
+            .add_systems(PostUpdate, render);
+    }
 }
 
 #[derive(Default, Copy, Clone, Resource)]
@@ -55,14 +40,6 @@ pub enum ExplorerMode {
     Tree,
     Search,
 }
-
-// // TODO : only on key event
-// fn update_search_entries(mut state: ResMut<UiSearchState>) {
-//     state.search_entries = state.search(&state.search_input);
-//     if state.search_state.selected().is_none() && !state.search_entries.is_empty() {
-//         state.search_state.select(Some(0));
-//     }
-// }
 
 // fn render(
 //     mut ctx: ResMut<RatatuiContext>,

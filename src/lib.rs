@@ -3,6 +3,7 @@ pub mod client;
 pub mod core_plugin;
 pub mod engine;
 pub mod engine_plugin;
+pub mod input_plugin;
 pub mod keyboard;
 pub mod network;
 pub mod server;
