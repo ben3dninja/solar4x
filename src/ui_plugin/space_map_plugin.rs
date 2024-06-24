@@ -15,7 +15,7 @@ use ratatui::{
 
 use crate::{
     app::{body_data::BodyType, body_id::BodyID},
-    core_plugin::{build_system, BodyInfo, EntityMapping, PrimaryBody},
+    core_plugin::{BodyInfo, EntityMapping, PrimaryBody},
     engine_plugin::{EllipticalOrbit, Position},
     utils::algebra::project_onto_plane,
 };
@@ -24,8 +24,8 @@ pub struct SpaceMapPlugin;
 
 impl Plugin for SpaceMapPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Startup, initialize_space_map.after(build_system))
-            .add_systems(Update, update_space_map);
+        app.add_systems(PostStartup, initialize_space_map)
+            .add_systems(PostUpdate, update_space_map);
     }
 }
 
@@ -114,11 +114,16 @@ fn initialize_space_map(
 
 #[cfg(test)]
 mod tests {
-    use bevy::app::App;
+    use bevy::{
+        app::{App, Update},
+        ecs::schedule::IntoSystemConfigs,
+    };
 
     use crate::{
-        app::body_data::BodyType, core_plugin::CorePlugin, engine_plugin::EnginePlugin,
-        ui_plugin::space_map_plugin::SpaceMap,
+        app::body_data::BodyType,
+        core_plugin::CorePlugin,
+        engine_plugin::{update_global, update_local, update_time, EnginePlugin},
+        ui_plugin::space_map_plugin::{update_space_map, SpaceMap},
     };
 
     use super::SpaceMapPlugin;
@@ -132,7 +137,12 @@ mod tests {
             },
             EnginePlugin,
             SpaceMapPlugin,
-        ));
+        ))
+        .add_systems(
+            Update,
+            (update_time, update_local, update_global, update_space_map).chain(),
+        );
+
         app.update();
         let map = app.world.get_resource::<SpaceMap>().unwrap();
         assert_eq!(map.circles.len(), 9);

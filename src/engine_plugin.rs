@@ -5,7 +5,7 @@ use bevy::{
 
 use crate::{
     app::body_data::BodyData,
-    core_plugin::{BodyInfo, EntityMapping, PrimaryBody},
+    core_plugin::{build_system, BodyInfo, EntityMapping, PrimaryBody},
     utils::algebra::{degs, mod_180, rads},
 };
 
@@ -17,6 +17,10 @@ impl Plugin for EnginePlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(GameTime::default())
             .insert_resource(GameSpeed::default())
+            .add_systems(
+                Startup,
+                (update_local, update_global).chain().after(build_system),
+            )
             .add_systems(
                 FixedUpdate,
                 (update_time, update_local, update_global).chain(),
@@ -36,15 +40,15 @@ impl Default for GameSpeed {
     }
 }
 
-fn update_time(mut game_time: ResMut<GameTime>, speed: Res<GameSpeed>, app_time: Res<Time>) {
+pub fn update_time(mut game_time: ResMut<GameTime>, speed: Res<GameSpeed>, app_time: Res<Time>) {
     game_time.0 += speed.0 * app_time.delta_seconds_f64();
 }
 
-fn update_local(mut orbits: Query<&mut EllipticalOrbit>, time: Res<GameTime>) {
+pub fn update_local(mut orbits: Query<&mut EllipticalOrbit>, time: Res<GameTime>) {
     orbits.par_iter_mut().for_each(|mut o| o.update_pos(time.0));
 }
 
-fn update_global(
+pub fn update_global(
     mut query: Query<(&mut Position, &EllipticalOrbit, &BodyInfo)>,
     primary: Res<PrimaryBody>,
     mapping: Res<EntityMapping>,
@@ -160,17 +164,12 @@ impl From<&BodyData> for EllipticalOrbit {
 
 #[cfg(test)]
 mod tests {
-    use bevy::{
-        app::{App, Update},
-        ecs::schedule::IntoSystemConfigs,
-    };
+    use bevy::app::App;
 
     use crate::{
         app::body_data::BodyType,
-        core_plugin::{BodyInfo, CorePlugin, EntityMapping, PrimaryBody},
-        engine_plugin::{
-            update_global, update_local, update_time, EllipticalOrbit, EnginePlugin, Position,
-        },
+        core_plugin::{BodyInfo, CorePlugin},
+        engine_plugin::{EllipticalOrbit, EnginePlugin, Position},
     };
 
     #[test]
@@ -182,7 +181,6 @@ mod tests {
             },
             EnginePlugin,
         ));
-        app.add_systems(Update, (update_time, update_local).chain());
         app.update();
         let mut world = app.world;
         let mut query = world.query::<(&EllipticalOrbit, &BodyInfo)>();
@@ -204,7 +202,6 @@ mod tests {
             },
             EnginePlugin,
         ));
-        app.add_systems(Update, (update_time, update_local, update_global).chain());
         app.update();
         let mut world = app.world;
         let mut query = world.query::<(&Position, &BodyInfo)>();
