@@ -1,5 +1,5 @@
 use bevy::prelude::*;
-use bevy_ratatui::terminal::RatatuiContext;
+use bevy_ratatui::{error::exit_on_error, terminal::RatatuiContext, RatatuiPlugins};
 use fuzzy_matcher::skim::SkimMatcherV2;
 use ratatui::{
     layout::{Alignment, Constraint, Layout, Rect},
@@ -13,6 +13,8 @@ use ratatui::{
     Frame,
 };
 
+use self::{space_map_plugin::SpaceMap, tree_plugin::TreeWidget};
+
 pub mod search_plugin;
 pub mod space_map_plugin;
 pub mod tree_plugin;
@@ -21,9 +23,11 @@ pub struct UiPlugin;
 
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
-        app.add_event::<WindowEvent>()
+        app.add_plugins(RatatuiPlugins::default())
+            .add_event::<WindowEvent>()
             .insert_resource(FocusView::default())
         .add_systems(Update, handle_window_events)
+    .add_systems(PostUpdate, render.pipe(exit_on_error))
         // .add_systems(PostUpdate, render)
         ;
     }
@@ -50,56 +54,20 @@ fn handle_window_events(mut focus_view: ResMut<FocusView>, mut reader: EventRead
     }
 }
 
-// fn render(
-//     mut ctx: ResMut<RatatuiContext>,
-//     mut tree_state: ResMut<UiTreeState>,
-//     search_state: Res<UiSearchState>,
-// ) {
-//     ctx.draw(|f| {
-//         let chunks =
-//             Layout::horizontal([Constraint::Percentage(25), Constraint::Fill(1)]).split(f.size());
-//         match self.get_explorer_mode() {
-//             ExplorerMode::Tree => self.draw_tree(f, chunks[0]),
-//             ExplorerMode::Search => self.draw_search(f, chunks[0]),
-//         }
-//         self.draw_canvas(f, chunks[1]);
-//         if matches!(self.get_current_screen(), AppScreen::Info) {
-//             self.draw_popup(f);
-//         }
-//     })
-// }
-// fn draw_tree(&mut self, f: &mut Frame, rect: Rect) {
-//     let texts: Vec<Line<'_>> = self
-//         .tree_entries
-//         .iter()
-//         .enumerate()
-//         .filter_map(|(index, entry)| {
-//             self.shared_info.bodies.get(&entry.id).map(|body| {
-//                 let style = if body.id == self.focus_body {
-//                     Style::default().bold()
-//                 } else {
-//                     Style::default()
-//                 };
-//                 let deepness_marker = Span::from(if entry.deepness == 0 {
-//                     String::new()
-//                 } else {
-//                     "│ ".repeat(entry.deepness.saturating_sub(1))
-//                         + if self.entry_is_last_child(index).unwrap() {
-//                             "└─"
-//                         } else {
-//                             "├─"
-//                         }
-//                 });
-//                 vec![deepness_marker, Span::styled(body.name.clone(), style)].into()
-//             })
-//         })
-//         .collect();
-//     let list = List::new(texts)
-//         .block(
-//             Block::bordered().title(Title::from("Tree view".bold()).alignment(Alignment::Center)),
-//         )
-//         .highlight_symbol("> ");
-//     f.render_stateful_widget(list, rect, &mut self.tree_state);
+fn render(
+    mut ctx: ResMut<RatatuiContext>,
+    tree: Res<TreeWidget>,
+    space_map: Res<SpaceMap>,
+) -> color_eyre::Result<()> {
+    ctx.draw(|f| {
+        let chunks =
+            Layout::horizontal([Constraint::Percentage(25), Constraint::Fill(1)]).split(f.size());
+
+        f.render_widget(tree.as_ref(), chunks[0]);
+        f.render_widget(space_map.as_ref(), chunks[1]);
+    })?;
+    Ok(())
+}
 // }
 
 // fn draw_search(&mut self, f: &mut Frame, rect: Rect) {

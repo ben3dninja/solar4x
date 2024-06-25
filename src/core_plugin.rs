@@ -1,14 +1,19 @@
 use std::time::Duration;
 
-use bevy::{app::FixedMain, prelude::*, time::TimePlugin, utils::HashMap};
+use bevy::{
+    app::{AppExit, FixedMain},
+    prelude::*,
+    time::TimePlugin,
+    utils::HashMap,
+};
 
 use crate::{
     app::{
         body_data::{BodyData, BodyType},
         body_id::BodyID,
     },
-    engine_plugin::{EllipticalOrbit, Position},
-    utils::de::read_main_bodies,
+    engine_plugin::{EllipticalOrbit, GameSpeed, Position, ToggleTime},
+    utils::{de::read_main_bodies, ui::Direction2},
 };
 pub struct CorePlugin {
     pub smallest_body_type: BodyType,
@@ -37,10 +42,11 @@ impl From<&CorePlugin> for CoreConfig {
 
 impl Plugin for CorePlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(CoreConfig::from(self))
-            .insert_resource(Time::<Fixed>::from_duration(Duration::from_millis(10)))
-            .add_plugins(TimePlugin)
-            .add_systems(Startup, (build_system).chain());
+        app.add_plugins(MinimalPlugins)
+            .insert_resource(CoreConfig::from(self))
+            .add_event::<CoreEvent>()
+            .add_systems(Startup, (build_system).chain())
+            .add_systems(Update, handle_core_events);
     }
 }
 
@@ -77,6 +83,33 @@ pub fn build_system(mut commands: Commands, config: Res<CoreConfig>) {
         id_mapping.insert(id, entity.id());
     }
     commands.insert_resource(EntityMapping { id_mapping });
+}
+
+#[derive(Event)]
+pub enum CoreEvent {
+    Quit,
+    EngineSpeed(Direction2),
+    ToggleTime,
+}
+
+fn handle_core_events(
+    mut reader: EventReader<CoreEvent>,
+    mut quit_writer: EventWriter<AppExit>,
+    mut toggle_time: ResMut<ToggleTime>,
+    mut speed: ResMut<GameSpeed>,
+) {
+    for event in reader.read() {
+        match event {
+            CoreEvent::Quit => {
+                quit_writer.send_default();
+            }
+            CoreEvent::EngineSpeed(d) => match d {
+                Direction2::Up => speed.0 *= 1.5,
+                Direction2::Down => speed.0 /= 1.5,
+            },
+            CoreEvent::ToggleTime => toggle_time.0 = !toggle_time.0,
+        }
+    }
 }
 
 #[cfg(test)]

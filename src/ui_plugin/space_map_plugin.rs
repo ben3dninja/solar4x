@@ -9,7 +9,7 @@ use ratatui::{
     widgets::{
         block::Title,
         canvas::{Canvas, Circle},
-        Block, Widget,
+        Block, WidgetRef,
     },
 };
 
@@ -23,7 +23,7 @@ use crate::{
     },
 };
 
-use super::tree_plugin::TreeWidget;
+use super::tree_plugin::{TreeViewEvent, TreeWidget};
 
 const OFFSET_STEP: f64 = 1e8;
 
@@ -33,7 +33,13 @@ impl Plugin for SpaceMapPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<SpaceMapEvent>()
             .add_systems(PostStartup, initialize_space_map)
-            .add_systems(Update, handle_space_map_events)
+            .add_systems(
+                Update,
+                (
+                    handle_space_map_events,
+                    update_selected.run_if(resource_exists::<TreeWidget>),
+                ),
+            )
             .add_systems(PostUpdate, update_space_map);
     }
 }
@@ -56,12 +62,12 @@ pub struct SpaceMap {
     offset: DVec2,
     focus_body: BodyID,
     zoom_level: f64,
-    selected_body: BodyID,
+    selected_body: Option<BodyID>,
     system_size: f64,
 }
 
-impl Widget for SpaceMap {
-    fn render(self, area: Rect, buf: &mut Buffer)
+impl WidgetRef for SpaceMap {
+    fn render_ref(&self, area: Rect, buf: &mut Buffer)
     where
         Self: Sized,
     {
@@ -80,26 +86,39 @@ impl Widget for SpaceMap {
                     ctx.draw(circle);
                 }
             })
-            .render(area, buf)
+            .render_ref(area, buf)
+    }
+}
+
+fn update_selected(
+    mut map: ResMut<SpaceMap>,
+    mut reader: EventReader<TreeViewEvent>,
+    tree: Res<TreeWidget>,
+) {
+    for event in reader.read() {
+        match event {
+            TreeViewEvent::SelectTree(_) => {
+                map.selected_body = Some(tree.selected_body_id());
+            }
+            _ => continue,
+        }
     }
 }
 
 fn update_space_map(
     mut map: ResMut<SpaceMap>,
-    focus_object: Res<FocusBody>,
     mapping: Res<EntityMapping>,
     query: Query<(&Position, &BodyInfo)>,
 ) {
     let mut circles = Vec::new();
-    let FocusBody(focus) = *focus_object;
-    map.focus_body = focus;
+    let focus = map.focus_body;
     let (&Position(focus_pos), _) = query
         .get(mapping.id_mapping[&focus])
         .unwrap_or_else(|_| panic!("Could not find focus object {}", focus));
     for (&Position(pos), BodyInfo(data)) in query.iter() {
         let proj = project_onto_plane(pos - focus_pos, (DVec3::X, DVec3::Y));
         let color = match data.body_type {
-            _ if data.id == map.selected_body => Color::Red,
+            _ if Some(data.id) == map.selected_body => Color::Red,
             BodyType::Star => Color::Yellow,
             BodyType::Planet => Color::Blue,
             _ => Color::DarkGray,
@@ -119,22 +138,23 @@ fn initialize_space_map(
     mut commands: Commands,
     positions: Query<&Position, With<EllipticalOrbit>>,
     primary: Res<PrimaryBody>,
+    tree: Option<Res<TreeWidget>>,
 ) {
     let system_size = positions
         .iter()
         .map(|pos| pos.0.length())
         .max_by(|a, b| a.total_cmp(b))
         .unwrap();
-    let focus_object = primary.0;
+    let focus_body = primary.0;
     commands.insert_resource(SpaceMap {
         circles: Vec::new(),
         offset: DVec2::ZERO,
-        focus_body: focus_object,
+        focus_body,
         zoom_level: 1.,
-        selected_body: primary.0,
+        selected_body: tree.map(|tree| tree.selected_body_id()),
         system_size,
     });
-    commands.insert_resource(FocusBody(focus_object));
+    commands.insert_resource(FocusBody(focus_body));
 }
 
 fn handle_space_map_events(
@@ -142,6 +162,7 @@ fn handle_space_map_events(
     mut space_map: ResMut<SpaceMap>,
     tree: Option<Res<TreeWidget>>,
     mapping: Res<EntityMapping>,
+    mut focus_body: ResMut<FocusBody>,
     query: Query<&BodyInfo>,
 ) {
     use Direction2::*;
@@ -168,7 +189,8 @@ fn handle_space_map_events(
             MapOffsetReset => space_map.offset = DVec2::ZERO,
             FocusBody => {
                 if let Some(tree) = &tree {
-                    space_map.focus_body = tree.selected_body_id_tree()
+                    focus_body.0 = tree.selected_body_id();
+                    space_map.focus_body = focus_body.0;
                 }
             }
             Autoscale => {

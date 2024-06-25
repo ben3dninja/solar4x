@@ -3334,6 +3334,7 @@ dependencies = [
  "bevy",
  "bevy_ratatui",
  "bincode",
+ "color-eyre",
  "crossterm",
  "fuzzy-matcher",
  "nalgebra",
