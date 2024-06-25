@@ -3,7 +3,7 @@ use ratatui::{
     layout::Alignment,
     style::{Style, Stylize},
     text::{Line, Span},
-    widgets::{block::Title, Block, List, Widget},
+    widgets::{block::Title, Block, List, WidgetRef},
 };
 
 use crate::{
@@ -52,8 +52,8 @@ pub struct TreeWidget {
     selected_index: usize,
 }
 
-impl Widget for TreeWidget {
-    fn render(self, area: ratatui::prelude::Rect, buf: &mut ratatui::prelude::Buffer)
+impl WidgetRef for TreeWidget {
+    fn render_ref(&self, area: ratatui::prelude::Rect, buf: &mut ratatui::prelude::Buffer)
     where
         Self: Sized,
     {
@@ -82,7 +82,7 @@ impl Widget for TreeWidget {
                     .title(Title::from("Tree view".bold()).alignment(Alignment::Center)),
             )
             .highlight_symbol("> ");
-        <List as Widget>::render(list, area, buf)
+        <List as WidgetRef>::render_ref(&list, area, buf)
     }
 }
 
@@ -285,14 +285,14 @@ impl TreeWidget {
     }
 
     pub fn select_next_tree(&mut self) {
-        self.selected_index = (self.selected_index + 1).max(self.visible_tree_entries.len() - 1)
+        self.selected_index = (self.selected_index + 1).min(self.visible_tree_entries.len() - 1)
     }
 
     pub fn select_previous_tree(&mut self) {
         self.selected_index = self.selected_index.saturating_sub(1);
     }
 
-    pub fn selected_body_id_tree(&self) -> BodyID {
+    pub fn selected_body_id(&self) -> BodyID {
         self.nth_visible_entry(self.selected_index).unwrap().id
     }
 
@@ -358,7 +358,7 @@ mod tests {
         let mut tree = world.resource_mut::<TreeWidget>();
         let earth = "terre".into();
         tree.select_body(earth);
-        assert_eq!(tree.selected_body_id_tree(), earth)
+        assert_eq!(tree.selected_body_id(), earth)
     }
 
     #[test]

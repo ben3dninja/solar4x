@@ -17,16 +17,22 @@ impl Plugin for EnginePlugin {
     fn build(&self, app: &mut App) {
         app.insert_resource(GameTime::default())
             .insert_resource(GameSpeed::default())
+            .insert_resource(ToggleTime(true))
             .add_systems(
                 Startup,
                 (update_local, update_global).chain().after(build_system),
             )
             .add_systems(
                 FixedUpdate,
-                (update_time, update_local, update_global).chain(),
+                (update_time, update_local, update_global)
+                    .chain()
+                    .run_if(resource_equals(ToggleTime(true))),
             );
     }
 }
+
+#[derive(Resource, PartialEq)]
+pub struct ToggleTime(pub bool);
 
 #[derive(Resource, Default)]
 pub struct GameTime(pub f64);

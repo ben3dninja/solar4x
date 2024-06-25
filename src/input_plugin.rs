@@ -2,7 +2,9 @@ use bevy::prelude::*;
 use bevy_ratatui::event::KeyEvent;
 use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent as CKeyEvent;
+use crossterm::event::KeyEventKind;
 
+use crate::core_plugin::CoreEvent;
 use crate::ui_plugin::search_plugin::SearchViewEvent;
 use crate::ui_plugin::space_map_plugin::SpaceMapEvent;
 use crate::ui_plugin::tree_plugin::TreeViewEvent;
@@ -19,6 +21,7 @@ impl Plugin for InputPlugin {
                 (send_tree_events, send_space_map_events).run_if(resource_equals(FocusView::Tree)),
                 send_search_events.run_if(resource_equals(FocusView::Search)),
                 send_window_events,
+                send_core_events,
             ),
         );
     }
@@ -33,6 +36,9 @@ fn send_tree_events(
     use TreeViewEvent::*;
     let codes = &keymap.tree;
     for event in keys.read() {
+        if event.kind == KeyEventKind::Release {
+            return;
+        }
         writer.send(match event {
             e if codes.select_next.matches(e) => SelectTree(Down),
             e if codes.select_previous.matches(e) => SelectTree(Up),
@@ -51,6 +57,9 @@ fn send_space_map_events(
     use SpaceMapEvent::*;
     let codes = &keymap.tree;
     for event in keys.read() {
+        if event.kind == KeyEventKind::Release {
+            return;
+        }
         writer.send(match event {
             e if codes.zoom_in.matches(e) => Zoom(Up),
             e if codes.zoom_out.matches(e) => Zoom(Down),
@@ -74,6 +83,9 @@ fn send_search_events(
     use SearchViewEvent::*;
     let codes = &keymap.search;
     for event in keys.read() {
+        if event.kind == KeyEventKind::Release {
+            return;
+        }
         writer.send(match event {
             e if codes.delete_char.matches(e) => DeleteChar,
             e if codes.validate_search.matches(e) => ValidateSearch,
@@ -99,6 +111,9 @@ fn send_window_events(
     use FocusView::*;
     use WindowEvent::*;
     for event in keys.read() {
+        if event.kind == KeyEventKind::Release {
+            return;
+        }
         match *focus_view {
             Tree => {
                 let codes = &keymap.tree;
@@ -122,6 +137,35 @@ fn send_window_events(
                     _ => continue,
                 }));
             }
+        }
+    }
+}
+
+fn send_core_events(
+    mut keys: EventReader<KeyEvent>,
+    mut core_writer: EventWriter<CoreEvent>,
+    keymap: Res<Keymap>,
+    focus_view: Res<FocusView>,
+) {
+    use crate::utils::ui::Direction2::*;
+    use CoreEvent::*;
+    use FocusView::*;
+    for event in keys.read() {
+        if event.kind == KeyEventKind::Release {
+            return;
+        }
+        match *focus_view {
+            Tree => {
+                let codes = &keymap.tree;
+                core_writer.send(match event {
+                    e if codes.quit.matches(e) => Quit,
+                    e if codes.speed_up.matches(e) => EngineSpeed(Up),
+                    e if codes.slow_down.matches(e) => EngineSpeed(Down),
+                    e if codes.toggle_time.matches(e) => ToggleTime,
+                    _ => continue,
+                });
+            }
+            _ => continue,
         }
     }
 }
