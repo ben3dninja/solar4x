@@ -84,22 +84,6 @@ impl UiState {
                     }
             }
             MapOffsetReset => self.offset = Vector2::zeros(),
-            // KeyCode::Char('w') => {
-            //     self.offset +=
-            //         (OFFSET_STEP as f64 / self.zoom_level).round() as i64 * Vector2::y()
-            // }
-            // KeyCode::Char('a') => {
-            //     self.offset +=
-            //         (-OFFSET_STEP as f64 / self.zoom_level).round() as i64 * Vector2::x()
-            // }
-            // KeyCode::Char('s') => {
-            //     self.offset +=
-            //         (-OFFSET_STEP as f64 / self.zoom_level).round() as i64 * Vector2::y()
-            // }
-            // KeyCode::Char('d') => {
-            //     self.offset +=
-            //         (OFFSET_STEP as f64 / self.zoom_level).round() as i64 * Vector2::x()
-            // }
             EnterSearchView => self.enter_search_mode(),
             FocusBody => self.focus_body = self.selected_body_id_tree(),
             Autoscale => self.autoscale(),

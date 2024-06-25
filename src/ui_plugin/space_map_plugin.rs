@@ -17,26 +17,47 @@ use crate::{
     app::{body_data::BodyType, body_id::BodyID},
     core_plugin::{BodyInfo, EntityMapping, PrimaryBody},
     engine_plugin::{EllipticalOrbit, Position},
-    utils::algebra::project_onto_plane,
+    utils::{
+        algebra::project_onto_plane,
+        ui::{Direction2, Direction4},
+    },
 };
+
+use super::tree_plugin::TreeWidget;
+
+const OFFSET_STEP: f64 = 1e8;
 
 pub struct SpaceMapPlugin;
 
 impl Plugin for SpaceMapPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(PostStartup, initialize_space_map)
+        app.add_event::<SpaceMapEvent>()
+            .add_systems(PostStartup, initialize_space_map)
+            .add_systems(Update, handle_space_map_events)
             .add_systems(PostUpdate, update_space_map);
     }
 }
 
+#[derive(Debug, Event)]
+pub enum SpaceMapEvent {
+    Zoom(Direction2),
+    MapOffset(Direction4),
+    MapOffsetReset,
+    FocusBody,
+    Autoscale,
+}
+
+#[derive(Debug, Resource, Clone)]
+pub struct FocusBody(pub BodyID);
+
 #[derive(Resource, Default, Debug)]
 pub struct SpaceMap {
     circles: Vec<Circle>,
-    pub offset: DVec2,
-    pub focus_object: BodyID,
-    pub zoom_level: f64,
-    pub selected_body: BodyID,
-    pub system_size: f64,
+    offset: DVec2,
+    focus_body: BodyID,
+    zoom_level: f64,
+    selected_body: BodyID,
+    system_size: f64,
 }
 
 impl Widget for SpaceMap {
@@ -65,11 +86,13 @@ impl Widget for SpaceMap {
 
 fn update_space_map(
     mut map: ResMut<SpaceMap>,
+    focus_object: Res<FocusBody>,
     mapping: Res<EntityMapping>,
     query: Query<(&Position, &BodyInfo)>,
 ) {
     let mut circles = Vec::new();
-    let focus = map.focus_object;
+    let FocusBody(focus) = *focus_object;
+    map.focus_body = focus;
     let (&Position(focus_pos), _) = query
         .get(mapping.id_mapping[&focus])
         .unwrap_or_else(|_| panic!("Could not find focus object {}", focus));
@@ -102,14 +125,74 @@ fn initialize_space_map(
         .map(|pos| pos.0.length())
         .max_by(|a, b| a.total_cmp(b))
         .unwrap();
+    let focus_object = primary.0;
     commands.insert_resource(SpaceMap {
         circles: Vec::new(),
         offset: DVec2::ZERO,
-        focus_object: primary.0,
+        focus_body: focus_object,
         zoom_level: 1.,
         selected_body: primary.0,
         system_size,
     });
+    commands.insert_resource(FocusBody(focus_object));
+}
+
+fn handle_space_map_events(
+    mut reader: EventReader<SpaceMapEvent>,
+    mut space_map: ResMut<SpaceMap>,
+    tree: Option<Res<TreeWidget>>,
+    mapping: Res<EntityMapping>,
+    query: Query<&BodyInfo>,
+) {
+    use Direction2::*;
+    use Direction4::*;
+    use SpaceMapEvent::*;
+    for event in reader.read() {
+        match event {
+            Zoom(d) => match d {
+                Down => space_map.zoom_level /= 1.5,
+                Up => space_map.zoom_level *= 1.5,
+            },
+            MapOffset(d) => {
+                let zoom = space_map.zoom_level;
+                space_map.offset += (match d {
+                    Front | Right => 1.,
+                    _ => -1.,
+                } * OFFSET_STEP
+                    / zoom)
+                    * match d {
+                        Front | Back => DVec2::Y,
+                        _ => DVec2::X,
+                    }
+            }
+            MapOffsetReset => space_map.offset = DVec2::ZERO,
+            FocusBody => {
+                if let Some(tree) = &tree {
+                    space_map.focus_body = tree.selected_body_id_tree()
+                }
+            }
+            Autoscale => {
+                let focus_data = &query
+                    .get(mapping.id_mapping[&space_map.focus_body])
+                    .unwrap()
+                    .0;
+                if let Some(max_dist) = focus_data
+                    .orbiting_bodies
+                    .iter()
+                    .filter_map(|id| {
+                        mapping
+                            .id_mapping
+                            .get(id)
+                            .and_then(|&e| query.get(e).ok())
+                            .map(|body| body.0.semimajor_axis)
+                    })
+                    .max()
+                {
+                    space_map.zoom_level = space_map.system_size / (max_dist as f64);
+                }
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -123,7 +206,7 @@ mod tests {
         app::body_data::BodyType,
         core_plugin::CorePlugin,
         engine_plugin::{update_global, update_local, update_time, EnginePlugin},
-        ui_plugin::space_map_plugin::{update_space_map, SpaceMap},
+        ui_plugin::space_map_plugin::{update_space_map, FocusBody, SpaceMap},
     };
 
     use super::SpaceMapPlugin;
@@ -149,5 +232,9 @@ mod tests {
         dbg!(map);
         assert!(4459753056. < map.system_size);
         assert!(map.system_size < 4537039826.);
+        let earth = "terre".into();
+        app.world.resource_mut::<FocusBody>().0 = earth;
+        app.update();
+        assert_eq!(app.world.resource::<FocusBody>().0, earth);
     }
 }
