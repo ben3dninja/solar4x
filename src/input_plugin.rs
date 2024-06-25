@@ -5,6 +5,7 @@ use crossterm::event::KeyEvent as CKeyEvent;
 use crossterm::event::KeyEventKind;
 
 use crate::core_plugin::CoreEvent;
+use crate::engine_plugin::EngineEvent;
 use crate::ui_plugin::search_plugin::SearchViewEvent;
 use crate::ui_plugin::space_map_plugin::SpaceMapEvent;
 use crate::ui_plugin::tree_plugin::TreeViewEvent;
@@ -22,6 +23,7 @@ impl Plugin for InputPlugin {
                 send_search_events.run_if(resource_equals(FocusView::Search)),
                 send_window_events,
                 send_core_events,
+                send_engine_events,
             ),
         );
     }
@@ -147,7 +149,6 @@ fn send_core_events(
     keymap: Res<Keymap>,
     focus_view: Res<FocusView>,
 ) {
-    use crate::utils::ui::Direction2::*;
     use CoreEvent::*;
     use FocusView::*;
     for event in keys.read() {
@@ -159,6 +160,31 @@ fn send_core_events(
                 let codes = &keymap.tree;
                 core_writer.send(match event {
                     e if codes.quit.matches(e) => Quit,
+                    _ => continue,
+                });
+            }
+            _ => continue,
+        }
+    }
+}
+
+fn send_engine_events(
+    mut keys: EventReader<KeyEvent>,
+    mut core_writer: EventWriter<EngineEvent>,
+    keymap: Res<Keymap>,
+    focus_view: Res<FocusView>,
+) {
+    use crate::utils::ui::Direction2::*;
+    use EngineEvent::*;
+    use FocusView::*;
+    for event in keys.read() {
+        if event.kind == KeyEventKind::Release {
+            return;
+        }
+        match *focus_view {
+            Tree => {
+                let codes = &keymap.tree;
+                core_writer.send(match event {
                     e if codes.speed_up.matches(e) => EngineSpeed(Up),
                     e if codes.slow_down.matches(e) => EngineSpeed(Down),
                     e if codes.toggle_time.matches(e) => ToggleTime,

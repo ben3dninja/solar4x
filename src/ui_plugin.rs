@@ -13,7 +13,11 @@ use ratatui::{
     Frame,
 };
 
-use self::{space_map_plugin::SpaceMap, tree_plugin::TreeWidget};
+use self::{
+    search_plugin::{SearchViewEvent, SearchWidget},
+    space_map_plugin::SpaceMap,
+    tree_plugin::TreeWidget,
+};
 
 pub mod search_plugin;
 pub mod space_map_plugin;
@@ -26,7 +30,7 @@ impl Plugin for UiPlugin {
         app.add_plugins(RatatuiPlugins::default())
             .add_event::<WindowEvent>()
             .insert_resource(FocusView::default())
-        .add_systems(Update, handle_window_events)
+        .add_systems(Update, (handle_window_events, handle_search_validate.run_if(resource_exists::<SearchWidget>)))
     .add_systems(PostUpdate, render.pipe(exit_on_error))
         // .add_systems(PostUpdate, render)
         ;
@@ -50,6 +54,18 @@ fn handle_window_events(mut focus_view: ResMut<FocusView>, mut reader: EventRead
     for event in reader.read() {
         match *event {
             WindowEvent::ChangeFocus(new_focus) => *focus_view = new_focus,
+        }
+    }
+}
+
+fn handle_search_validate(
+    mut focus_view: ResMut<FocusView>,
+    mut reader: EventReader<SearchViewEvent>,
+) {
+    for event in reader.read() {
+        match event {
+            SearchViewEvent::ValidateSearch => *focus_view = FocusView::Tree,
+            _ => continue,
         }
     }
 }

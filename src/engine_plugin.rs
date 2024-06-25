@@ -6,7 +6,10 @@ use bevy::{
 use crate::{
     app::body_data::BodyData,
     core_plugin::{build_system, BodyInfo, EntityMapping, PrimaryBody},
-    utils::algebra::{degs, mod_180, rads},
+    utils::{
+        algebra::{degs, mod_180, rads},
+        ui::Direction2,
+    },
 };
 
 // Speed in days per second
@@ -15,7 +18,8 @@ pub struct EnginePlugin;
 
 impl Plugin for EnginePlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(GameTime::default())
+        app.add_event::<EngineEvent>()
+            .insert_resource(GameTime::default())
             .insert_resource(GameSpeed::default())
             .insert_resource(ToggleTime(true))
             .add_systems(
@@ -43,6 +47,29 @@ pub struct GameSpeed(pub f64);
 impl Default for GameSpeed {
     fn default() -> Self {
         GameSpeed(DEFAULT_SPEED)
+    }
+}
+
+#[derive(Event)]
+pub enum EngineEvent {
+    EngineSpeed(Direction2),
+    ToggleTime,
+}
+
+fn handle_engine_events(
+    mut reader: EventReader<EngineEvent>,
+    mut toggle_time: ResMut<ToggleTime>,
+    mut speed: ResMut<GameSpeed>,
+) {
+    use EngineEvent::*;
+    for event in reader.read() {
+        match event {
+            EngineSpeed(d) => match d {
+                Direction2::Up => speed.0 *= 1.5,
+                Direction2::Down => speed.0 /= 1.5,
+            },
+            ToggleTime => toggle_time.0 = !toggle_time.0,
+        }
     }
 }
 
