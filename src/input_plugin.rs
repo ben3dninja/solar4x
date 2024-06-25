@@ -3,11 +3,11 @@ use bevy_ratatui::event::KeyEvent;
 use crossterm::event::KeyCode;
 use crossterm::event::KeyEvent as CKeyEvent;
 
-use crate::{
-    keyboard::Keymap,
-    ui_plugin::{AppScreen, ExplorerMode},
-    utils::ui::{Direction2, Direction4},
-};
+use crate::ui_plugin::search_plugin::SearchViewEvent;
+use crate::ui_plugin::space_map_plugin::SpaceMapEvent;
+use crate::ui_plugin::tree_plugin::TreeViewEvent;
+use crate::ui_plugin::WindowEvent;
+use crate::{keyboard::Keymap, ui_plugin::FocusView};
 
 pub struct InputPlugin;
 
@@ -16,71 +16,34 @@ impl Plugin for InputPlugin {
         app.insert_resource(Keymap::default()).add_systems(
             PreUpdate,
             (
-                (
-                    (send_tree_events, send_space_map_events)
-                        .run_if(resource_equals(ExplorerMode::Tree)),
-                    send_search_events,
-                )
-                    .run_if(resource_equals(AppScreen::Main)),
-                send_info_events.run_if(resource_equals(AppScreen::Info)),
+                (send_tree_events, send_space_map_events).run_if(resource_equals(FocusView::Tree)),
+                send_search_events.run_if(resource_equals(FocusView::Search)),
+                send_window_events,
             ),
         );
     }
 }
-#[derive(Debug, Event)]
-pub enum TreeViewEvent {
-    SelectTree(Direction2),
-    BodyInfo,
-    ToggleTreeExpansion,
-    EnterSearchView,
-}
-
-#[derive(Debug, Event)]
-pub enum SpaceMapEvent {
-    Zoom(Direction2),
-    MapOffset(Direction4),
-    MapOffsetReset,
-    FocusBody,
-    Autoscale,
-}
-
-#[derive(Debug, Event)]
-pub enum SearchViewEvent {
-    MoveCursor(Direction2),
-    SelectSearch(Direction2),
-    LeaveSearchView,
-    ValidateSearch,
-    WriteChar(char),
-    DeleteChar,
-}
-
-#[derive(Debug, Event)]
-pub enum InfoViewEvent {
-    LeaveInfoView,
-}
 
 fn send_tree_events(
     mut keys: EventReader<KeyEvent>,
-    mut tree_writer: EventWriter<TreeViewEvent>,
+    mut writer: EventWriter<TreeViewEvent>,
     keymap: Res<Keymap>,
 ) {
     use crate::utils::ui::Direction2::*;
     use TreeViewEvent::*;
     let codes = &keymap.tree;
     for event in keys.read() {
-        tree_writer.send(match event {
+        writer.send(match event {
             e if codes.select_next.matches(e) => SelectTree(Down),
             e if codes.select_previous.matches(e) => SelectTree(Up),
-            e if codes.display_info.matches(e) => BodyInfo,
             e if codes.toggle_expand.matches(e) => ToggleTreeExpansion,
-            e if codes.enter_search.matches(e) => EnterSearchView,
             _ => continue,
         });
     }
 }
 fn send_space_map_events(
     mut keys: EventReader<KeyEvent>,
-    mut tree_writer: EventWriter<SpaceMapEvent>,
+    mut writer: EventWriter<SpaceMapEvent>,
     keymap: Res<Keymap>,
 ) {
     use crate::utils::ui::Direction2::*;
@@ -88,7 +51,7 @@ fn send_space_map_events(
     use SpaceMapEvent::*;
     let codes = &keymap.tree;
     for event in keys.read() {
-        tree_writer.send(match event {
+        writer.send(match event {
             e if codes.zoom_in.matches(e) => Zoom(Up),
             e if codes.zoom_out.matches(e) => Zoom(Down),
             e if codes.map_offset_up.matches(e) => MapOffset(Front),
@@ -104,21 +67,20 @@ fn send_space_map_events(
 }
 fn send_search_events(
     mut keys: EventReader<KeyEvent>,
-    mut tree_writer: EventWriter<SearchViewEvent>,
+    mut writer: EventWriter<SearchViewEvent>,
     keymap: Res<Keymap>,
 ) {
     use crate::utils::ui::Direction2::*;
     use SearchViewEvent::*;
     let codes = &keymap.search;
     for event in keys.read() {
-        tree_writer.send(match event {
+        writer.send(match event {
             e if codes.delete_char.matches(e) => DeleteChar,
             e if codes.validate_search.matches(e) => ValidateSearch,
             e if codes.move_cursor_left.matches(e) => MoveCursor(Down),
             e if codes.move_cursor_right.matches(e) => MoveCursor(Up),
             e if codes.select_next.matches(e) => SelectSearch(Down),
             e if codes.select_previous.matches(e) => SelectSearch(Up),
-            e if codes.leave_search.matches(e) => LeaveSearchView,
             KeyEvent(CKeyEvent {
                 code: KeyCode::Char(char),
                 ..
@@ -127,17 +89,39 @@ fn send_search_events(
         });
     }
 }
-fn send_info_events(
+
+fn send_window_events(
     mut keys: EventReader<KeyEvent>,
-    mut tree_writer: EventWriter<InfoViewEvent>,
+    mut tree_writer: EventWriter<WindowEvent>,
     keymap: Res<Keymap>,
+    focus_view: Res<FocusView>,
 ) {
-    use InfoViewEvent::*;
-    let codes = &keymap.info;
+    use FocusView::*;
+    use WindowEvent::*;
     for event in keys.read() {
-        tree_writer.send(match event {
-            e if codes.leave_info.matches(e) => LeaveInfoView,
-            _ => continue,
-        });
+        match *focus_view {
+            Tree => {
+                let codes = &keymap.tree;
+                tree_writer.send(ChangeFocus(match event {
+                    e if codes.enter_search.matches(e) => Search,
+                    e if codes.display_info.matches(e) => Info,
+                    _ => continue,
+                }));
+            }
+            Search => {
+                let codes = &keymap.search;
+                tree_writer.send(ChangeFocus(match event {
+                    e if codes.leave_search.matches(e) => Search,
+                    _ => continue,
+                }));
+            }
+            Info => {
+                let codes = &keymap.info;
+                tree_writer.send(ChangeFocus(match event {
+                    e if codes.leave_info.matches(e) => Info,
+                    _ => continue,
+                }));
+            }
+        }
     }
 }

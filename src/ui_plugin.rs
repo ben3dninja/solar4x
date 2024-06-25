@@ -13,32 +13,41 @@ use ratatui::{
     Frame,
 };
 
-mod search_plugin;
-mod space_map_plugin;
-mod tree_plugin;
+pub mod search_plugin;
+pub mod space_map_plugin;
+pub mod tree_plugin;
 
 pub struct UiPlugin;
 
 impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(AppScreen::default())
-            .insert_resource(ExplorerMode::default())
-            .add_systems(PostUpdate, render);
+        app.add_event::<WindowEvent>()
+            .insert_resource(FocusView::default())
+        .add_systems(Update, handle_window_events)
+        // .add_systems(PostUpdate, render)
+        ;
     }
 }
 
-#[derive(Default, Copy, Clone, Resource, PartialEq)]
-pub enum AppScreen {
-    #[default]
-    Main,
-    Info,
-}
-
-#[derive(Default, Copy, Clone, Resource, PartialEq)]
-pub enum ExplorerMode {
+#[derive(Default, Copy, Clone, Resource, PartialEq, Debug)]
+pub enum FocusView {
     #[default]
     Tree,
     Search,
+    Info,
+}
+
+#[derive(Debug, Event)]
+pub enum WindowEvent {
+    ChangeFocus(FocusView),
+}
+
+fn handle_window_events(mut focus_view: ResMut<FocusView>, mut reader: EventReader<WindowEvent>) {
+    for event in reader.read() {
+        match *event {
+            WindowEvent::ChangeFocus(new_focus) => *focus_view = new_focus,
+        }
+    }
 }
 
 // fn render(
