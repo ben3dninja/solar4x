@@ -1,19 +1,12 @@
-use std::time::Duration;
-
-use bevy::{
-    app::{AppExit, FixedMain},
-    prelude::*,
-    time::TimePlugin,
-    utils::HashMap,
-};
+use bevy::{app::AppExit, prelude::*, utils::HashMap};
 
 use crate::{
     app::{
         body_data::{BodyData, BodyType},
         body_id::BodyID,
     },
-    engine_plugin::{EllipticalOrbit, GameSpeed, Position, ToggleTime},
-    utils::{de::read_main_bodies, ui::Direction2},
+    engine_plugin::{EllipticalOrbit, Position},
+    utils::de::read_main_bodies,
 };
 pub struct CorePlugin {
     pub smallest_body_type: BodyType,
@@ -88,26 +81,14 @@ pub fn build_system(mut commands: Commands, config: Res<CoreConfig>) {
 #[derive(Event)]
 pub enum CoreEvent {
     Quit,
-    EngineSpeed(Direction2),
-    ToggleTime,
 }
 
-fn handle_core_events(
-    mut reader: EventReader<CoreEvent>,
-    mut quit_writer: EventWriter<AppExit>,
-    mut toggle_time: ResMut<ToggleTime>,
-    mut speed: ResMut<GameSpeed>,
-) {
+fn handle_core_events(mut reader: EventReader<CoreEvent>, mut quit_writer: EventWriter<AppExit>) {
     for event in reader.read() {
         match event {
             CoreEvent::Quit => {
                 quit_writer.send_default();
             }
-            CoreEvent::EngineSpeed(d) => match d {
-                Direction2::Up => speed.0 *= 1.5,
-                Direction2::Down => speed.0 /= 1.5,
-            },
-            CoreEvent::ToggleTime => toggle_time.0 = !toggle_time.0,
         }
     }
 }
