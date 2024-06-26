@@ -31,7 +31,8 @@ impl Plugin for EnginePlugin {
                 (update_time, update_local, update_global)
                     .chain()
                     .run_if(resource_equals(ToggleTime(true))),
-            );
+            )
+            .add_systems(Update, handle_engine_events);
     }
 }
 
