@@ -1,7 +1,20 @@
 use bevy::prelude::*;
 use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
+use ratatui::{
+    layout::{Alignment, Constraint, Layout},
+    style::{Style, Stylize},
+    text::Text,
+    widgets::{block::Title, Block, List, ListState, Paragraph, StatefulWidget, Widget},
+};
 
-use crate::{app::body_id::BodyID, core_plugin::BodyInfo, utils::ui::Direction2};
+use crate::{
+    app::{body_data::BodyData, body_id::BodyID},
+    core_plugin::BodyInfo,
+    utils::{
+        list::{select_next_clamp, select_previous_clamp},
+        ui::Direction2,
+    },
+};
 
 use super::{tree_plugin::TreeState, FocusView, WindowEvent};
 
@@ -15,9 +28,10 @@ impl Plugin for SearchPlugin {
                 Update,
                 (
                     (
-                        reset_on_enter_search.run_if(resource_exists::<FocusView>),
                         handle_search_events,
-                    ),
+                        reset_on_enter_search.run_if(resource_exists::<FocusView>),
+                    )
+                        .chain(),
                     update_search_entries,
                 )
                     .chain(),
@@ -35,46 +49,95 @@ pub enum SearchViewEvent {
 }
 
 #[derive(Resource)]
-pub struct SearchWidget {
-    search_entries: Vec<BodyID>,
+pub struct SearchState {
+    search_entries: Vec<SearchEntry>,
     // search_state: ListState,
-    selected_index: Option<usize>,
     search_character_index: usize,
+    list_state: ListState,
     search_input: String,
     search_matcher: SkimMatcherV2,
 }
-// TODO : only on key event
-fn update_search_entries(mut state: ResMut<SearchWidget>, query: Query<&BodyInfo>) {
+
+struct SearchEntry {
+    id: BodyID,
+    name: String,
+}
+
+impl From<&BodyData> for SearchEntry {
+    fn from(value: &BodyData) -> Self {
+        Self {
+            id: value.id,
+            name: value.name.clone(),
+        }
+    }
+}
+
+pub struct SearchWidget;
+
+impl StatefulWidget for SearchWidget {
+    type State = SearchState;
+
+    fn render(
+        self,
+        area: ratatui::prelude::Rect,
+        buf: &mut ratatui::prelude::Buffer,
+        state: &mut Self::State,
+    ) {
+        let names: Vec<_> = state
+            .search_entries
+            .iter()
+            .map(|entry| entry.name.clone())
+            .collect();
+        let texts: Vec<Text> = names
+            .into_iter()
+            .map(|s| Text::styled(s, Style::default()))
+            .collect();
+        let search_bar = Paragraph::new(&state.search_input[..]).block(Block::bordered());
+        let list = List::new(texts)
+            .block(
+                Block::bordered()
+                    .title(Title::from("Search view".bold()).alignment(Alignment::Center)),
+            )
+            .highlight_symbol("> ");
+        let chunks = Layout::vertical([Constraint::Length(3), Constraint::Fill(1)]).split(area);
+        search_bar.render(chunks[0], buf);
+
+        <List as StatefulWidget>::render(list, chunks[1], buf, &mut state.list_state);
+    }
+}
+
+// TODO : only on key event q
+fn update_search_entries(mut state: ResMut<SearchState>, query: Query<&BodyInfo>) {
     let mut ids_score: Vec<_> = query
         .iter()
         .filter_map(|BodyInfo(body)| {
             state
                 .search_matcher
                 .fuzzy_match(&body.name, &state.search_input)
-                .map(|score| (body.id, score))
+                .map(|score| (body, score))
         })
         .collect();
-    ids_score.sort_by(|a, b| a.0.cmp(&b.0));
+    ids_score.sort_by(|a, b| a.0.name.cmp(&b.0.name));
     ids_score.sort_by(|a, b| a.1.cmp(&b.1).reverse());
-    state.search_entries = ids_score.into_iter().map(|(id, _)| id).collect();
-    if state.selected_index.is_none() && !state.search_entries.is_empty() {
-        state.selected_index = Some(0);
+    state.search_entries = ids_score.into_iter().map(|(data, _)| data.into()).collect();
+    if state.list_state.selected().is_none() && !state.search_entries.is_empty() {
+        state.list_state.select(Some(0));
     }
 }
 
 fn initialize_search(mut commands: Commands, query: Query<&BodyInfo>) {
-    let search_entries: Vec<BodyID> = query.iter().map(|BodyInfo(data)| data.id).collect();
-    commands.insert_resource(SearchWidget {
+    let search_entries: Vec<_> = query.iter().map(|BodyInfo(data)| data.into()).collect();
+    commands.insert_resource(SearchState {
         search_entries,
         search_character_index: 0,
         search_input: String::new(),
         search_matcher: SkimMatcherV2::default(),
-        selected_index: None,
+        list_state: ListState::default(),
     });
 }
 
 fn reset_on_enter_search(
-    mut search_state: ResMut<SearchWidget>,
+    mut search_state: ResMut<SearchState>,
     mut reader: EventReader<WindowEvent>,
 ) {
     reader
@@ -84,7 +147,7 @@ fn reset_on_enter_search(
 }
 
 fn handle_search_events(
-    mut search: ResMut<SearchWidget>,
+    mut search: ResMut<SearchState>,
     mut reader: EventReader<SearchViewEvent>,
     mut tree: Option<ResMut<TreeState>>,
 ) {
@@ -114,7 +177,7 @@ fn handle_search_events(
 }
 
 // Code from https://ratatui.rs/examples/apps/user_input/
-impl SearchWidget {
+impl SearchState {
     pub fn move_cursor_left(&mut self) {
         let cursor_moved_left = self.search_character_index.saturating_sub(1);
         self.search_character_index = self.clamp_cursor(cursor_moved_left);
@@ -170,34 +233,24 @@ impl SearchWidget {
     }
 
     pub fn selected_body_id(&self) -> Option<BodyID> {
-        self.selected_index
-            .and_then(|i| self.search_entries.get(i).cloned())
+        self.list_state
+            .selected()
+            .and_then(|i| self.search_entries.get(i))
+            .map(|entry| entry.id)
     }
 
     pub fn select_next_search(&mut self) {
-        self.selected_index = if let Some(index) = self.selected_index {
-            Some((index + 1).min(self.search_entries.len() - 1))
-        } else if !self.search_entries.is_empty() {
-            Some(0)
-        } else {
-            None
-        }
+        select_next_clamp(&mut self.list_state, self.search_entries.len() - 1);
     }
 
     pub fn select_previous_search(&mut self) {
-        self.selected_index = if let Some(index) = self.selected_index {
-            Some(index.saturating_sub(1))
-        } else if !self.search_entries.is_empty() {
-            Some(0)
-        } else {
-            None
-        }
+        select_previous_clamp(&mut self.list_state, 0);
     }
 
     pub fn reset_search(&mut self) {
         self.search_character_index = 0;
         self.search_input = String::new();
-        self.selected_index = Some(0);
+        self.list_state.select(Some(0));
     }
 }
 
@@ -209,7 +262,7 @@ mod tests {
         app::body_data::BodyType,
         core_plugin::CorePlugin,
         ui_plugin::{
-            search_plugin::{SearchPlugin, SearchViewEvent, SearchWidget},
+            search_plugin::{SearchPlugin, SearchState, SearchViewEvent},
             tree_plugin::{TreePlugin, TreeState},
         },
     };
@@ -225,7 +278,7 @@ mod tests {
             TreePlugin,
         ));
         app.update();
-        let mut search = app.world.resource_mut::<SearchWidget>();
+        let mut search = app.world.resource_mut::<SearchState>();
         search.search_input = "Moo".into();
         app.update();
         app.world.send_event(SearchViewEvent::ValidateSearch);

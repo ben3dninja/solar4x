@@ -181,15 +181,12 @@ impl<'de> Deserialize<'de> for Key {
                                         .parse::<u8>()
                                         .map_err(|_| E::custom(format!("Unknown fkey : {s}")))?,
                                 )),
-                                _ => Some(
-                                    string_keycode_map()
-                                        .get(s)
-                                        .ok_or(E::custom(format!(
-                                            "Invalid key code {s}, expected one of : {:#?}",
-                                            POSSIBLE_CODE_STRINGS
-                                        )))?
-                                        .clone(),
-                                ),
+                                _ => {
+                                    Some(*string_keycode_map().get(s).ok_or(E::custom(format!(
+                                        "Invalid key code {s}, expected one of : {:#?}",
+                                        POSSIBLE_CODE_STRINGS
+                                    )))?)
+                                }
                             };
                             break;
                         }

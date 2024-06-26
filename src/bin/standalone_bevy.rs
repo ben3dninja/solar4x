@@ -4,7 +4,10 @@ use rust_space_trading::{
     core_plugin::CorePlugin,
     engine_plugin::EnginePlugin,
     input_plugin::InputPlugin,
-    ui_plugin::{space_map_plugin::SpaceMapPlugin, tree_plugin::TreePlugin, UiPlugin},
+    ui_plugin::{
+        search_plugin::SearchPlugin, space_map_plugin::SpaceMapPlugin, tree_plugin::TreePlugin,
+        UiPlugin,
+    },
 };
 
 fn main() {
@@ -18,6 +21,7 @@ fn main() {
             UiPlugin,
             TreePlugin,
             SpaceMapPlugin,
+            SearchPlugin,
         ))
         .run();
 }

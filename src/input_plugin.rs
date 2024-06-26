@@ -6,8 +6,12 @@ use crossterm::event::KeyEventKind;
 
 use crate::core_plugin::CoreEvent;
 use crate::engine_plugin::EngineEvent;
+use crate::engine_plugin::GameTime;
+use crate::ui_plugin::search_plugin::SearchState;
 use crate::ui_plugin::search_plugin::SearchViewEvent;
+use crate::ui_plugin::space_map_plugin::SpaceMap;
 use crate::ui_plugin::space_map_plugin::SpaceMapEvent;
+use crate::ui_plugin::tree_plugin::TreeState;
 use crate::ui_plugin::tree_plugin::TreeViewEvent;
 use crate::ui_plugin::WindowEvent;
 use crate::{keyboard::Keymap, ui_plugin::FocusView};
@@ -19,12 +23,23 @@ impl Plugin for InputPlugin {
         app.insert_resource(Keymap::default()).add_systems(
             PreUpdate,
             (
-                (send_tree_events, send_space_map_events).run_if(resource_equals(FocusView::Tree)),
-                send_search_events.run_if(resource_equals(FocusView::Search)),
                 send_window_events,
                 send_core_events,
-                send_engine_events,
-            ),
+                (
+                    (
+                        send_tree_events.run_if(resource_exists::<TreeState>),
+                        send_space_map_events.run_if(resource_exists::<SpaceMap>),
+                    )
+                        .run_if(resource_equals(FocusView::Tree))
+                        .run_if(resource_exists::<TreeState>),
+                    send_search_events
+                        .run_if(resource_equals(FocusView::Search))
+                        .run_if(resource_exists::<SearchState>),
+                    send_engine_events.run_if(resource_exists::<GameTime>),
+                )
+                    .run_if(not(resource_equals(FocusView::Switching))),
+            )
+                .chain(),
         );
     }
 }
@@ -106,9 +121,9 @@ fn send_search_events(
 
 fn send_window_events(
     mut keys: EventReader<KeyEvent>,
-    mut tree_writer: EventWriter<WindowEvent>,
+    mut window_writer: EventWriter<WindowEvent>,
     keymap: Res<Keymap>,
-    focus_view: Res<FocusView>,
+    mut focus_view: ResMut<FocusView>,
 ) {
     use FocusView::*;
     use WindowEvent::*;
@@ -119,7 +134,7 @@ fn send_window_events(
         match *focus_view {
             Tree => {
                 let codes = &keymap.tree;
-                tree_writer.send(ChangeFocus(match event {
+                window_writer.send(ChangeFocus(match event {
                     e if codes.enter_search.matches(e) => Search,
                     e if codes.display_info.matches(e) => Info,
                     _ => continue,
@@ -127,19 +142,21 @@ fn send_window_events(
             }
             Search => {
                 let codes = &keymap.search;
-                tree_writer.send(ChangeFocus(match event {
-                    e if codes.leave_search.matches(e) => Search,
+                window_writer.send(ChangeFocus(match event {
+                    e if codes.leave_search.matches(e) => Tree,
                     _ => continue,
                 }));
             }
             Info => {
                 let codes = &keymap.info;
-                tree_writer.send(ChangeFocus(match event {
-                    e if codes.leave_info.matches(e) => Info,
+                window_writer.send(ChangeFocus(match event {
+                    e if codes.leave_info.matches(e) => Tree,
                     _ => continue,
                 }));
             }
+            _ => {}
         }
+        *focus_view = Switching;
     }
 }
 

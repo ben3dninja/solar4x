@@ -56,9 +56,9 @@ pub struct TreeState {
 }
 
 #[derive(Resource)]
-pub struct TreeWidg;
+pub struct TreeWidget;
 
-impl StatefulWidget for TreeWidg {
+impl StatefulWidget for TreeWidget {
     type State = TreeState;
     fn render(
         self,
@@ -218,7 +218,7 @@ impl TreeState {
         self.system_tree.iter().position(|entry| entry.id == id)
     }
 
-    pub fn nth_visible_entry(&self, n: usize) -> Option<&TreeEntry> {
+    fn nth_visible_entry(&self, n: usize) -> Option<&TreeEntry> {
         self.visible_tree_entries
             .get(n)
             .map(|&i| &self.system_tree[i])
@@ -280,7 +280,8 @@ impl TreeState {
             return false;
         }
         let mut i = 0;
-        for next in self.system_tree[(index_in_tree + 1)..].iter() {
+        for &next_index in self.visible_tree_entries[(index + 1)..].iter() {
+            let next = &self.system_tree[next_index];
             if let Some(parent) = next.index_of_parent {
                 if parent >= index_in_tree {
                     i += 1;

@@ -25,9 +25,9 @@ impl From<u64> for BodyID {
         Self(value)
     }
 }
-impl Into<u64> for &BodyID {
-    fn into(self) -> u64 {
-        self.0
+impl From<&BodyID> for u64 {
+    fn from(val: &BodyID) -> Self {
+        val.0
     }
 }
 

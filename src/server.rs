@@ -6,7 +6,6 @@ use std::net::UdpSocket;
 use std::time::{Duration, Instant, SystemTime};
 
 use crate::app::body_data::BodyType;
-use crate::app::body_id::BodyID;
 use crate::app::{App, TIME_STEP};
 use crate::network::{ServerReliableMessage, ServerUnreliableMessage};
 
