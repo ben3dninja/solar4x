@@ -27,17 +27,17 @@ impl Plugin for InputPlugin {
                 send_core_events,
                 (
                     (
-                        send_tree_events.run_if(resource_exists::<TreeState>),
+                        send_tree_events.run_if(in_state(FocusView::Tree)),
                         send_space_map_events.run_if(resource_exists::<SpaceMap>),
                     )
-                        .run_if(resource_equals(FocusView::Tree))
+                        .run_if(in_state(FocusView::Tree))
                         .run_if(resource_exists::<TreeState>),
                     send_search_events
-                        .run_if(resource_equals(FocusView::Search))
+                        .run_if(in_state(FocusView::Search))
                         .run_if(resource_exists::<SearchState>),
                     send_engine_events.run_if(resource_exists::<GameTime>),
                 )
-                    .run_if(not(resource_equals(FocusView::Switching))),
+                    .run_if(not(state_changed::<FocusView>)),
             )
                 .chain(),
         );
@@ -123,7 +123,7 @@ fn send_window_events(
     mut keys: EventReader<KeyEvent>,
     mut window_writer: EventWriter<WindowEvent>,
     keymap: Res<Keymap>,
-    mut focus_view: ResMut<FocusView>,
+    focus_view: Res<State<FocusView>>,
 ) {
     use FocusView::*;
     use WindowEvent::*;
@@ -131,7 +131,7 @@ fn send_window_events(
         if event.kind == KeyEventKind::Release {
             return;
         }
-        match *focus_view {
+        match focus_view.get() {
             Tree => {
                 let codes = &keymap.tree;
                 window_writer.send(ChangeFocus(match event {
@@ -156,7 +156,6 @@ fn send_window_events(
             }
             _ => {}
         }
-        *focus_view = Switching;
     }
 }
 
@@ -164,7 +163,7 @@ fn send_core_events(
     mut keys: EventReader<KeyEvent>,
     mut core_writer: EventWriter<CoreEvent>,
     keymap: Res<Keymap>,
-    focus_view: Res<FocusView>,
+    focus_view: Res<State<FocusView>>,
 ) {
     use CoreEvent::*;
     use FocusView::*;
@@ -172,7 +171,7 @@ fn send_core_events(
         if event.kind == KeyEventKind::Release {
             return;
         }
-        match *focus_view {
+        match focus_view.get() {
             Tree => {
                 let codes = &keymap.tree;
                 core_writer.send(match event {
@@ -189,7 +188,7 @@ fn send_engine_events(
     mut keys: EventReader<KeyEvent>,
     mut core_writer: EventWriter<EngineEvent>,
     keymap: Res<Keymap>,
-    focus_view: Res<FocusView>,
+    focus_view: Res<State<FocusView>>,
 ) {
     use crate::utils::ui::Direction2::*;
     use EngineEvent::*;
@@ -198,7 +197,7 @@ fn send_engine_events(
         if event.kind == KeyEventKind::Release {
             return;
         }
-        match *focus_view {
+        match focus_view.get() {
             Tree => {
                 let codes = &keymap.tree;
                 core_writer.send(match event {

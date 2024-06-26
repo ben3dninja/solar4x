@@ -26,16 +26,9 @@ impl Plugin for SearchPlugin {
             .add_systems(PostStartup, initialize_search)
             .add_systems(
                 Update,
-                (
-                    (
-                        handle_search_events,
-                        reset_on_enter_search.run_if(resource_exists::<FocusView>),
-                    )
-                        .chain(),
-                    update_search_entries,
-                )
-                    .chain(),
-            );
+                (handle_search_events, update_search_entries).chain(),
+            )
+            .add_systems(OnEnter(FocusView::Search), reset_on_enter_search);
     }
 }
 
