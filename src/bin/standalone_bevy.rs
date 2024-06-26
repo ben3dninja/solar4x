@@ -1,9 +1,10 @@
 use bevy::app::App;
 use rust_space_trading::{
     app::body_data::BodyType,
-    core_plugin::CorePlugin,
+    core_plugin::BodiesConfig,
     engine_plugin::EnginePlugin,
     input_plugin::InputPlugin,
+    standalone_plugin::StandalonePlugin,
     ui_plugin::{
         search_plugin::SearchPlugin, space_map_plugin::SpaceMapPlugin, tree_plugin::TreePlugin,
         UiPlugin,
@@ -13,9 +14,7 @@ use rust_space_trading::{
 fn main() {
     App::new()
         .add_plugins((
-            CorePlugin {
-                smallest_body_type: BodyType::Moon,
-            },
+            StandalonePlugin(BodiesConfig::SmallestBodyType(BodyType::Moon)),
             EnginePlugin,
             InputPlugin,
             UiPlugin,

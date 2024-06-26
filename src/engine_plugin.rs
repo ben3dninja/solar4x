@@ -5,7 +5,7 @@ use bevy::{
 
 use crate::{
     app::body_data::BodyData,
-    core_plugin::{build_system, BodyInfo, EntityMapping, PrimaryBody},
+    core_plugin::{build_system, AppState, BodyInfo, EntityMapping, GameSet, PrimaryBody},
     utils::{
         algebra::{degs, mod_180, rads},
         ui::Direction2,
@@ -23,16 +23,17 @@ impl Plugin for EnginePlugin {
             .insert_resource(GameSpeed::default())
             .insert_resource(ToggleTime(true))
             .add_systems(
-                Startup,
+                OnEnter(AppState::Game),
                 (update_local, update_global).chain().after(build_system),
             )
             .add_systems(
                 FixedUpdate,
                 (update_time, update_local, update_global)
+                    .in_set(GameSet)
                     .chain()
                     .run_if(resource_equals(ToggleTime(true))),
             )
-            .add_systems(Update, handle_engine_events);
+            .add_systems(Update, handle_engine_events.in_set(GameSet));
     }
 }
 
@@ -102,7 +103,7 @@ pub fn update_global(
     }
 }
 
-#[derive(Component, Default)]
+#[derive(Component, Default, Debug)]
 pub struct Position(pub DVec3);
 
 #[derive(Component, Default, Clone, Debug)]
@@ -202,17 +203,16 @@ mod tests {
 
     use crate::{
         app::body_data::BodyType,
-        core_plugin::{BodyInfo, CorePlugin},
+        core_plugin::{BodiesConfig, BodyInfo},
         engine_plugin::{EllipticalOrbit, EnginePlugin, Position},
+        standalone_plugin::StandalonePlugin,
     };
 
     #[test]
     fn test_update_local() {
         let mut app = App::new();
         app.add_plugins((
-            CorePlugin {
-                smallest_body_type: BodyType::Planet,
-            },
+            StandalonePlugin(BodiesConfig::SmallestBodyType(BodyType::Planet)),
             EnginePlugin,
         ));
         app.update();
@@ -231,9 +231,7 @@ mod tests {
     fn test_update_global() {
         let mut app = App::new();
         app.add_plugins((
-            CorePlugin {
-                smallest_body_type: BodyType::Moon,
-            },
+            StandalonePlugin(BodiesConfig::SmallestBodyType(BodyType::Moon)),
             EnginePlugin,
         ));
         app.update();

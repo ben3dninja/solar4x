@@ -15,7 +15,7 @@ use ratatui::{
 
 use crate::{
     app::{body_data::BodyType, body_id::BodyID},
-    core_plugin::{BodyInfo, EntityMapping, PrimaryBody},
+    core_plugin::{AppState, BodyInfo, EntityMapping, GameSet, PrimaryBody},
     engine_plugin::{EllipticalOrbit, Position},
     utils::{
         algebra::project_onto_plane,
@@ -23,7 +23,10 @@ use crate::{
     },
 };
 
-use super::tree_plugin::{TreeState, TreeViewEvent};
+use super::{
+    tree_plugin::{TreeState, TreeViewEvent},
+    InitializeUiSet,
+};
 
 const OFFSET_STEP: f64 = 1e8;
 
@@ -32,15 +35,20 @@ pub struct SpaceMapPlugin;
 impl Plugin for SpaceMapPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<SpaceMapEvent>()
-            .add_systems(PostStartup, initialize_space_map)
+            .add_systems(
+                OnEnter(AppState::Game),
+                initialize_space_map.in_set(InitializeUiSet),
+            )
             .add_systems(
                 Update,
                 (
                     handle_space_map_events,
                     update_selected.run_if(resource_exists::<TreeState>),
-                ),
-            )
-            .add_systems(PostUpdate, update_space_map);
+                    update_space_map,
+                )
+                    .in_set(GameSet)
+                    .chain(),
+            );
     }
 }
 
@@ -226,8 +234,9 @@ mod tests {
 
     use crate::{
         app::body_data::BodyType,
-        core_plugin::CorePlugin,
+        core_plugin::{BodiesConfig, GameSet},
         engine_plugin::{update_global, update_local, update_time, EnginePlugin},
+        standalone_plugin::StandalonePlugin,
         ui_plugin::space_map_plugin::{update_space_map, FocusBody, SpaceMap},
     };
 
@@ -237,17 +246,16 @@ mod tests {
     fn test_update_space_map() {
         let mut app = App::new();
         app.add_plugins((
-            CorePlugin {
-                smallest_body_type: BodyType::Planet,
-            },
+            StandalonePlugin(BodiesConfig::SmallestBodyType(BodyType::Planet)),
             EnginePlugin,
             SpaceMapPlugin,
         ))
         .add_systems(
             Update,
-            (update_time, update_local, update_global, update_space_map).chain(),
+            (update_time, update_local, update_global, update_space_map)
+                .in_set(GameSet)
+                .chain(),
         );
-
         app.update();
         let map = app.world.get_resource::<SpaceMap>().unwrap();
         assert_eq!(map.circles.len(), 9);
