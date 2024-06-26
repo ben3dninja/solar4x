@@ -8,6 +8,7 @@ pub mod input_plugin;
 pub mod keyboard;
 pub mod network;
 pub mod server;
+pub mod server_plugin;
 pub mod standalone;
 pub mod standalone_plugin;
 pub mod ui;

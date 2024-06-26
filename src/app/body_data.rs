@@ -1,12 +1,12 @@
 use std::fmt::Display;
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::utils::de::deserialize_options;
 
 use super::body_id::BodyID;
 
-#[derive(Deserialize, Clone, Copy, Debug, PartialEq, Default, PartialOrd)]
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Default, PartialOrd)]
 pub enum BodyType {
     Star,
     #[default]

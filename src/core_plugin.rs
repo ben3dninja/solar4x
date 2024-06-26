@@ -1,4 +1,5 @@
 use bevy::{app::AppExit, prelude::*, utils::HashMap};
+use serde::{Deserialize, Serialize};
 
 use crate::{
     app::{
@@ -11,7 +12,7 @@ use crate::{
 };
 pub struct CorePlugin;
 
-#[derive(Resource, Clone)]
+#[derive(Resource, Clone, Serialize, Deserialize)]
 pub enum BodiesConfig {
     SmallestBodyType(BodyType),
     IDs(Vec<BodyID>),
@@ -60,10 +61,6 @@ pub enum AppState {
     Setup,
     Game,
 }
-
-#[derive(Debug, Resource)]
-pub struct InitialBodies(pub Vec<BodyID>);
-
 #[derive(Resource)]
 pub struct PrimaryBody(pub BodyID);
 
@@ -79,30 +76,29 @@ pub fn start_game(mut app_state: ResMut<NextState<AppState>>) {
     app_state.set(AppState::Game);
 }
 
-pub fn build_system(world: &mut World) {
-    let config = world.remove_resource::<BodiesConfig>().unwrap();
+pub fn build_system(mut commands: Commands, config: Res<BodiesConfig>) {
     let bodies: Vec<_> = read_main_bodies()
         .expect("Failed to read bodies")
         .into_iter()
-        .filter(config.into_filter())
+        .filter(config.clone().into_filter())
         .collect();
     let primary_body = bodies
         .iter()
         .find(|data| data.host_body.is_none())
         .expect("no primary body found")
         .id;
-    world.insert_resource(PrimaryBody(primary_body));
+    commands.insert_resource(PrimaryBody(primary_body));
     let mut id_mapping = HashMap::new();
     for data in bodies {
         let id = data.id;
-        let entity = world.spawn((
+        let entity = commands.spawn((
             Position::default(),
             EllipticalOrbit::from(&data),
             BodyInfo(data),
         ));
         id_mapping.insert(id, entity.id());
     }
-    world.insert_resource(EntityMapping { id_mapping });
+    commands.insert_resource(EntityMapping { id_mapping });
 }
 
 #[derive(Event)]
