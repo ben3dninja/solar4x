@@ -3,7 +3,7 @@ use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
 
 use crate::{app::body_id::BodyID, core_plugin::BodyInfo, utils::ui::Direction2};
 
-use super::{tree_plugin::TreeWidget, FocusView, WindowEvent};
+use super::{tree_plugin::TreeState, FocusView, WindowEvent};
 
 pub struct SearchPlugin;
 
@@ -86,7 +86,7 @@ fn reset_on_enter_search(
 fn handle_search_events(
     mut search: ResMut<SearchWidget>,
     mut reader: EventReader<SearchViewEvent>,
-    mut tree: Option<ResMut<TreeWidget>>,
+    mut tree: Option<ResMut<TreeState>>,
 ) {
     use Direction2::*;
     use SearchViewEvent::*;
@@ -210,7 +210,7 @@ mod tests {
         core_plugin::CorePlugin,
         ui_plugin::{
             search_plugin::{SearchPlugin, SearchViewEvent, SearchWidget},
-            tree_plugin::{TreePlugin, TreeWidget},
+            tree_plugin::{TreePlugin, TreeState},
         },
     };
 
@@ -230,7 +230,7 @@ mod tests {
         app.update();
         app.world.send_event(SearchViewEvent::ValidateSearch);
         app.update();
-        let id = app.world.resource::<TreeWidget>().selected_body_id();
+        let id = app.world.resource::<TreeState>().selected_body_id();
         assert_eq!(id, "lune".into())
     }
 }

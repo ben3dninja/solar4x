@@ -3,14 +3,17 @@ use ratatui::{
     layout::Alignment,
     style::{Style, Stylize},
     text::{Line, Span},
-    widgets::{block::Title, Block, List, WidgetRef},
+    widgets::{block::Title, Block, List, ListState, StatefulWidget, StatefulWidgetRef},
 };
 
 use crate::{
     app::body_id::BodyID,
     core_plugin::{BodyInfo, PrimaryBody},
     ui_plugin::space_map_plugin::FocusBody,
-    utils::ui::Direction2,
+    utils::{
+        list::{select_next_clamp, select_previous_clamp},
+        ui::Direction2,
+    },
 };
 
 pub struct TreePlugin;
@@ -44,36 +47,42 @@ struct TreeEntry {
 }
 
 #[derive(Resource, Debug)]
-pub struct TreeWidget {
+pub struct TreeState {
     /// Indices of the entries in the system tree, and whether they are expanded or not
     visible_tree_entries: Vec<usize>,
     system_tree: Vec<TreeEntry>,
     focus_body: Option<BodyID>,
-    selected_index: usize,
+    list_state: ListState,
 }
 
-impl WidgetRef for TreeWidget {
-    fn render_ref(&self, area: ratatui::prelude::Rect, buf: &mut ratatui::prelude::Buffer)
-    where
+#[derive(Resource)]
+pub struct TreeWidg;
+
+impl StatefulWidget for TreeWidg {
+    type State = TreeState;
+    fn render(
+        self,
+        area: ratatui::prelude::Rect,
+        buf: &mut ratatui::prelude::Buffer,
+        state: &mut Self::State,
+    ) where
         Self: Sized,
     {
-        let texts: Vec<Line<'_>> = self
+        let texts: Vec<Line<'_>> = state
             .visible_tree_entries
             .iter()
-            .enumerate()
-            .map(|(index, &index_in_tree)| {
-                let entry = &self.system_tree[index_in_tree];
-                let style = if Some(entry.id) == self.focus_body {
+            .map(|&index_in_tree| {
+                let entry = &state.system_tree[index_in_tree];
+                let style = if Some(entry.id) == state.focus_body {
                     Style::default().bold()
                 } else {
                     Style::default()
                 };
-                let prefix = String::from(if index == self.selected_index {
-                    "> "
-                } else {
-                    "  "
-                }) + &self.build_deepness_prefix(index_in_tree);
-                vec![Span::from(prefix), Span::styled(entry.name.clone(), style)].into()
+                vec![
+                    Span::from(state.build_deepness_prefix(index_in_tree)),
+                    Span::styled(entry.name.clone(), style),
+                ]
+                .into()
             })
             .collect();
         let list = List::new(texts)
@@ -82,7 +91,7 @@ impl WidgetRef for TreeWidget {
                     .title(Title::from("Tree view".bold()).alignment(Alignment::Center)),
             )
             .highlight_symbol("> ");
-        <List as WidgetRef>::render_ref(&list, area, buf)
+        <List as StatefulWidgetRef>::render_ref(&list, area, buf, &mut state.list_state)
     }
 }
 
@@ -140,15 +149,15 @@ fn initialize_tree(
     let mut system_tree = Vec::new();
     fill_tree_rec(&mut system_tree, &info, primary.0, None, true);
 
-    commands.insert_resource(TreeWidget {
+    commands.insert_resource(TreeState {
         system_tree,
-        selected_index: 0,
         visible_tree_entries: vec![0],
         focus_body: focus_body.map(|r| r.0),
+        list_state: ListState::default().with_selected(Some(0)),
     });
 }
 
-fn handle_tree_events(mut tree_state: ResMut<TreeWidget>, mut reader: EventReader<TreeViewEvent>) {
+fn handle_tree_events(mut tree_state: ResMut<TreeState>, mut reader: EventReader<TreeViewEvent>) {
     use Direction2::*;
     use TreeViewEvent::*;
     for event in reader.read() {
@@ -162,11 +171,11 @@ fn handle_tree_events(mut tree_state: ResMut<TreeWidget>, mut reader: EventReade
     }
 }
 
-fn update_focus_body(mut tree_state: ResMut<TreeWidget>, focus_body: Res<FocusBody>) {
+fn update_focus_body(mut tree_state: ResMut<TreeState>, focus_body: Res<FocusBody>) {
     tree_state.focus_body = Some(focus_body.0);
 }
 
-impl TreeWidget {
+impl TreeState {
     /// Each entry of this vector corresponds to an ancestor of the body.
     /// The body itself is the last entry, and the primary body is the first.
     /// Each boolean corresponds to whether or not the ancestor is a last child
@@ -221,7 +230,9 @@ impl TreeWidget {
     }
 
     pub fn toggle_selection_expansion(&mut self) {
-        self.toggle_entry_expansion(self.selected_index);
+        if let Some(index) = self.list_state.selected() {
+            self.toggle_entry_expansion(index);
+        }
     }
 
     pub fn expand_entry_by_id(&mut self, id: BodyID) {
@@ -285,15 +296,17 @@ impl TreeWidget {
     }
 
     pub fn select_next_tree(&mut self) {
-        self.selected_index = (self.selected_index + 1).min(self.visible_tree_entries.len() - 1)
+        select_next_clamp(&mut self.list_state, self.visible_tree_entries.len() - 1)
     }
 
     pub fn select_previous_tree(&mut self) {
-        self.selected_index = self.selected_index.saturating_sub(1);
+        select_previous_clamp(&mut self.list_state, 0)
     }
 
     pub fn selected_body_id(&self) -> BodyID {
-        self.nth_visible_entry(self.selected_index).unwrap().id
+        self.nth_visible_entry(self.list_state.selected().unwrap())
+            .unwrap()
+            .id
     }
 
     pub fn select_body(&mut self, id: BodyID) -> bool {
@@ -319,7 +332,7 @@ impl TreeWidget {
                 .iter()
                 .position(|&index_in_tree| self.system_tree[index_in_tree].id == id)
             {
-                self.selected_index = index;
+                self.list_state.select(Some(index));
                 return true;
             }
         }
@@ -333,7 +346,7 @@ mod tests {
 
     use crate::{app::body_data::BodyType, core_plugin::CorePlugin};
 
-    use super::{TreePlugin, TreeWidget};
+    use super::{TreePlugin, TreeState};
 
     #[test]
     fn test_initialize_tree() {
@@ -341,7 +354,7 @@ mod tests {
         app.add_plugins((CorePlugin::default(), TreePlugin));
         app.update();
         let world = &app.world;
-        let tree = world.resource::<TreeWidget>();
+        let tree = world.resource::<TreeState>();
         assert_eq!(tree.system_tree.len(), 9);
         assert!(tree.system_tree[0].is_last_child);
         assert!(tree.system_tree[8].is_last_child);
@@ -355,7 +368,7 @@ mod tests {
         app.add_plugins((CorePlugin::default(), TreePlugin));
         app.update();
         let world = &mut app.world;
-        let mut tree = world.resource_mut::<TreeWidget>();
+        let mut tree = world.resource_mut::<TreeState>();
         let earth = "terre".into();
         tree.select_body(earth);
         assert_eq!(tree.selected_body_id(), earth)
@@ -366,7 +379,7 @@ mod tests {
         let mut app = App::new();
         app.add_plugins((CorePlugin::default(), TreePlugin));
         app.update();
-        let mut tree = app.world.resource_mut::<TreeWidget>();
+        let mut tree = app.world.resource_mut::<TreeState>();
         tree.toggle_selection_expansion();
         assert_eq!(tree.visible_tree_entries.len(), 9);
         assert!(tree.nth_visible_entry(0).unwrap().is_expanded);
@@ -390,7 +403,7 @@ mod tests {
         ));
         app.update();
         let world = &app.world;
-        let tree_state = world.resource::<TreeWidget>();
+        let tree_state = world.resource::<TreeState>();
         assert_eq!(
             tree_state.compute_deepness_map(tree_state.index_of("lune".into()).unwrap()),
             vec![true, false, true]
@@ -407,7 +420,7 @@ mod tests {
             TreePlugin,
         ));
         app.update();
-        let mut tree_state = app.world.resource_mut::<TreeWidget>();
+        let mut tree_state = app.world.resource_mut::<TreeState>();
         assert_eq!(tree_state.build_deepness_prefix(0), "");
         dbg!(&tree_state.visible_tree_entries);
         tree_state.toggle_selection_expansion();

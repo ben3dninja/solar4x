@@ -16,7 +16,7 @@ use ratatui::{
 use self::{
     search_plugin::{SearchViewEvent, SearchWidget},
     space_map_plugin::SpaceMap,
-    tree_plugin::TreeWidget,
+    tree_plugin::{TreeState, TreeWidg},
 };
 
 pub mod search_plugin;
@@ -72,14 +72,14 @@ fn handle_search_validate(
 
 fn render(
     mut ctx: ResMut<RatatuiContext>,
-    tree: Res<TreeWidget>,
+    mut tree: ResMut<TreeState>,
     space_map: Res<SpaceMap>,
 ) -> color_eyre::Result<()> {
     ctx.draw(|f| {
         let chunks =
             Layout::horizontal([Constraint::Percentage(25), Constraint::Fill(1)]).split(f.size());
 
-        f.render_widget(tree.as_ref(), chunks[0]);
+        f.render_stateful_widget(TreeWidg, chunks[0], tree.as_mut());
         f.render_widget(space_map.as_ref(), chunks[1]);
     })?;
     Ok(())

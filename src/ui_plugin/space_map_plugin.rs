@@ -23,7 +23,7 @@ use crate::{
     },
 };
 
-use super::tree_plugin::{TreeViewEvent, TreeWidget};
+use super::tree_plugin::{TreeState, TreeViewEvent};
 
 const OFFSET_STEP: f64 = 1e8;
 
@@ -37,7 +37,7 @@ impl Plugin for SpaceMapPlugin {
                 Update,
                 (
                     handle_space_map_events,
-                    update_selected.run_if(resource_exists::<TreeWidget>),
+                    update_selected.run_if(resource_exists::<TreeState>),
                 ),
             )
             .add_systems(PostUpdate, update_space_map);
@@ -93,7 +93,7 @@ impl WidgetRef for SpaceMap {
 fn update_selected(
     mut map: ResMut<SpaceMap>,
     mut reader: EventReader<TreeViewEvent>,
-    tree: Res<TreeWidget>,
+    tree: Res<TreeState>,
 ) {
     for event in reader.read() {
         match event {
@@ -138,7 +138,7 @@ fn initialize_space_map(
     mut commands: Commands,
     positions: Query<&Position, With<EllipticalOrbit>>,
     primary: Res<PrimaryBody>,
-    tree: Option<Res<TreeWidget>>,
+    tree: Option<Res<TreeState>>,
 ) {
     let system_size = positions
         .iter()
@@ -160,7 +160,7 @@ fn initialize_space_map(
 fn handle_space_map_events(
     mut reader: EventReader<SpaceMapEvent>,
     mut space_map: ResMut<SpaceMap>,
-    tree: Option<Res<TreeWidget>>,
+    tree: Option<Res<TreeState>>,
     mapping: Res<EntityMapping>,
     mut focus_body: ResMut<FocusBody>,
     query: Query<&BodyInfo>,
