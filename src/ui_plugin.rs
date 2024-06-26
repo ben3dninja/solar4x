@@ -18,7 +18,7 @@ impl Plugin for UiPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(RatatuiPlugins::default())
             .add_event::<WindowEvent>()
-            .insert_resource(FocusView::default())
+            .insert_state(FocusView::default())
         .add_systems(Update, (handle_window_events, handle_search_validate.run_if(resource_exists::<SearchState>)))
     .add_systems(PostUpdate, render.pipe(exit_on_error))
         // .add_systems(PostUpdate, render)
@@ -26,13 +26,12 @@ impl Plugin for UiPlugin {
     }
 }
 
-#[derive(Default, Copy, Clone, Resource, PartialEq, Debug)]
+#[derive(Default, Copy, Clone, States, PartialEq, Eq, Debug, Hash)]
 pub enum FocusView {
     #[default]
     Tree,
     Search,
     Info,
-    Switching,
 }
 
 #[derive(Debug, Event)]
@@ -40,21 +39,24 @@ pub enum WindowEvent {
     ChangeFocus(FocusView),
 }
 
-fn handle_window_events(mut focus_view: ResMut<FocusView>, mut reader: EventReader<WindowEvent>) {
+fn handle_window_events(
+    mut focus_view: ResMut<NextState<FocusView>>,
+    mut reader: EventReader<WindowEvent>,
+) {
     for event in reader.read() {
         match *event {
-            WindowEvent::ChangeFocus(new_focus) => *focus_view = new_focus,
+            WindowEvent::ChangeFocus(new_focus) => focus_view.set(new_focus),
         }
     }
 }
 
 fn handle_search_validate(
-    mut focus_view: ResMut<FocusView>,
+    mut focus_view: ResMut<NextState<FocusView>>,
     mut reader: EventReader<SearchViewEvent>,
 ) {
     for event in reader.read() {
         match event {
-            SearchViewEvent::ValidateSearch => *focus_view = FocusView::Tree,
+            SearchViewEvent::ValidateSearch => focus_view.set(FocusView::Tree),
             _ => continue,
         }
     }
@@ -65,13 +67,13 @@ fn render(
     tree: Option<ResMut<TreeState>>,
     search: Option<ResMut<SearchState>>,
     space_map: Option<Res<SpaceMap>>,
-    focus: Res<FocusView>,
+    focus: Res<State<FocusView>>,
 ) -> color_eyre::Result<()> {
     ctx.draw(|f| {
         let chunks =
             Layout::horizontal([Constraint::Percentage(25), Constraint::Fill(1)]).split(f.size());
 
-        match *focus {
+        match focus.get() {
             FocusView::Tree => {
                 if let Some(mut tree) = tree {
                     f.render_stateful_widget(TreeWidget, chunks[0], tree.as_mut());
