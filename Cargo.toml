@@ -18,6 +18,7 @@ serde_json = "1.0.117"
 toml = "0.8.14"
 tokio = {version = "1.38.0", features = ["full"] }
 color-eyre = "0.6.3"
+bevy_quinnet = "0.8.0"
 
 [features]
 radius = []

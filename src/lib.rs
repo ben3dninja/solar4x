@@ -1,5 +1,6 @@
 pub mod app;
 pub mod client;
+pub mod client_plugin;
 pub mod core_plugin;
 pub mod engine;
 pub mod engine_plugin;
@@ -8,6 +9,7 @@ pub mod keyboard;
 pub mod network;
 pub mod server;
 pub mod standalone;
+pub mod standalone_plugin;
 pub mod ui;
 pub mod ui_plugin;
 pub mod utils;

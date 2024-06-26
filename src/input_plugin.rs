@@ -5,6 +5,7 @@ use crossterm::event::KeyEvent as CKeyEvent;
 use crossterm::event::KeyEventKind;
 
 use crate::core_plugin::CoreEvent;
+use crate::core_plugin::GameSet;
 use crate::engine_plugin::EngineEvent;
 use crate::engine_plugin::GameTime;
 use crate::ui_plugin::search_plugin::SearchState;
@@ -39,6 +40,7 @@ impl Plugin for InputPlugin {
                 )
                     .run_if(not(state_changed::<FocusView>)),
             )
+                .in_set(GameSet)
                 .chain(),
         );
     }

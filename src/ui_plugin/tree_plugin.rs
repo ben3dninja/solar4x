@@ -8,7 +8,7 @@ use ratatui::{
 
 use crate::{
     app::body_id::BodyID,
-    core_plugin::{BodyInfo, PrimaryBody},
+    core_plugin::{AppState, BodyInfo, GameSet, PrimaryBody},
     ui_plugin::space_map_plugin::FocusBody,
     utils::{
         list::{select_next_clamp, select_previous_clamp},
@@ -16,18 +16,24 @@ use crate::{
     },
 };
 
+use super::InitializeUiSet;
+
 pub struct TreePlugin;
 
 impl Plugin for TreePlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<TreeViewEvent>()
-            .add_systems(PostStartup, initialize_tree)
+            .add_systems(
+                OnEnter(AppState::Game),
+                initialize_tree.in_set(InitializeUiSet),
+            )
             .add_systems(
                 Update,
                 (
                     handle_tree_events,
                     update_focus_body.run_if(resource_exists::<FocusBody>),
-                ),
+                )
+                    .in_set(GameSet),
             );
     }
 }
@@ -95,7 +101,7 @@ impl StatefulWidget for TreeWidget {
     }
 }
 
-fn initialize_tree(
+pub fn initialize_tree(
     mut commands: Commands,
     primary: Res<PrimaryBody>,
     focus_body: Option<Res<FocusBody>>,
@@ -345,14 +351,16 @@ impl TreeState {
 mod tests {
     use bevy::app::App;
 
-    use crate::{app::body_data::BodyType, core_plugin::CorePlugin};
+    use crate::{
+        app::body_data::BodyType, core_plugin::BodiesConfig, standalone_plugin::StandalonePlugin,
+    };
 
     use super::{TreePlugin, TreeState};
 
     #[test]
     fn test_initialize_tree() {
         let mut app = App::new();
-        app.add_plugins((CorePlugin::default(), TreePlugin));
+        app.add_plugins((StandalonePlugin::default(), TreePlugin));
         app.update();
         let world = &app.world;
         let tree = world.resource::<TreeState>();
@@ -366,7 +374,7 @@ mod tests {
     #[test]
     fn test_select_body() {
         let mut app = App::new();
-        app.add_plugins((CorePlugin::default(), TreePlugin));
+        app.add_plugins((StandalonePlugin::default(), TreePlugin));
         app.update();
         let world = &mut app.world;
         let mut tree = world.resource_mut::<TreeState>();
@@ -378,7 +386,7 @@ mod tests {
     #[test]
     fn test_toggle_entry_expansion() {
         let mut app = App::new();
-        app.add_plugins((CorePlugin::default(), TreePlugin));
+        app.add_plugins((StandalonePlugin::default(), TreePlugin));
         app.update();
         let mut tree = app.world.resource_mut::<TreeState>();
         tree.toggle_selection_expansion();
@@ -397,9 +405,7 @@ mod tests {
     fn test_deepness_map() {
         let mut app = App::new();
         app.add_plugins((
-            CorePlugin {
-                smallest_body_type: BodyType::Moon,
-            },
+            StandalonePlugin(BodiesConfig::SmallestBodyType(BodyType::Moon)),
             TreePlugin,
         ));
         app.update();
@@ -415,9 +421,7 @@ mod tests {
     fn test_build_deepness_prefix() {
         let mut app = App::new();
         app.add_plugins((
-            CorePlugin {
-                smallest_body_type: BodyType::Moon,
-            },
+            StandalonePlugin(BodiesConfig::SmallestBodyType(BodyType::Moon)),
             TreePlugin,
         ));
         app.update();

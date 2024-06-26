@@ -5,30 +5,31 @@ use crate::{
         body_data::{BodyData, BodyType},
         body_id::BodyID,
     },
-    engine_plugin::{EllipticalOrbit, Position},
+    engine_plugin::{update_global, EllipticalOrbit, Position},
+    ui_plugin::InitializeUiSet,
     utils::de::read_main_bodies,
 };
-pub struct CorePlugin {
-    pub smallest_body_type: BodyType,
+pub struct CorePlugin;
+
+#[derive(Resource, Clone)]
+pub enum BodiesConfig {
+    SmallestBodyType(BodyType),
+    IDs(Vec<BodyID>),
 }
 
-impl Default for CorePlugin {
+impl Default for BodiesConfig {
     fn default() -> Self {
-        CorePlugin {
-            smallest_body_type: BodyType::Planet,
-        }
+        BodiesConfig::SmallestBodyType(BodyType::Planet)
     }
 }
 
-#[derive(Resource)]
-pub struct CoreConfig {
-    smallest_body_type: BodyType,
-}
-
-impl From<&CorePlugin> for CoreConfig {
-    fn from(value: &CorePlugin) -> Self {
-        Self {
-            smallest_body_type: value.smallest_body_type,
+impl BodiesConfig {
+    fn into_filter(self) -> Box<dyn FnMut(&BodyData) -> bool> {
+        match self {
+            BodiesConfig::SmallestBodyType(body_type) => {
+                Box::new(move |data: &BodyData| data.body_type <= body_type)
+            }
+            BodiesConfig::IDs(v) => Box::new(move |data: &BodyData| v.contains(&data.id)),
         }
     }
 }
@@ -36,12 +37,32 @@ impl From<&CorePlugin> for CoreConfig {
 impl Plugin for CorePlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(MinimalPlugins)
-            .insert_resource(CoreConfig::from(self))
+            .insert_state(AppState::Setup)
             .add_event::<CoreEvent>()
-            .add_systems(Startup, (build_system).chain())
-            .add_systems(Update, handle_core_events);
+            .configure_sets(Update, GameSet.run_if(in_state(AppState::Game)))
+            .configure_sets(PreUpdate, GameSet.run_if(in_state(AppState::Game)))
+            .configure_sets(PostUpdate, GameSet.run_if(in_state(AppState::Game)))
+            .configure_sets(FixedUpdate, GameSet.run_if(in_state(AppState::Game)))
+            .configure_sets(
+                OnEnter(AppState::Game),
+                InitializeUiSet.after(update_global),
+            )
+            .add_systems(OnEnter(AppState::Game), (build_system).chain())
+            .add_systems(Update, handle_core_events.in_set(GameSet));
     }
 }
+
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct GameSet;
+
+#[derive(States, Debug, PartialEq, Eq, Clone, Hash)]
+pub enum AppState {
+    Setup,
+    Game,
+}
+
+#[derive(Debug, Resource)]
+pub struct InitialBodies(pub Vec<BodyID>);
 
 #[derive(Resource)]
 pub struct PrimaryBody(pub BodyID);
@@ -54,28 +75,34 @@ pub struct EntityMapping {
 #[derive(Component, Debug)]
 pub struct BodyInfo(pub BodyData);
 
-pub fn build_system(mut commands: Commands, config: Res<CoreConfig>) {
-    let bodies = read_main_bodies()
+pub fn start_game(mut app_state: ResMut<NextState<AppState>>) {
+    app_state.set(AppState::Game);
+}
+
+pub fn build_system(world: &mut World) {
+    let config = world.remove_resource::<BodiesConfig>().unwrap();
+    let bodies: Vec<_> = read_main_bodies()
         .expect("Failed to read bodies")
         .into_iter()
-        .filter(|data| data.body_type <= config.smallest_body_type);
+        .filter(config.into_filter())
+        .collect();
     let primary_body = bodies
-        .clone()
+        .iter()
         .find(|data| data.host_body.is_none())
         .expect("no primary body found")
         .id;
-    commands.insert_resource(PrimaryBody(primary_body));
+    world.insert_resource(PrimaryBody(primary_body));
     let mut id_mapping = HashMap::new();
     for data in bodies {
         let id = data.id;
-        let entity = commands.spawn((
+        let entity = world.spawn((
             Position::default(),
             EllipticalOrbit::from(&data),
             BodyInfo(data),
         ));
         id_mapping.insert(id, entity.id());
     }
-    commands.insert_resource(EntityMapping { id_mapping });
+    world.insert_resource(EntityMapping { id_mapping });
 }
 
 #[derive(Event)]
@@ -98,17 +125,20 @@ mod tests {
     use bevy::app::App;
 
     use crate::{
-        app::body_data::BodyType, core_plugin::EntityMapping, engine_plugin::EllipticalOrbit,
+        app::body_data::BodyType,
+        core_plugin::{BodiesConfig, EntityMapping},
+        engine_plugin::EllipticalOrbit,
+        standalone_plugin::StandalonePlugin,
     };
 
-    use super::{BodyInfo, CorePlugin};
+    use super::BodyInfo;
 
     #[test]
     fn test_build_system() {
         let mut app = App::new();
-        app.add_plugins(CorePlugin {
-            smallest_body_type: BodyType::Planet,
-        });
+        app.add_plugins(StandalonePlugin(BodiesConfig::SmallestBodyType(
+            BodyType::Planet,
+        )));
         app.update();
         let mut world = app.world;
         assert_eq!(world.resource::<EntityMapping>().id_mapping.len(), 9);

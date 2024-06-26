@@ -9,24 +9,29 @@ use ratatui::{
 
 use crate::{
     app::{body_data::BodyData, body_id::BodyID},
-    core_plugin::BodyInfo,
+    core_plugin::{AppState, BodyInfo, GameSet},
     utils::{
         list::{select_next_clamp, select_previous_clamp},
         ui::Direction2,
     },
 };
 
-use super::{tree_plugin::TreeState, FocusView, WindowEvent};
+use super::{tree_plugin::TreeState, FocusView, InitializeUiSet, WindowEvent};
 
 pub struct SearchPlugin;
 
 impl Plugin for SearchPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<SearchViewEvent>()
-            .add_systems(PostStartup, initialize_search)
+            .add_systems(
+                OnEnter(AppState::Game),
+                initialize_search.in_set(InitializeUiSet),
+            )
             .add_systems(
                 Update,
-                (handle_search_events, update_search_entries).chain(),
+                (handle_search_events, update_search_entries)
+                    .in_set(GameSet)
+                    .chain(),
             )
             .add_systems(OnEnter(FocusView::Search), reset_on_enter_search);
     }
@@ -253,7 +258,8 @@ mod tests {
 
     use crate::{
         app::body_data::BodyType,
-        core_plugin::CorePlugin,
+        core_plugin::BodiesConfig,
+        standalone_plugin::StandalonePlugin,
         ui_plugin::{
             search_plugin::{SearchPlugin, SearchState, SearchViewEvent},
             tree_plugin::{TreePlugin, TreeState},
@@ -264,9 +270,7 @@ mod tests {
     fn test_search() {
         let mut app = App::new();
         app.add_plugins((
-            CorePlugin {
-                smallest_body_type: BodyType::Moon,
-            },
+            StandalonePlugin(BodiesConfig::SmallestBodyType(BodyType::Moon)),
             SearchPlugin,
             TreePlugin,
         ));

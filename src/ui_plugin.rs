@@ -2,6 +2,8 @@ use bevy::prelude::*;
 use bevy_ratatui::{error::exit_on_error, terminal::RatatuiContext, RatatuiPlugins};
 use ratatui::layout::{Constraint, Layout};
 
+use crate::core_plugin::{build_system, AppState, GameSet};
+
 use self::{
     search_plugin::{SearchState, SearchViewEvent, SearchWidget},
     space_map_plugin::SpaceMap,
@@ -19,12 +21,15 @@ impl Plugin for UiPlugin {
         app.add_plugins(RatatuiPlugins::default())
             .add_event::<WindowEvent>()
             .insert_state(FocusView::default())
-        .add_systems(Update, (handle_window_events, handle_search_validate.run_if(resource_exists::<SearchState>)))
-    .add_systems(PostUpdate, render.pipe(exit_on_error))
+        .add_systems(Update, (handle_window_events, handle_search_validate.run_if(resource_exists::<SearchState>)).in_set(GameSet))
+    .add_systems(PostUpdate, render.pipe(exit_on_error).in_set(GameSet))
         // .add_systems(PostUpdate, render)
         ;
     }
 }
+
+#[derive(SystemSet, Debug, Clone, Hash, PartialEq, Eq)]
+pub struct InitializeUiSet;
 
 #[derive(Default, Copy, Clone, States, PartialEq, Eq, Debug, Hash)]
 pub enum FocusView {
