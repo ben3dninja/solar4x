@@ -1,4 +1,4 @@
-use bevy::prelude::*;
+use bevy::{app::ScheduleRunnerPlugin, prelude::*};
 use bevy_ratatui::{error::exit_on_error, terminal::RatatuiContext, RatatuiPlugins};
 use ratatui::layout::{Constraint, Layout};
 
@@ -14,11 +14,11 @@ pub mod search_plugin;
 pub mod space_map_plugin;
 pub mod tree_plugin;
 
-pub struct UiPlugin;
+pub struct TuiPlugin;
 
-impl Plugin for UiPlugin {
+impl Plugin for TuiPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(RatatuiPlugins::default())
+        app.add_plugins((ScheduleRunnerPlugin::default(), RatatuiPlugins::default()))
             .add_event::<WindowEvent>()
             .insert_state(FocusView::default())
         .add_systems(Update, (handle_window_events, handle_search_validate.run_if(resource_exists::<SearchState>)).in_set(GameSet))

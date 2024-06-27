@@ -9,7 +9,7 @@ use ratatui::{
 use crate::{
     bodies::body_id::BodyID,
     core_plugin::{AppState, BodyInfo, GameSet, PrimaryBody},
-    ui_plugin::space_map_plugin::FocusBody,
+    tui_plugin::space_map_plugin::FocusBody,
     utils::{
         list::{select_next_clamp, select_previous_clamp},
         ui::Direction2,

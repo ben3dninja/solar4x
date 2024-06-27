@@ -1,4 +1,4 @@
-use bevy::{app::AppExit, prelude::*, utils::HashMap};
+use bevy::{app::AppExit, prelude::*, time::TimePlugin, utils::HashMap};
 use serde::{Deserialize, Serialize};
 
 use crate::{
@@ -7,7 +7,7 @@ use crate::{
         body_id::BodyID,
     },
     engine_plugin::{update_global, EllipticalOrbit, Position},
-    ui_plugin::InitializeUiSet,
+    tui_plugin::InitializeUiSet,
     utils::de::read_main_bodies,
 };
 pub struct CorePlugin;
@@ -37,19 +37,24 @@ impl BodiesConfig {
 
 impl Plugin for CorePlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(MinimalPlugins)
-            .insert_state(AppState::Setup)
-            .add_event::<CoreEvent>()
-            .configure_sets(Update, GameSet.run_if(in_state(AppState::Game)))
-            .configure_sets(PreUpdate, GameSet.run_if(in_state(AppState::Game)))
-            .configure_sets(PostUpdate, GameSet.run_if(in_state(AppState::Game)))
-            .configure_sets(FixedUpdate, GameSet.run_if(in_state(AppState::Game)))
-            .configure_sets(
-                OnEnter(AppState::Game),
-                InitializeUiSet.after(update_global),
-            )
-            .add_systems(OnEnter(AppState::Game), (build_system).chain())
-            .add_systems(Update, handle_core_events.in_set(GameSet));
+        app.add_plugins((
+            TaskPoolPlugin::default(),
+            TypeRegistrationPlugin,
+            FrameCountPlugin,
+            TimePlugin,
+        ))
+        .insert_state(AppState::Setup)
+        .add_event::<CoreEvent>()
+        .configure_sets(Update, GameSet.run_if(in_state(AppState::Game)))
+        .configure_sets(PreUpdate, GameSet.run_if(in_state(AppState::Game)))
+        .configure_sets(PostUpdate, GameSet.run_if(in_state(AppState::Game)))
+        .configure_sets(FixedUpdate, GameSet.run_if(in_state(AppState::Game)))
+        .configure_sets(
+            OnEnter(AppState::Game),
+            InitializeUiSet.after(update_global),
+        )
+        .add_systems(OnEnter(AppState::Game), (build_system).chain())
+        .add_systems(Update, handle_core_events.in_set(GameSet));
     }
 }
 
