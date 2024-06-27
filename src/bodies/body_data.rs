@@ -31,9 +31,9 @@ impl Display for BodyType {
     }
 }
 
-#[derive(Deserialize, PartialEq, Debug, Clone, Default)]
+#[derive(Deserialize)]
 #[serde(rename_all(deserialize = "camelCase"))]
-pub struct BodyData {
+pub struct MainBodyData {
     #[serde(rename(deserialize = "rel"))]
     pub id: BodyID,
     #[serde(rename(deserialize = "englishName"))]
@@ -67,11 +67,81 @@ pub struct BodyData {
     pub rotation_period: f64,
 
     #[serde(alias = "meanRadius")]
+    radius: f64,
+    #[serde(deserialize_with = "deserialize_options")]
+    mass: Mass,
+}
+
+#[derive(PartialEq, Debug, Clone, Default)]
+pub struct BodyData {
+    pub id: BodyID,
+    pub name: String,
+    pub body_type: BodyType,
+    pub host_body: Option<BodyID>,
+    pub orbiting_bodies: Vec<BodyID>,
+
+    // Orbital elements
+    pub semimajor_axis: f64,
+    pub eccentricity: f64,
+    pub inclination: f64,
+    pub long_asc_node: f64,
+    pub arg_periapsis: f64,
+    pub initial_mean_anomaly: f64,
+
+    pub periapsis: f64,
+    pub apoapsis: f64,
+
+    // Time
+    // Time required to complete a cycle around the host body (in earth days)
+    pub revolution_period: f64,
+    // Time required to rotate around itself (in earth hours)
+    pub rotation_period: f64,
+
     pub radius: f64,
+    pub mass: f64,
+}
+
+impl From<MainBodyData> for BodyData {
+    fn from(value: MainBodyData) -> Self {
+        Self {
+            id: value.id,
+            name: value.name,
+            body_type: value.body_type,
+            host_body: value.host_body,
+            orbiting_bodies: value.orbiting_bodies,
+            semimajor_axis: value.semimajor_axis as f64,
+            eccentricity: value.eccentricity,
+            inclination: value.inclination,
+            long_asc_node: value.long_asc_node,
+            arg_periapsis: value.arg_periapsis,
+            initial_mean_anomaly: value.initial_mean_anomaly,
+            periapsis: value.periapsis as f64,
+            apoapsis: value.apoapsis as f64,
+            revolution_period: value.revolution_period,
+            rotation_period: value.rotation_period,
+            radius: value.radius,
+            mass: value.mass.into(),
+        }
+    }
+}
+
+#[derive(Deserialize, Default)]
+#[serde(rename_all(deserialize = "camelCase"))]
+struct Mass {
+    mass_value: f64,
+    mass_exponent: i32,
+}
+
+impl From<Mass> for f64 {
+    fn from(value: Mass) -> Self {
+        value.mass_value * 10f64.powi(value.mass_exponent)
+    }
 }
 
 #[cfg(test)]
 mod tests {
+
+    use crate::bodies::body_data::MainBodyData;
 
     use super::{BodyData, BodyType};
     use serde_json::from_str;
@@ -124,26 +194,27 @@ mod tests {
             "rel": "https://api.le-systeme-solaire.net/rest/bodies/lune"
         }
         "#;
-        let body_data: BodyData = from_str(data).unwrap();
+        let body_data: MainBodyData = from_str(data).unwrap();
         assert_eq!(
-            body_data,
+            BodyData::from(body_data),
             BodyData {
                 id: "lune".into(),
                 name: "Moon".into(),
                 body_type: BodyType::Moon,
                 host_body: Some("terre".into()),
                 orbiting_bodies: Vec::new(),
-                semimajor_axis: 384400,
+                semimajor_axis: 384400.,
                 eccentricity: 0.0549,
                 inclination: 5.145,
                 long_asc_node: 0.,
                 arg_periapsis: 0.,
                 initial_mean_anomaly: 0.,
-                periapsis: 363300,
-                apoapsis: 405500,
+                periapsis: 363300.,
+                apoapsis: 405500.,
                 revolution_period: 27.32170,
                 rotation_period: 655.72800,
-                radius: 1737.
+                radius: 1737.,
+                mass: 7.346e22
             }
         );
     }

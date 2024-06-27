@@ -14,7 +14,7 @@ use ratatui::{
 };
 
 use crate::{
-    bodies::{body_data::BodyType, body_id::BodyID},
+    bodies::body_data::BodyType,
     core_plugin::{AppState, BodyInfo, EntityMapping, GameSet, PrimaryBody},
     engine_plugin::{EllipticalOrbit, Position},
     utils::{
@@ -23,11 +23,7 @@ use crate::{
     },
 };
 
-use super::{
-    search_plugin::SearchViewEvent,
-    tree_plugin::{TreeState, TreeViewEvent},
-    InitializeUiSet,
-};
+use super::{tree_plugin::TreeState, InitializeUiSet};
 
 const OFFSET_STEP: f64 = 1e8;
 
@@ -222,9 +218,9 @@ fn handle_space_map_events(
                             .and_then(|&e| query.get(e).ok())
                             .map(|body| body.0.semimajor_axis)
                     })
-                    .max()
+                    .max_by(|a, b| a.total_cmp(b))
                 {
-                    space_map.zoom_level = space_map.system_size / (max_dist as f64);
+                    space_map.zoom_level = space_map.system_size / max_dist;
                 }
             }
         }
