@@ -66,8 +66,8 @@ pub enum AppState {
     Setup,
     Game,
 }
-#[derive(Resource)]
-pub struct PrimaryBody(pub BodyID);
+#[derive(Component)]
+pub struct PrimaryBody;
 
 #[derive(Resource)]
 pub struct EntityMapping {
@@ -92,15 +92,17 @@ pub fn build_system(mut commands: Commands, config: Res<BodiesConfig>) {
         .find(|data| data.host_body.is_none())
         .expect("no primary body found")
         .id;
-    commands.insert_resource(PrimaryBody(primary_body));
     let mut id_mapping = HashMap::new();
     for data in bodies {
         let id = data.id;
-        let entity = commands.spawn((
+        let mut entity = commands.spawn((
             Position::default(),
             EllipticalOrbit::from(&data),
             BodyInfo(data),
         ));
+        if id == primary_body {
+            entity.insert(PrimaryBody);
+        }
         id_mapping.insert(id, entity.id());
     }
     commands.insert_resource(EntityMapping { id_mapping });
@@ -123,11 +125,11 @@ fn handle_core_events(mut reader: EventReader<CoreEvent>, mut quit_writer: Event
 
 #[cfg(test)]
 mod tests {
-    use bevy::app::App;
+    use bevy::{app::App, ecs::query::With};
 
     use crate::{
         bodies::body_data::BodyType,
-        core_plugin::{BodiesConfig, EntityMapping},
+        core_plugin::{BodiesConfig, EntityMapping, PrimaryBody},
         engine_plugin::EllipticalOrbit,
         standalone_plugin::StandalonePlugin,
     };
@@ -151,5 +153,13 @@ mod tests {
             .unwrap();
         assert_eq!(orbit.semimajor_axis, 149598023.);
         assert_eq!(data.semimajor_axis, 149598023);
+        assert_eq!(
+            world
+                .query_filtered::<&BodyInfo, With<PrimaryBody>>()
+                .single(&world)
+                .0
+                .id,
+            "soleil".into()
+        )
     }
 }

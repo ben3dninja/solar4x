@@ -19,7 +19,7 @@ use crate::{
     core_plugin::{AppState, BodyInfo},
     engine_plugin::Position,
     tui_plugin::{
-        space_map_plugin::{initialize_space_map, SpaceMap},
+        space_map_plugin::{initialize_space_map, FocusBody, SpaceMap},
         InitializeUiSet,
     },
     utils::algebra::project_onto_plane,
@@ -123,10 +123,16 @@ fn insert_display_components(
     });
 }
 
-fn update_transform(space_map: Res<SpaceMap>, mut query: Query<(&mut Transform, &Position)>) {
-    let scale = MAX_WIDTH as f64 / space_map.system_size;
+fn update_transform(
+    space_map: Res<SpaceMap>,
+    mut query: Query<(&mut Transform, &Position)>,
+    focus_pos: Query<&Position, With<FocusBody>>,
+) {
+    let scale = space_map.zoom_level * MAX_WIDTH as f64 / space_map.system_size;
     for (mut transform, Position(pos)) in query.iter_mut() {
-        let (x, y) = (project_onto_plane(*pos, (DVec3::X, DVec3::Y)) * scale)
+        let (x, y) = ((project_onto_plane(*pos - focus_pos.single().0, (DVec3::X, DVec3::Y))
+            - space_map.offset)
+            * scale)
             .as_vec2()
             .into();
         transform.translation.x = x;

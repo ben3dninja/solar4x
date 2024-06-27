@@ -31,7 +31,7 @@ impl Plugin for TreePlugin {
                 Update,
                 (
                     handle_tree_events,
-                    update_focus_body.run_if(resource_exists::<FocusBody>),
+                    update_focus_body.run_if(any_with_component::<FocusBody>),
                 )
                     .in_set(GameSet),
             );
@@ -103,8 +103,8 @@ impl StatefulWidget for TreeWidget {
 
 pub fn initialize_tree(
     mut commands: Commands,
-    primary: Res<PrimaryBody>,
-    focus_body: Option<Res<FocusBody>>,
+    primary: Query<&BodyInfo, With<PrimaryBody>>,
+    focus_body: Query<&BodyInfo, With<FocusBody>>,
     bodies: Query<&BodyInfo>,
 ) {
     #[derive(Clone)]
@@ -153,12 +153,12 @@ pub fn initialize_tree(
         }
     }
     let mut system_tree = Vec::new();
-    fill_tree_rec(&mut system_tree, &info, primary.0, None, true);
+    fill_tree_rec(&mut system_tree, &info, primary.single().0.id, None, true);
 
     commands.insert_resource(TreeState {
         system_tree,
         visible_tree_entries: vec![0],
-        focus_body: focus_body.map(|r| r.0),
+        focus_body: focus_body.get_single().map(|r| r.0.id).ok(),
         list_state: ListState::default().with_selected(Some(0)),
     });
 }
@@ -177,8 +177,11 @@ fn handle_tree_events(mut tree_state: ResMut<TreeState>, mut reader: EventReader
     }
 }
 
-fn update_focus_body(mut tree_state: ResMut<TreeState>, focus_body: Res<FocusBody>) {
-    tree_state.focus_body = Some(focus_body.0);
+fn update_focus_body(
+    mut tree_state: ResMut<TreeState>,
+    focus_body: Query<&BodyInfo, With<FocusBody>>,
+) {
+    tree_state.focus_body = focus_body.get_single().map(|i| i.0.id).ok();
 }
 
 impl TreeState {

@@ -85,10 +85,10 @@ pub fn update_local(mut orbits: Query<&mut EllipticalOrbit>, time: Res<GameTime>
 
 pub fn update_global(
     mut query: Query<(&mut Position, &EllipticalOrbit, &BodyInfo)>,
-    primary: Res<PrimaryBody>,
+    primary: Query<&BodyInfo, With<PrimaryBody>>,
     mapping: Res<EntityMapping>,
 ) {
-    let mut queue = vec![(primary.0, DVec3::ZERO)];
+    let mut queue = vec![(primary.single().0.id, DVec3::ZERO)];
     let mut i = 0;
     while i < queue.len() {
         let (id, parent_pos) = queue[i];
