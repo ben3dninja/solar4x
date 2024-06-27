@@ -69,10 +69,10 @@ pub struct FocusBody(pub BodyID);
 pub struct SpaceMap {
     circles: Vec<Circle>,
     offset: DVec2,
-    focus_body: BodyID,
-    zoom_level: f64,
-    selected_body: Option<BodyID>,
-    system_size: f64,
+    pub focus_body: BodyID,
+    pub zoom_level: f64,
+    pub selected_body: Option<BodyID>,
+    pub system_size: f64,
 }
 
 impl WidgetRef for SpaceMap {
@@ -153,7 +153,7 @@ fn update_space_map(
     map.circles = circles;
 }
 
-fn initialize_space_map(
+pub fn initialize_space_map(
     mut commands: Commands,
     positions: Query<&Position, With<EllipticalOrbit>>,
     primary: Res<PrimaryBody>,
@@ -248,7 +248,7 @@ mod tests {
         core_plugin::{BodiesConfig, GameSet},
         engine_plugin::{update_global, update_local, update_time, EnginePlugin},
         standalone_plugin::StandalonePlugin,
-        ui_plugin::space_map_plugin::{update_space_map, FocusBody, SpaceMap},
+        tui_plugin::space_map_plugin::{update_space_map, FocusBody, SpaceMap},
     };
 
     use super::SpaceMapPlugin;

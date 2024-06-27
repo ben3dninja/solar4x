@@ -8,14 +8,14 @@ use crate::core_plugin::CoreEvent;
 use crate::core_plugin::GameSet;
 use crate::engine_plugin::EngineEvent;
 use crate::engine_plugin::GameTime;
-use crate::ui_plugin::search_plugin::SearchState;
-use crate::ui_plugin::search_plugin::SearchViewEvent;
-use crate::ui_plugin::space_map_plugin::SpaceMap;
-use crate::ui_plugin::space_map_plugin::SpaceMapEvent;
-use crate::ui_plugin::tree_plugin::TreeState;
-use crate::ui_plugin::tree_plugin::TreeViewEvent;
-use crate::ui_plugin::WindowEvent;
-use crate::{keyboard::Keymap, ui_plugin::FocusView};
+use crate::tui_plugin::search_plugin::SearchState;
+use crate::tui_plugin::search_plugin::SearchViewEvent;
+use crate::tui_plugin::space_map_plugin::SpaceMap;
+use crate::tui_plugin::space_map_plugin::SpaceMapEvent;
+use crate::tui_plugin::tree_plugin::TreeState;
+use crate::tui_plugin::tree_plugin::TreeViewEvent;
+use crate::tui_plugin::WindowEvent;
+use crate::{keyboard::Keymap, tui_plugin::FocusView};
 
 pub struct InputPlugin {
     pub keymap: Keymap,

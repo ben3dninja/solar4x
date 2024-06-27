@@ -260,7 +260,7 @@ mod tests {
         bodies::body_data::BodyType,
         core_plugin::BodiesConfig,
         standalone_plugin::StandalonePlugin,
-        ui_plugin::{
+        tui_plugin::{
             search_plugin::{SearchPlugin, SearchState, SearchViewEvent},
             tree_plugin::{TreePlugin, TreeState},
         },
