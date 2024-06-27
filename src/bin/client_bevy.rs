@@ -8,9 +8,9 @@ use rust_space_trading::{
     client_plugin::{ClientNetworkInfo, ClientPlugin},
     engine_plugin::EnginePlugin,
     input_plugin::InputPlugin,
-    ui_plugin::{
+    tui_plugin::{
         search_plugin::SearchPlugin, space_map_plugin::SpaceMapPlugin, tree_plugin::TreePlugin,
-        UiPlugin,
+        TuiPlugin,
     },
     utils::args::get_keymap,
 };
@@ -26,7 +26,7 @@ fn main() {
             InputPlugin {
                 keymap: get_keymap(env::args()).unwrap(),
             },
-            UiPlugin,
+            TuiPlugin,
             TreePlugin,
             SpaceMapPlugin,
             SearchPlugin,
