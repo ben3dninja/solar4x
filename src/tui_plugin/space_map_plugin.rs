@@ -44,7 +44,7 @@ impl Plugin for SpaceMapPlugin {
                 Update,
                 (
                     handle_space_map_events,
-                    update_selected.run_if(resource_exists::<TreeState>),
+                    // update_selected.run_if(resource_exists::<TreeState>),
                     update_space_map,
                 )
                     .in_set(GameSet)
@@ -62,16 +62,14 @@ pub enum SpaceMapEvent {
     Autoscale,
 }
 
-#[derive(Debug, Resource, Clone)]
-pub struct FocusBody(pub BodyID);
+#[derive(Component)]
+pub struct FocusBody;
 
 #[derive(Resource, Default, Debug)]
 pub struct SpaceMap {
     circles: Vec<Circle>,
-    offset: DVec2,
-    pub focus_body: BodyID,
+    pub offset: DVec2,
     pub zoom_level: f64,
-    pub selected_body: Option<BodyID>,
     pub system_size: f64,
 }
 
@@ -99,45 +97,44 @@ impl WidgetRef for SpaceMap {
     }
 }
 
-fn update_selected(
-    mut map: ResMut<SpaceMap>,
-    mut reader: EventReader<TreeViewEvent>,
-    mut search_reader: EventReader<SearchViewEvent>,
-    tree: Res<TreeState>,
-) {
-    for event in reader.read() {
-        match event {
-            TreeViewEvent::SelectTree(_) => {
-                map.selected_body = Some(tree.selected_body_id());
-            }
-            _ => continue,
-        }
-    }
+// fn update_selected(
+//     mut map: ResMut<SpaceMap>,
+//     mut reader: EventReader<TreeViewEvent>,
+//     mut search_reader: EventReader<SearchViewEvent>,
+//     tree: Res<TreeState>,
+// ) {
+//     for event in reader.read() {
+//         match event {
+//             TreeViewEvent::SelectTree(_) => {
+//                 map.selected_body = Some(tree.selected_body_id());
+//             }
+//             _ => continue,
+//         }
+//     }
 
-    for event in search_reader.read() {
-        match event {
-            SearchViewEvent::ValidateSearch => {
-                map.selected_body = Some(tree.selected_body_id());
-            }
-            _ => continue,
-        }
-    }
-}
+//     for event in search_reader.read() {
+//         match event {
+//             SearchViewEvent::ValidateSearch => {
+//                 map.selected_body = Some(tree.selected_body_id());
+//             }
+//             _ => continue,
+//         }
+//     }
+// }
 
 fn update_space_map(
     mut map: ResMut<SpaceMap>,
-    mapping: Res<EntityMapping>,
     query: Query<(&Position, &BodyInfo)>,
+    tree: Option<Res<TreeState>>,
+    focus_pos: Query<&Position, With<FocusBody>>,
 ) {
     let mut circles = Vec::new();
-    let focus = map.focus_body;
-    let (&Position(focus_pos), _) = query
-        .get(mapping.id_mapping[&focus])
-        .unwrap_or_else(|_| panic!("Could not find focus object {}", focus));
+    let &Position(focus_pos) = focus_pos.single();
+    let selected = tree.as_ref().map(|t| t.selected_body_id());
     for (&Position(pos), BodyInfo(data)) in query.iter() {
-        let proj = project_onto_plane(pos - focus_pos, (DVec3::X, DVec3::Y));
+        let proj = project_onto_plane(pos - focus_pos, (DVec3::X, DVec3::Y)) - map.offset;
         let color = match data.body_type {
-            _ if Some(data.id) == map.selected_body => Color::Red,
+            _ if Some(data.id) == selected => Color::Red,
             BodyType::Star => Color::Yellow,
             BodyType::Planet => Color::Blue,
             _ => Color::DarkGray,
@@ -156,32 +153,29 @@ fn update_space_map(
 pub fn initialize_space_map(
     mut commands: Commands,
     positions: Query<&Position, With<EllipticalOrbit>>,
-    primary: Res<PrimaryBody>,
-    tree: Option<Res<TreeState>>,
+    primary: Query<Entity, With<PrimaryBody>>,
 ) {
     let system_size = positions
         .iter()
         .map(|pos| pos.0.length())
         .max_by(|a, b| a.total_cmp(b))
         .unwrap();
-    let focus_body = primary.0;
     commands.insert_resource(SpaceMap {
         circles: Vec::new(),
         offset: DVec2::ZERO,
-        focus_body,
         zoom_level: 1.,
-        selected_body: tree.map(|tree| tree.selected_body_id()),
         system_size,
     });
-    commands.insert_resource(FocusBody(focus_body));
+    commands.entity(primary.single()).insert(FocusBody);
 }
 
 fn handle_space_map_events(
+    mut commands: Commands,
     mut reader: EventReader<SpaceMapEvent>,
     mut space_map: ResMut<SpaceMap>,
     tree: Option<Res<TreeState>>,
     mapping: Res<EntityMapping>,
-    mut focus_body: ResMut<FocusBody>,
+    focus_body: Query<(Entity, &BodyInfo), With<FocusBody>>,
     query: Query<&BodyInfo>,
 ) {
     use Direction2::*;
@@ -208,15 +202,16 @@ fn handle_space_map_events(
             MapOffsetReset => space_map.offset = DVec2::ZERO,
             FocusBody => {
                 if let Some(tree) = &tree {
-                    focus_body.0 = tree.selected_body_id();
-                    space_map.focus_body = focus_body.0;
+                    commands
+                        .entity(focus_body.single().0)
+                        .remove::<self::FocusBody>();
+                    if let Some(entity) = mapping.id_mapping.get(&tree.selected_body_id()) {
+                        commands.entity(*entity).insert(self::FocusBody);
+                    }
                 }
             }
             Autoscale => {
-                let focus_data = &query
-                    .get(mapping.id_mapping[&space_map.focus_body])
-                    .unwrap()
-                    .0;
+                let focus_data = &focus_body.single().1 .0;
                 if let Some(max_dist) = focus_data
                     .orbiting_bodies
                     .iter()
@@ -240,15 +235,20 @@ fn handle_space_map_events(
 mod tests {
     use bevy::{
         app::{App, Update},
-        ecs::schedule::IntoSystemConfigs,
+        ecs::{query::With, schedule::IntoSystemConfigs},
     };
 
     use crate::{
         bodies::body_data::BodyType,
-        core_plugin::{BodiesConfig, GameSet},
+        core_plugin::{BodiesConfig, BodyInfo, GameSet},
         engine_plugin::{update_global, update_local, update_time, EnginePlugin},
         standalone_plugin::StandalonePlugin,
-        tui_plugin::space_map_plugin::{update_space_map, FocusBody, SpaceMap},
+        tui_plugin::{
+            space_map_plugin::{
+                handle_space_map_events, update_space_map, FocusBody, SpaceMap, SpaceMapEvent,
+            },
+            tree_plugin::{TreePlugin, TreeState},
+        },
     };
 
     use super::SpaceMapPlugin;
@@ -273,9 +273,32 @@ mod tests {
         dbg!(map);
         assert!(4459753056. < map.system_size);
         assert!(map.system_size < 4537039826.);
-        let earth = "terre".into();
-        app.world.resource_mut::<FocusBody>().0 = earth;
+    }
+
+    #[test]
+    fn test_change_focus_body() {
+        let mut app = App::new();
+        app.add_plugins((
+            StandalonePlugin(BodiesConfig::SmallestBodyType(BodyType::Planet)),
+            EnginePlugin,
+            TreePlugin,
+            SpaceMapPlugin,
+        ))
+        .add_systems(Update, handle_space_map_events.in_set(GameSet));
         app.update();
-        assert_eq!(app.world.resource::<FocusBody>().0, earth);
+        let earth = "terre".into();
+
+        app.world.resource_mut::<TreeState>().select_body(earth);
+        app.world.send_event(SpaceMapEvent::FocusBody);
+        app.update();
+        let world = &mut app.world;
+        assert_eq!(
+            world
+                .query_filtered::<&BodyInfo, With<FocusBody>>()
+                .single(world)
+                .0
+                .id,
+            earth
+        );
     }
 }
