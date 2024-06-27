@@ -7,6 +7,7 @@ use crate::{
         body_id::BodyID,
     },
     engine_plugin::{update_global, EllipticalOrbit, Position},
+    gravity::Mass,
     tui_plugin::InitializeUiSet,
     utils::de::read_main_bodies,
 };
@@ -98,6 +99,7 @@ pub fn build_system(mut commands: Commands, config: Res<BodiesConfig>) {
         let mut entity = commands.spawn((
             Position::default(),
             EllipticalOrbit::from(&data),
+            Mass(data.mass),
             BodyInfo(data),
         ));
         if id == primary_body {
@@ -152,7 +154,7 @@ mod tests {
             .find(|(_, BodyInfo(data))| data.id == "terre".into())
             .unwrap();
         assert_eq!(orbit.semimajor_axis, 149598023.);
-        assert_eq!(data.semimajor_axis, 149598023);
+        assert_eq!(data.semimajor_axis, 149598023.);
         assert_eq!(
             world
                 .query_filtered::<&BodyInfo, With<PrimaryBody>>()

@@ -110,7 +110,7 @@ pub fn initialize_tree(
     #[derive(Clone)]
     struct Temp {
         children: Vec<BodyID>,
-        semimajor_axis: i64,
+        semimajor_axis: f64,
         name: String,
     }
     let mut info: HashMap<BodyID, Temp> = bodies
@@ -129,7 +129,11 @@ pub fn initialize_tree(
     let info_bis = info.clone();
     for entry in info.values_mut() {
         entry.children.retain(|b| info_bis.get(b).is_some());
-        entry.children.sort_by_key(|b| info_bis[b].semimajor_axis);
+        entry.children.sort_by(|a, b| {
+            info_bis[a]
+                .semimajor_axis
+                .total_cmp(&info_bis[b].semimajor_axis)
+        });
     }
     fn fill_tree_rec(
         tree: &mut Vec<TreeEntry>,

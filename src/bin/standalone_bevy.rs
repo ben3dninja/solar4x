@@ -5,6 +5,7 @@ use rust_space_trading::{
     bodies::body_data::BodyType,
     core_plugin::BodiesConfig,
     engine_plugin::EnginePlugin,
+    gravity::GravityPlugin,
     gui_plugin::GuiPlugin,
     input_plugin::InputPlugin,
     standalone_plugin::StandalonePlugin,
@@ -23,6 +24,7 @@ fn main() {
         .add_plugins((
             StandalonePlugin(config),
             EnginePlugin,
+            GravityPlugin,
             InputPlugin {
                 keymap: get_keymap(env::args()).unwrap(),
             },
