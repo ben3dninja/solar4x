@@ -4,7 +4,7 @@ use bevy::{
 };
 
 use crate::{
-    app::body_data::BodyData,
+    bodies::body_data::BodyData,
     core_plugin::{build_system, AppState, BodyInfo, EntityMapping, GameSet, PrimaryBody},
     utils::{
         algebra::{degs, mod_180, rads},
@@ -202,7 +202,7 @@ mod tests {
     use bevy::app::App;
 
     use crate::{
-        app::body_data::BodyType,
+        bodies::body_data::BodyType,
         core_plugin::{BodiesConfig, BodyInfo},
         engine_plugin::{EllipticalOrbit, EnginePlugin, Position},
         standalone_plugin::StandalonePlugin,

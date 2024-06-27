@@ -13,14 +13,14 @@ use serde::{
     Deserialize, Serialize,
 };
 
-#[derive(Default, Debug, Serialize, Deserialize, Resource)]
+#[derive(Default, Debug, Serialize, Deserialize, Resource, Clone)]
 pub struct Keymap {
     pub tree: TreeViewKeymap,
     pub search: SearchViewKeymap,
     pub info: InfoViewKeymap,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Key {
     pub code: KeyCode,
     pub modifiers: KeyModifiers,
@@ -224,7 +224,7 @@ impl Keymap {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct TreeViewKeymap {
     pub select_next: Key,
     pub select_previous: Key,
@@ -246,7 +246,7 @@ pub struct TreeViewKeymap {
     pub toggle_time: Key,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct SearchViewKeymap {
     pub move_cursor_right: Key,
     pub move_cursor_left: Key,
@@ -257,7 +257,7 @@ pub struct SearchViewKeymap {
     pub delete_char: Key,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct InfoViewKeymap {
     pub leave_info: Key,
 }
@@ -267,7 +267,6 @@ impl Default for TreeViewKeymap {
         let (w, a) = ("w", "a");
         #[cfg(feature = "azerty")]
         let (w, a) = ("z", "q");
-
         Self {
             select_next: Key::from_str_unchecked("down"),
             select_previous: Key::from_str_unchecked("up"),

@@ -1,4 +1,7 @@
-use std::net::{IpAddr, Ipv4Addr};
+use std::{
+    env,
+    net::{IpAddr, Ipv4Addr},
+};
 
 use bevy::app::App;
 use rust_space_trading::{
@@ -9,6 +12,7 @@ use rust_space_trading::{
         search_plugin::SearchPlugin, space_map_plugin::SpaceMapPlugin, tree_plugin::TreePlugin,
         UiPlugin,
     },
+    utils::args::get_keymap,
 };
 
 fn main() {
@@ -19,7 +23,9 @@ fn main() {
                 client_address: (IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0),
             }),
             EnginePlugin,
-            InputPlugin,
+            InputPlugin {
+                keymap: get_keymap(env::args()).unwrap(),
+            },
             UiPlugin,
             TreePlugin,
             SpaceMapPlugin,

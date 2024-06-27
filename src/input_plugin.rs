@@ -17,11 +17,13 @@ use crate::ui_plugin::tree_plugin::TreeViewEvent;
 use crate::ui_plugin::WindowEvent;
 use crate::{keyboard::Keymap, ui_plugin::FocusView};
 
-pub struct InputPlugin;
+pub struct InputPlugin {
+    pub keymap: Keymap,
+}
 
 impl Plugin for InputPlugin {
     fn build(&self, app: &mut App) {
-        app.insert_resource(Keymap::default()).add_systems(
+        app.insert_resource(self.keymap.clone()).add_systems(
             PreUpdate,
             (
                 send_window_events,
@@ -156,7 +158,6 @@ fn send_window_events(
                     _ => continue,
                 }));
             }
-            _ => {}
         }
     }
 }

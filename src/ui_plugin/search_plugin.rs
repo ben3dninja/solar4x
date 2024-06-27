@@ -8,7 +8,7 @@ use ratatui::{
 };
 
 use crate::{
-    app::{body_data::BodyData, body_id::BodyID},
+    bodies::{body_data::BodyData, body_id::BodyID},
     core_plugin::{AppState, BodyInfo, GameSet},
     utils::{
         list::{select_next_clamp, select_previous_clamp},
@@ -257,7 +257,7 @@ mod tests {
     use bevy::app::App;
 
     use crate::{
-        app::body_data::BodyType,
+        bodies::body_data::BodyType,
         core_plugin::BodiesConfig,
         standalone_plugin::StandalonePlugin,
         ui_plugin::{

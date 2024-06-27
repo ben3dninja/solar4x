@@ -2,7 +2,7 @@ use bevy::{app::AppExit, prelude::*, utils::HashMap};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    app::{
+    bodies::{
         body_data::{BodyData, BodyType},
         body_id::BodyID,
     },
@@ -121,7 +121,7 @@ mod tests {
     use bevy::app::App;
 
     use crate::{
-        app::body_data::BodyType,
+        bodies::body_data::BodyType,
         core_plugin::{BodiesConfig, EntityMapping},
         engine_plugin::EllipticalOrbit,
         standalone_plugin::StandalonePlugin,
