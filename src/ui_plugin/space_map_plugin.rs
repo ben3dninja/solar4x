@@ -14,7 +14,7 @@ use ratatui::{
 };
 
 use crate::{
-    app::{body_data::BodyType, body_id::BodyID},
+    bodies::{body_data::BodyType, body_id::BodyID},
     core_plugin::{AppState, BodyInfo, EntityMapping, GameSet, PrimaryBody},
     engine_plugin::{EllipticalOrbit, Position},
     utils::{
@@ -24,6 +24,7 @@ use crate::{
 };
 
 use super::{
+    search_plugin::SearchViewEvent,
     tree_plugin::{TreeState, TreeViewEvent},
     InitializeUiSet,
 };
@@ -101,11 +102,21 @@ impl WidgetRef for SpaceMap {
 fn update_selected(
     mut map: ResMut<SpaceMap>,
     mut reader: EventReader<TreeViewEvent>,
+    mut search_reader: EventReader<SearchViewEvent>,
     tree: Res<TreeState>,
 ) {
     for event in reader.read() {
         match event {
             TreeViewEvent::SelectTree(_) => {
+                map.selected_body = Some(tree.selected_body_id());
+            }
+            _ => continue,
+        }
+    }
+
+    for event in search_reader.read() {
+        match event {
+            SearchViewEvent::ValidateSearch => {
                 map.selected_body = Some(tree.selected_body_id());
             }
             _ => continue,
@@ -233,7 +244,7 @@ mod tests {
     };
 
     use crate::{
-        app::body_data::BodyType,
+        bodies::body_data::BodyType,
         core_plugin::{BodiesConfig, GameSet},
         engine_plugin::{update_global, update_local, update_time, EnginePlugin},
         standalone_plugin::StandalonePlugin,

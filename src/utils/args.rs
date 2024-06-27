@@ -1,10 +1,10 @@
-use std::{env, error::Error};
+use std::{env::Args, error::Error};
 
-use rust_space_trading::{app::body_data::BodyType, keyboard::Keymap, standalone::Standalone};
+use crate::keyboard::Keymap;
 
-fn main() -> Result<(), Box<dyn Error>> {
-    let mut args = env::args();
+pub fn get_keymap(mut args: Args) -> Result<Keymap, Box<dyn Error>> {
     let mut keymap = Keymap::default();
+
     if let Some(command) = args.nth(1) {
         match &command[..] {
             "--writekeymap" => {
@@ -17,8 +17,5 @@ fn main() -> Result<(), Box<dyn Error>> {
             _ => {}
         }
     }
-    let body_type = BodyType::Moon;
-    #[cfg(feature = "asteroids")]
-    let body_type = BodyType::Asteroid;
-    Standalone::new(body_type)?.with_keymap(keymap).run()
+    Ok(keymap)
 }

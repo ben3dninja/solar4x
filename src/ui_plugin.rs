@@ -2,7 +2,7 @@ use bevy::prelude::*;
 use bevy_ratatui::{error::exit_on_error, terminal::RatatuiContext, RatatuiPlugins};
 use ratatui::layout::{Constraint, Layout};
 
-use crate::core_plugin::{build_system, AppState, GameSet};
+use crate::core_plugin::GameSet;
 
 use self::{
     search_plugin::{SearchState, SearchViewEvent, SearchWidget},

@@ -8,9 +8,9 @@ use bevy_quinnet::client::{
 use bevy_ratatui::error::exit_on_error;
 
 use crate::{
-    core_plugin::{AppState, BodiesConfig, CorePlugin},
+    core_plugin::{AppState, CorePlugin},
     engine_plugin::GameTime,
-    network::{ClientChannel, ServerChannel, ServerMessage},
+    network::{ClientChannel, ServerMessage},
 };
 
 pub struct ClientPlugin(pub ClientNetworkInfo);

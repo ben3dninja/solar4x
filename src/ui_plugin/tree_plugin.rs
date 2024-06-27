@@ -7,7 +7,7 @@ use ratatui::{
 };
 
 use crate::{
-    app::body_id::BodyID,
+    bodies::body_id::BodyID,
     core_plugin::{AppState, BodyInfo, GameSet, PrimaryBody},
     ui_plugin::space_map_plugin::FocusBody,
     utils::{
@@ -352,7 +352,7 @@ mod tests {
     use bevy::app::App;
 
     use crate::{
-        app::body_data::BodyType, core_plugin::BodiesConfig, standalone_plugin::StandalonePlugin,
+        bodies::body_data::BodyType, core_plugin::BodiesConfig, standalone_plugin::StandalonePlugin,
     };
 
     use super::{TreePlugin, TreeState};

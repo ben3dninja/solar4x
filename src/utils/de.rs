@@ -2,7 +2,7 @@ use std::{fs::File, io::Read};
 
 use serde::{Deserialize, Deserializer};
 
-use crate::app::body_data::BodyData;
+use crate::bodies::body_data::BodyData;
 
 const MAIN_OBJECT_FILE_PATH: &str = "main_objects.json";
 const SUN_ID: &str = "soleil";
@@ -46,7 +46,7 @@ fn fix_bodies(mut bodies: Vec<BodyData>) -> std::io::Result<Vec<BodyData>> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{app::body_data::BodyType, utils::de::SUN_ID};
+    use crate::{bodies::body_data::BodyType, utils::de::SUN_ID};
 
     use super::read_main_bodies;
 
