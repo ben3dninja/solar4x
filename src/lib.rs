@@ -15,4 +15,5 @@ pub mod standalone_plugin;
 pub mod tui_plugin;
 pub mod utils;
 
+pub mod gravity;
 pub mod gui_plugin;

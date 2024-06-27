@@ -185,7 +185,7 @@ impl From<&BodyData> for EllipticalOrbit {
     fn from(data: &BodyData) -> Self {
         Self {
             eccentricity: data.eccentricity,
-            semimajor_axis: data.semimajor_axis as f64,
+            semimajor_axis: data.semimajor_axis,
             inclination: data.inclination,
             long_asc_node: data.long_asc_node,
             arg_periapsis: data.arg_periapsis,

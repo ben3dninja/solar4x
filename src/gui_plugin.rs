@@ -1,13 +1,14 @@
 use bevy::{
     a11y::AccessibilityPlugin,
     core_pipeline::CorePipelinePlugin,
-    input::InputPlugin,
+    input::{mouse::MouseButtonInput, ButtonState, InputPlugin},
     math::DVec3,
     prelude::*,
     render::{camera::ScalingMode, pipelined_rendering::PipelinedRenderingPlugin, RenderPlugin},
     sprite::{MaterialMesh2dBundle, Mesh2dHandle, SpritePlugin},
     text::TextPlugin,
     ui::UiPlugin,
+    window::PrimaryWindow,
     winit::WinitPlugin,
 };
 
@@ -18,6 +19,7 @@ use crate::{
     bodies::body_data::BodyType,
     core_plugin::{AppState, BodyInfo},
     engine_plugin::Position,
+    gravity::{Acceleration, GravityBound, Speed},
     tui_plugin::{
         space_map_plugin::{initialize_space_map, FocusBody, SpaceMap},
         InitializeUiSet,
@@ -47,6 +49,7 @@ impl Plugin for GuiPlugin {
             UiPlugin,
         ))
         .insert_resource(ClearColor(GuiColor::BLACK))
+        .insert_resource(ShootingState::Idle)
         .add_systems(Startup, gui_setup)
         .add_systems(
             OnEnter(AppState::Game),
@@ -55,7 +58,8 @@ impl Plugin for GuiPlugin {
                 .in_set(InitializeUiSet)
                 .after(initialize_space_map),
         )
-        .add_systems(FixedPostUpdate, update_transform);
+        .add_systems(FixedPostUpdate, update_transform)
+        .add_systems(Update, shoot);
     }
 }
 
@@ -80,6 +84,10 @@ fn gui_setup(mut commands: Commands, mut materials: ResMut<Assets<ColorMaterial>
             tui: TuiColor::Red,
             gui: materials.add(GuiColor::MAROON),
         },
+        ships: Color {
+            tui: TuiColor::Magenta,
+            gui: materials.add(GuiColor::PURPLE),
+        },
     };
     commands.insert_resource(colors);
 }
@@ -96,13 +104,14 @@ pub struct Colors {
     planets: Color,
     other: Color,
     selected: Color,
+    ships: Color,
 }
 
 fn insert_display_components(
     mut commands: Commands,
     query: Query<(Entity, &BodyInfo)>,
     mut meshes: ResMut<Assets<Mesh>>,
-    colors: ResMut<Colors>,
+    colors: Res<Colors>,
     space_map: Res<SpaceMap>,
 ) {
     let scale = MAX_WIDTH as f64 / space_map.system_size;
@@ -137,5 +146,63 @@ fn update_transform(
             .into();
         transform.translation.x = x;
         transform.translation.y = y;
+    }
+}
+
+#[derive(Resource)]
+enum ShootingState {
+    Idle,
+    Loading { initial_mouse_pos: Vec2 },
+}
+
+fn shoot(
+    mut commands: Commands,
+    mut shooting_state: ResMut<ShootingState>,
+    mut buttons: EventReader<MouseButtonInput>,
+    window: Query<&Window, With<PrimaryWindow>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+    colors: Res<Colors>,
+    camera_query: Query<(&Camera, &GlobalTransform)>,
+    space_map: Res<SpaceMap>,
+) {
+    if let Some(position) = window.single().cursor_position() {
+        for event in buttons.read() {
+            match event.state {
+                ButtonState::Pressed => {
+                    *shooting_state = ShootingState::Loading {
+                        initial_mouse_pos: position,
+                    }
+                }
+                ButtonState::Released => {
+                    if let ShootingState::Loading { initial_mouse_pos } = *shooting_state {
+                        let (camera, camera_transform) = camera_query.single();
+
+                        if let (Some(point1), Some(point2)) = (
+                            camera.viewport_to_world_2d(camera_transform, initial_mouse_pos),
+                            camera.viewport_to_world_2d(camera_transform, position),
+                        ) {
+                            let scale =
+                                space_map.zoom_level * MAX_WIDTH as f64 / space_map.system_size;
+                            let d = (point1 - point2).as_dvec2();
+                            let speed = DVec3::new(d.x, d.y, 0.) / (scale * 20.);
+                            let pos = DVec3::new(point1.x as f64, point1.y as f64, 0.) / scale;
+                            commands
+                                .spawn(MaterialMesh2dBundle {
+                                    mesh: Mesh2dHandle(meshes.add(Circle { radius: MIN_RADIUS })),
+                                    material: colors.ships.gui.clone(),
+                                    transform: Transform::from_xyz(point1.x, point1.y, 1.),
+                                    ..default()
+                                })
+                                .insert(Speed(speed))
+                                .insert(Position(pos))
+                                .insert(Acceleration(DVec3::ZERO))
+                                .insert(GravityBound);
+                        }
+                        *shooting_state = ShootingState::Idle;
+                    }
+                }
+            }
+        }
     }
 }
