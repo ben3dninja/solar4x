@@ -1,6 +1,6 @@
 use std::net::{IpAddr, Ipv4Addr};
 
-use bevy::app::App;
+use bevy::app::{App, ScheduleRunnerPlugin};
 use rust_space_trading::{
     core_plugin::BodiesConfig, engine_plugin::EnginePlugin, server_plugin::ServerPlugin,
 };
@@ -13,6 +13,7 @@ fn main() {
                 config: BodiesConfig::default(),
             },
             EnginePlugin,
+            ScheduleRunnerPlugin::default(),
         ))
         .run();
 }

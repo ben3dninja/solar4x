@@ -23,13 +23,13 @@ fn main() {
         .add_plugins((
             StandalonePlugin(config),
             EnginePlugin,
-            // InputPlugin {
-            //     keymap: get_keymap(env::args()).unwrap(),
-            // },
-            // TuiPlugin,
-            // TreePlugin,
+            InputPlugin {
+                keymap: get_keymap(env::args()).unwrap(),
+            },
+            TuiPlugin,
+            TreePlugin,
             SpaceMapPlugin,
-            // SearchPlugin,
+            SearchPlugin,
             GuiPlugin,
         ))
         .run();
