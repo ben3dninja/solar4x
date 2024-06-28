@@ -1,3 +1,5 @@
+use std::f64::consts::PI;
+
 use bevy::{
     math::{DVec2, DVec3},
     prelude::*,
@@ -7,7 +9,7 @@ use crate::{
     bodies::body_data::BodyData,
     core_plugin::{build_system, AppState, BodyInfo, EntityMapping, GameSet, PrimaryBody},
     utils::{
-        algebra::{degs, mod_180, rads},
+        algebra::{degs, mod_180, rads, rotate},
         ui::Direction2,
     },
 };
@@ -84,27 +86,32 @@ pub fn update_local(mut orbits: Query<&mut EllipticalOrbit>, time: Res<GameTime>
 }
 
 pub fn update_global(
-    mut query: Query<(&mut Position, &EllipticalOrbit, &BodyInfo)>,
+    mut query: Query<(&mut Position, &mut Velocity, &EllipticalOrbit, &BodyInfo)>,
     primary: Query<&BodyInfo, With<PrimaryBody>>,
     mapping: Res<EntityMapping>,
 ) {
-    let mut queue = vec![(primary.single().0.id, DVec3::ZERO)];
+    let mut queue = vec![(primary.single().0.id, (DVec3::ZERO, DVec3::ZERO))];
     let mut i = 0;
     while i < queue.len() {
-        let (id, parent_pos) = queue[i];
+        let (id, (parent_pos, parent_velocity)) = queue[i];
         if let Some(entity) = mapping.id_mapping.get(&id) {
-            if let Ok((mut world_pos, orbit, info)) = query.get_mut(*entity) {
+            if let Ok((mut world_pos, mut world_velocity, orbit, info)) = query.get_mut(*entity) {
                 let pos = parent_pos + orbit.local_pos;
+                let velocity = parent_velocity + orbit.local_velocity;
                 world_pos.0 = pos;
-                queue.extend(info.0.orbiting_bodies.iter().map(|c| (*c, pos)));
+                world_velocity.0 = velocity;
+                queue.extend(info.0.orbiting_bodies.iter().map(|c| (*c, (pos, velocity))));
             }
         }
         i += 1;
     }
 }
 
-#[derive(Component, Default, Debug)]
+#[derive(Component, Default, Debug, Clone, Copy)]
 pub struct Position(pub DVec3);
+
+#[derive(Component, Debug, Default, Clone, Copy)]
+pub struct Velocity(pub DVec3);
 
 #[derive(Component, Default, Clone, Debug)]
 pub struct EllipticalOrbit {
@@ -120,9 +127,10 @@ pub struct EllipticalOrbit {
     eccentric_anomaly: f64,
     /// 2D position in the orbital plane around the host body
     orbital_position: DVec2,
-    // orbital_velocity: DVec2,
+    orbital_velocity: DVec2,
     /// 3D position with respect to the host body
     pub local_pos: DVec3,
+    pub local_velocity: DVec3,
 }
 
 const E_TOLERANCE: f64 = 1e-6;
@@ -163,21 +171,23 @@ impl EllipticalOrbit {
         let x = a * (E.cos() - e);
         let y = a * (1. - e * e).sqrt() * E.sin();
         self.orbital_position = DVec2::new(x, y);
+        if self.revolution_period == 0. {
+            return;
+        }
+        let Mdot = 2. * PI / self.revolution_period;
+        let Edot = Mdot / (1. - e * E.cos());
+        let Pdot = -a * (E.sin()) * Edot;
+        let Qdot = a * (E.cos()) * Edot * (1. - e * e).sqrt();
+        self.orbital_velocity = DVec2::new(Pdot, Qdot);
     }
 
     pub fn update_pos(&mut self, time: f64) {
         self.update_orb_pos(time);
-        let x = self.orbital_position.x;
-        let y = self.orbital_position.y;
         let o = rads(self.arg_periapsis);
         let O = rads(self.long_asc_node);
         let I = rads(self.inclination);
-        let x_glob = (o.cos() * O.cos() - o.sin() * O.sin() * I.cos()) * x
-            + (-o.sin() * O.cos() - o.cos() * O.sin() * I.cos()) * y;
-        let y_glob = (o.cos() * O.sin() + o.sin() * O.cos() * I.cos()) * x
-            + (-o.sin() * O.sin() + o.cos() * O.cos() * I.cos()) * y;
-        let z_glob = (o.sin() * I.sin()) * x + (o.cos() * I.sin()) * y;
-        self.local_pos = DVec3::new(x_glob, y_glob, z_glob);
+        self.local_pos = rotate(self.orbital_position, o, O, I);
+        self.local_velocity = rotate(self.orbital_velocity, o, O, I);
     }
 }
 
@@ -222,9 +232,10 @@ mod tests {
             .iter(&world)
             .find(|(_, BodyInfo(data))| data.id == "terre".into())
             .unwrap();
-        let earth_dist = orbit.local_pos.length();
+        let (earth_dist, earth_speed) = (orbit.local_pos.length(), orbit.local_velocity.length());
         assert!(147095000. <= earth_dist);
         assert!(earth_dist <= 152100000.);
+        assert!((earth_speed / 24. - 107200.).abs() <= 20000.);
     }
 
     #[test]

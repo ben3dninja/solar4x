@@ -25,6 +25,17 @@ pub fn mod_180(x: f64) -> f64 {
     }
 }
 
+#[allow(non_snake_case)]
+pub fn rotate(u: DVec2, o: f64, O: f64, I: f64) -> DVec3 {
+    let (x, y) = u.into();
+    let x_glob = (o.cos() * O.cos() - o.sin() * O.sin() * I.cos()) * x
+        + (-o.sin() * O.cos() - o.cos() * O.sin() * I.cos()) * y;
+    let y_glob = (o.cos() * O.sin() + o.sin() * O.cos() * I.cos()) * x
+        + (-o.sin() * O.sin() + o.cos() * O.cos() * I.cos()) * y;
+    let z_glob = (o.sin() * I.sin()) * x + (o.cos() * I.sin()) * y;
+    DVec3::new(x_glob, y_glob, z_glob)
+}
+
 /// Computes the coordinates of the projection of v on the (v1, v2) plane, provided they form an orthonormal basis
 pub fn project_onto_plane(v: DVec3, basis: (DVec3, DVec3)) -> DVec2 {
     DVec2::new(v.dot(basis.0), v.dot(basis.1))
