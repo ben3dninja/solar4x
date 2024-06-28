@@ -28,7 +28,7 @@ use crate::{
 };
 
 const MAX_WIDTH: f32 = 1000.;
-const MIN_RADIUS: f32 = 1.;
+const MIN_RADIUS: f32 = 0.2;
 pub struct GuiPlugin;
 
 impl Plugin for GuiPlugin {
@@ -59,13 +59,13 @@ impl Plugin for GuiPlugin {
                 .after(initialize_space_map),
         )
         .add_systems(FixedPostUpdate, update_transform)
-        .add_systems(Update, shoot);
+        .add_systems(Update, (shoot, update_camera_pos));
     }
 }
 
 fn gui_setup(mut commands: Commands, mut materials: ResMut<Assets<ColorMaterial>>) {
     let mut cam = Camera2dBundle::default();
-    cam.projection.scaling_mode = ScalingMode::FixedHorizontal(MAX_WIDTH);
+    cam.projection.scaling_mode = ScalingMode::FixedVertical(MAX_WIDTH);
     commands.spawn(cam);
     let colors = Colors {
         stars: Color {
@@ -132,16 +132,23 @@ fn insert_display_components(
     });
 }
 
-fn update_transform(
-    space_map: Res<SpaceMap>,
-    mut query: Query<(&mut Transform, &Position)>,
+fn update_camera_pos(
+    mut cam: Query<(&mut Transform, &mut OrthographicProjection)>,
     focus_pos: Query<&Position, With<FocusBody>>,
+    space_map: Res<SpaceMap>,
 ) {
-    let scale = space_map.zoom_level * MAX_WIDTH as f64 / space_map.system_size;
+    let scale = MAX_WIDTH as f64 / space_map.system_size;
+    let (mut cam_pos, mut proj) = cam.single_mut();
+    cam_pos.translation =
+        ((focus_pos.single().0 + DVec3::new(space_map.offset.x, space_map.offset.y, 0.)) * scale)
+            .as_vec3();
+    proj.scale = (1. / space_map.zoom_level) as f32;
+}
+
+fn update_transform(space_map: Res<SpaceMap>, mut query: Query<(&mut Transform, &Position)>) {
+    let scale = MAX_WIDTH as f64 / space_map.system_size;
     for (mut transform, Position(pos)) in query.iter_mut() {
-        let (x, y) = ((project_onto_plane(*pos - focus_pos.single().0, (DVec3::X, DVec3::Y))
-            - space_map.offset)
-            * scale)
+        let (x, y) = (project_onto_plane(*pos, (DVec3::X, DVec3::Y)) * scale)
             .as_vec2()
             .into();
         transform.translation.x = x;
@@ -161,7 +168,6 @@ fn shoot(
     mut buttons: EventReader<MouseButtonInput>,
     window: Query<&Window, With<PrimaryWindow>>,
     mut meshes: ResMut<Assets<Mesh>>,
-    mut materials: ResMut<Assets<ColorMaterial>>,
     colors: Res<Colors>,
     camera_query: Query<(&Camera, &GlobalTransform)>,
     space_map: Res<SpaceMap>,
@@ -182,8 +188,7 @@ fn shoot(
                             camera.viewport_to_world_2d(camera_transform, initial_mouse_pos),
                             camera.viewport_to_world_2d(camera_transform, position),
                         ) {
-                            let scale =
-                                space_map.zoom_level * MAX_WIDTH as f64 / space_map.system_size;
+                            let scale = MAX_WIDTH as f64 / space_map.system_size;
                             let d = (point1 - point2).as_dvec2();
                             let speed = DVec3::new(d.x, d.y, 0.) / (scale * 20.);
                             let pos = DVec3::new(point1.x as f64, point1.y as f64, 0.) / scale;
