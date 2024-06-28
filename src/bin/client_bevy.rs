@@ -7,6 +7,7 @@ use bevy::app::App;
 use rust_space_trading::{
     client_plugin::{ClientNetworkInfo, ClientPlugin},
     engine_plugin::EnginePlugin,
+    gui_plugin::GuiPlugin,
     input_plugin::InputPlugin,
     tui_plugin::{
         search_plugin::SearchPlugin, space_map_plugin::SpaceMapPlugin, tree_plugin::TreePlugin,
@@ -30,6 +31,7 @@ fn main() {
             TreePlugin,
             SpaceMapPlugin,
             SearchPlugin,
+            GuiPlugin,
         ))
         .run();
 }
