@@ -2,7 +2,7 @@ use bevy::{math::DVec3, prelude::*};
 
 use crate::{
     core_plugin::{build_system, AppState, BodyInfo, EntityMapping, PrimaryBody},
-    engine_plugin::{GameSpeed, Position},
+    engine_plugin::{GameSpeed, Position, Velocity},
 };
 
 const G: f64 = 6.6743e-11;
@@ -44,7 +44,7 @@ pub fn setup_hill_spheres(
                     * (1. - data.eccentricity)
                     * (data.mass / (3. * (parent_mass + data.mass)))
                         .powf(1. / 3.)
-                        .min(data.radius);
+                        .max(data.radius);
                 commands.entity(*entity).insert(HillRadius(radius));
                 queue.extend(data.orbiting_bodies.iter().map(|c| (*c, data.mass)));
             }
@@ -56,11 +56,8 @@ pub fn setup_hill_spheres(
         .insert(HillRadius(f64::INFINITY));
 }
 
-#[derive(Component, Debug)]
+#[derive(Component, Debug, Default)]
 pub struct Acceleration(pub DVec3);
-
-#[derive(Component, Debug)]
-pub struct Speed(pub DVec3);
 
 pub fn apply_gravity_force(
     mut gravity_bound: Query<(&Position, &mut Acceleration), With<GravityBound>>,
@@ -84,7 +81,7 @@ pub fn apply_gravity_force(
 }
 
 pub fn integrate_positions(
-    mut query: Query<(&mut Position, &mut Speed, &Acceleration)>,
+    mut query: Query<(&mut Position, &mut Velocity, &Acceleration), With<GravityBound>>,
     time: Res<Time>,
     game_speed: Res<GameSpeed>,
 ) {

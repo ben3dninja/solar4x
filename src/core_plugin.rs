@@ -6,7 +6,7 @@ use crate::{
         body_data::{BodyData, BodyType},
         body_id::BodyID,
     },
-    engine_plugin::{update_global, EllipticalOrbit, Position},
+    engine_plugin::{update_global, EllipticalOrbit, Position, Velocity},
     gravity::Mass,
     tui_plugin::InitializeUiSet,
     utils::de::read_main_bodies,
@@ -101,6 +101,7 @@ pub fn build_system(mut commands: Commands, config: Res<BodiesConfig>) {
             EllipticalOrbit::from(&data),
             Mass(data.mass),
             BodyInfo(data),
+            Velocity::default(),
         ));
         if id == primary_body {
             entity.insert(PrimaryBody);
