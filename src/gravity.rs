@@ -2,10 +2,11 @@ use bevy::{math::DVec3, prelude::*};
 
 use crate::{
     core_plugin::{build_system, AppState, BodyInfo, EntityMapping, PrimaryBody},
-    engine_plugin::{GameSpeed, Position, Velocity},
+    engine_plugin::{GameSpeed, Position, Velocity, SECONDS_PER_DAY},
 };
 
-const G: f64 = 6.6743e-11;
+/// Gravitationnal constant in km3kg-1d-2
+const G: f64 = 6.6743e-11 * SECONDS_PER_DAY * SECONDS_PER_DAY * 1e-9;
 
 pub struct GravityPlugin;
 
@@ -85,6 +86,7 @@ pub fn integrate_positions(
     time: Res<Time>,
     game_speed: Res<GameSpeed>,
 ) {
+    // Gametime-days since last update
     let dt = time.delta_seconds_f64() * game_speed.0;
     query.par_iter_mut().for_each(|(mut pos, mut speed, acc)| {
         speed.0 += acc.0 * dt;
