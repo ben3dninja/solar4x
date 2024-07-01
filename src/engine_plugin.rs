@@ -16,6 +16,8 @@ use crate::{
 
 // Speed in days per second
 const DEFAULT_SPEED: f64 = 10.;
+pub const SECONDS_PER_DAY: f64 = 86400.;
+
 pub struct EnginePlugin;
 
 impl Plugin for EnginePlugin {
@@ -128,8 +130,9 @@ pub struct EllipticalOrbit {
     /// 2D position in the orbital plane around the host body
     orbital_position: DVec2,
     orbital_velocity: DVec2,
-    /// 3D position with respect to the host body
+    /// 3D position with respect to the host body (in kilometers)
     pub local_pos: DVec3,
+    /// 3D velocity (in kilometers per day)
     pub local_velocity: DVec3,
 }
 

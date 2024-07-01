@@ -21,7 +21,7 @@ use ratatui::style::Color as TuiColor;
 use crate::{
     bodies::body_data::BodyType,
     core_plugin::{AppState, BodyInfo},
-    engine_plugin::{Position, Velocity},
+    engine_plugin::{GameSpeed, Position, Velocity, SECONDS_PER_DAY},
     gravity::{Acceleration, GravityBound},
     tui_plugin::{
         space_map_plugin::{initialize_space_map, FocusBody, SpaceMap},
@@ -61,8 +61,10 @@ impl Plugin for GuiPlugin {
                 .in_set(InitializeUiSet)
                 .after(initialize_space_map),
         )
-        .add_systems(FixedPostUpdate, update_transform)
-        .add_systems(Update, (shoot, update_camera_pos));
+        .add_systems(
+            FixedPreUpdate,
+            (update_transform, update_camera_pos, shoot).chain(),
+        );
     }
 }
 
@@ -181,6 +183,8 @@ fn shoot(
     camera_query: Query<(&Camera, &GlobalTransform)>,
     space_map: Res<SpaceMap>,
     focus: Query<(&Position, &Velocity), With<FocusBody>>,
+    time: Res<Time>,
+    game_speed: Res<GameSpeed>,
 ) {
     if let Some(position) = window.single().cursor_position() {
         let (&Position(focus_pos), &Velocity(focus_speed)) = focus.single();
@@ -203,7 +207,8 @@ fn shoot(
                             let point =
                                 DVec3::new(point.x as f64, point.y as f64, 0.) / scale - focus_pos;
                             let d = launch_point - point;
-                            let speed = d / 20. + focus_speed;
+                            let speed =
+                                d / (time.delta_seconds_f64() * game_speed.0 * 20.) + focus_speed;
                             let pos = launch_point + focus_pos;
                             let (x, y, _) = (pos * scale).as_vec3().into();
                             commands
@@ -218,10 +223,11 @@ fn shoot(
                                 .insert(Acceleration(DVec3::ZERO))
                                 .insert(GravityBound);
                             println!(
-                                "speed: {:?}, pos: {:?}, focus: {:?}",
-                                speed,
+                                "pos: {:?}, speed: {:?}, focus: {:?}, d: {:?}",
                                 pos,
-                                focus.single()
+                                speed,
+                                focus.single(),
+                                d
                             );
                         }
                         *shooting_state = ShootingState::Idle;
