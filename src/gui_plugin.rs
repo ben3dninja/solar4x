@@ -170,7 +170,7 @@ fn update_transform(space_map: Res<SpaceMap>, mut query: Query<(&mut Transform, 
 #[derive(Resource)]
 enum ShootingState {
     Idle,
-    Loading { launch_point: DVec3 },
+    Loading { launch_mouse_position: Vec2 },
 }
 
 fn shoot(
@@ -186,49 +186,60 @@ fn shoot(
     time: Res<Time>,
     game_speed: Res<GameSpeed>,
 ) {
-    if let Some(position) = window.single().cursor_position() {
+    if let Some(mouse_position) = window.single().cursor_position() {
         let (&Position(focus_pos), &Velocity(focus_speed)) = focus.single();
         let (camera, camera_transform) = camera_query.single();
         let scale = MAX_WIDTH as f64 / space_map.system_size;
         for event in buttons.read() {
             match event.state {
                 ButtonState::Pressed => {
-                    if let Some(pos) = camera.viewport_to_world_2d(camera_transform, position) {
-                        *shooting_state = ShootingState::Loading {
-                            launch_point: DVec3::new(pos.x as f64, pos.y as f64, 0.) / scale
-                                - focus_pos,
-                        }
+                    *shooting_state = ShootingState::Loading {
+                        launch_mouse_position: mouse_position,
                     }
                 }
                 ButtonState::Released => {
-                    if let ShootingState::Loading { launch_point } = *shooting_state {
-                        if let Some(point) = camera.viewport_to_world_2d(camera_transform, position)
+                    if let ShootingState::Loading {
+                        launch_mouse_position,
+                    } = *shooting_state
+                    {
+                        if let Some(shooting_transform) =
+                            camera.viewport_to_world_2d(camera_transform, launch_mouse_position)
                         {
-                            let point =
-                                DVec3::new(point.x as f64, point.y as f64, 0.) / scale - focus_pos;
-                            let d = launch_point - point;
-                            let speed =
-                                d / (time.delta_seconds_f64() * game_speed.0 * 20.) + focus_speed;
-                            let pos = launch_point + focus_pos;
-                            let (x, y, _) = (pos * scale).as_vec3().into();
-                            commands
-                                .spawn(MaterialMesh2dBundle {
-                                    mesh: Mesh2dHandle(meshes.add(Circle { radius: MIN_RADIUS })),
-                                    material: colors.ships.gui.clone(),
-                                    transform: Transform::from_xyz(x, y, 1.),
-                                    ..default()
-                                })
-                                .insert(Velocity(speed))
-                                .insert(Position(pos))
-                                .insert(Acceleration(DVec3::ZERO))
-                                .insert(GravityBound);
-                            println!(
-                                "pos: {:?}, speed: {:?}, focus: {:?}, d: {:?}",
-                                pos,
-                                speed,
-                                focus.single(),
-                                d
-                            );
+                            if let Some(release_transform) =
+                                camera.viewport_to_world_2d(camera_transform, mouse_position)
+                            {
+                                let d = (shooting_transform - release_transform).as_dvec2();
+                                let speed = DVec3::new(d.x, d.y, 0.)
+                                    / (scale * time.delta_seconds_f64() * game_speed.0 * 20.)
+                                    + focus_speed;
+                                let pos = DVec3::new(
+                                    shooting_transform.x as f64,
+                                    shooting_transform.y as f64,
+                                    0.,
+                                ) / scale;
+
+                                let (x, y, _) = (pos * scale).as_vec3().into();
+                                commands
+                                    .spawn(MaterialMesh2dBundle {
+                                        mesh: Mesh2dHandle(
+                                            meshes.add(Circle { radius: MIN_RADIUS }),
+                                        ),
+                                        material: colors.ships.gui.clone(),
+                                        transform: Transform::from_xyz(x, y, 1.),
+                                        ..default()
+                                    })
+                                    .insert(Velocity(speed))
+                                    .insert(Position(pos))
+                                    .insert(Acceleration(DVec3::ZERO))
+                                    .insert(GravityBound);
+                                println!(
+                                    "pos: {:?}, speed: {:?}, focus: {:?}, d: {:?}",
+                                    pos,
+                                    speed,
+                                    focus.single(),
+                                    d
+                                );
+                            }
                         }
                         *shooting_state = ShootingState::Idle;
                     }
