@@ -16,17 +16,17 @@ use crate::{
     },
 };
 
-use super::{tree_plugin::TreeState, FocusView, InitializeUiSet, WindowEvent};
+use super::{
+    tree_plugin::{ChangeSelectionEvent, TreeState},
+    FocusView, UiInitSet, WindowEvent,
+};
 
 pub struct SearchPlugin;
 
 impl Plugin for SearchPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<SearchViewEvent>()
-            .add_systems(
-                OnEnter(AppState::Game),
-                initialize_search.in_set(InitializeUiSet),
-            )
+            .add_systems(OnEnter(AppState::Game), initialize_search.in_set(UiInitSet))
             .add_systems(
                 Update,
                 (handle_search_events, update_search_entries)
@@ -49,7 +49,6 @@ pub enum SearchViewEvent {
 #[derive(Resource)]
 pub struct SearchState {
     search_entries: Vec<SearchEntry>,
-    // search_state: ListState,
     search_character_index: usize,
     list_state: ListState,
     search_input: String,
@@ -137,17 +136,20 @@ fn initialize_search(mut commands: Commands, query: Query<&BodyInfo>) {
 fn reset_on_enter_search(
     mut search_state: ResMut<SearchState>,
     mut reader: EventReader<WindowEvent>,
+    mut event: EventWriter<ChangeSelectionEvent>,
 ) {
     reader
         .read()
         .find(|event| matches!(event, WindowEvent::ChangeFocus(FocusView::Search)))
         .inspect(|_| search_state.reset_search());
+    event.send_default();
 }
 
 fn handle_search_events(
     mut search: ResMut<SearchState>,
     mut reader: EventReader<SearchViewEvent>,
     mut tree: Option<ResMut<TreeState>>,
+    mut change_selection: EventWriter<ChangeSelectionEvent>,
 ) {
     use Direction2::*;
     use SearchViewEvent::*;
@@ -166,6 +168,7 @@ fn handle_search_events(
                 if let Some(ref mut tree) = tree {
                     if let Some(id) = search.selected_body_id() {
                         tree.select_body(id);
+                        change_selection.send_default();
                     }
                 }
             }

@@ -64,6 +64,7 @@ fn send_tree_events(
             e if codes.select_next.matches(e) => SelectTree(Down),
             e if codes.select_previous.matches(e) => SelectTree(Up),
             e if codes.toggle_expand.matches(e) => ToggleTreeExpansion,
+            e if codes.toggle_info.matches(e) => ToggleInfo,
             _ => continue,
         });
     }
@@ -140,7 +141,6 @@ fn send_window_events(
                 let codes = &keymap.tree;
                 window_writer.send(ChangeFocus(match event {
                     e if codes.enter_search.matches(e) => Search,
-                    e if codes.display_info.matches(e) => Info,
                     _ => continue,
                 }));
             }
@@ -148,13 +148,6 @@ fn send_window_events(
                 let codes = &keymap.search;
                 window_writer.send(ChangeFocus(match event {
                     e if codes.leave_search.matches(e) => Tree,
-                    _ => continue,
-                }));
-            }
-            Info => {
-                let codes = &keymap.info;
-                window_writer.send(ChangeFocus(match event {
-                    e if codes.leave_info.matches(e) => Tree,
                     _ => continue,
                 }));
             }

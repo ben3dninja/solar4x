@@ -5,11 +5,13 @@ use ratatui::layout::{Constraint, Layout};
 use crate::core_plugin::GameSet;
 
 use self::{
+    info_plugin::{InfoToggle, InfoWidget},
     search_plugin::{SearchState, SearchViewEvent, SearchWidget},
     space_map_plugin::SpaceMap,
     tree_plugin::{TreeState, TreeWidget},
 };
 
+pub mod info_plugin;
 pub mod search_plugin;
 pub mod space_map_plugin;
 pub mod tree_plugin;
@@ -21,24 +23,27 @@ impl Plugin for TuiPlugin {
         app.add_plugins(RatatuiPlugins::default())
             .add_event::<WindowEvent>()
             .insert_state(FocusView::default())
-        .add_systems(Update, (handle_window_events, handle_search_validate.run_if(resource_exists::<SearchState>)).in_set(GameSet))
-    .add_systems(PostUpdate, render.pipe(exit_on_error).in_set(GameSet))
-        // .add_systems(PostUpdate, render)
-        ;
+            .add_systems(
+                Update,
+                (
+                    handle_window_events,
+                    handle_search_validate.run_if(resource_exists::<SearchState>),
+                )
+                    .in_set(GameSet),
+            )
+            .add_systems(PostUpdate, render.pipe(exit_on_error).in_set(GameSet));
     }
 }
 
 #[derive(SystemSet, Debug, Clone, Hash, PartialEq, Eq)]
-pub struct InitializeUiSet;
+pub struct UiInitSet;
 
 #[derive(Default, Copy, Clone, States, PartialEq, Eq, Debug, Hash)]
 pub enum FocusView {
     #[default]
     Tree,
     Search,
-    Info,
 }
-
 #[derive(Debug, Event)]
 pub enum WindowEvent {
     ChangeFocus(FocusView),
@@ -73,10 +78,17 @@ fn render(
     search: Option<ResMut<SearchState>>,
     space_map: Option<Res<SpaceMap>>,
     focus: Res<State<FocusView>>,
+    is_info_toggled: Option<Res<InfoToggle>>,
+    info_widget: Option<Res<InfoWidget>>,
 ) -> color_eyre::Result<()> {
     ctx.draw(|f| {
-        let chunks =
-            Layout::horizontal([Constraint::Percentage(25), Constraint::Fill(1)]).split(f.size());
+        let mut c = vec![Constraint::Percentage(25), Constraint::Fill(1)];
+        if let Some(ref toggle) = is_info_toggled {
+            if toggle.0 {
+                c.push(Constraint::Percentage(25));
+            }
+        }
+        let chunks = Layout::horizontal(c).split(f.size());
 
         match focus.get() {
             FocusView::Tree => {
@@ -89,38 +101,15 @@ fn render(
                     f.render_stateful_widget(SearchWidget, chunks[0], search.as_mut());
                 }
             }
-            _ => {}
         }
         if let Some(space_map) = space_map {
             f.render_widget(space_map.as_ref(), chunks[1]);
         }
+        if let Some(info_widget) = info_widget {
+            if is_info_toggled.unwrap().0 {
+                f.render_widget(info_widget.as_ref(), chunks[2]);
+            }
+        }
     })?;
     Ok(())
 }
-// }
-
-// fn draw_popup(f: &mut Frame, main_body_info: BodyInfo) {
-//     let main_body = state
-//         .shared_info
-//         .bodies
-//         .get(&self.selected_body_id_tree())
-//         .unwrap();
-//     let popup_block = Block::default()
-//         .title(&main_body.name[..])
-//         .borders(Borders::ALL)
-//         .style(Style::default().bg(Color::DarkGray));
-//     let area = centered_rect(25, 25, f.size());
-//     Clear.render(area, f.buffer_mut());
-//     let info = Paragraph::new(format!(
-//         "Body type: {}\n\
-//             N of orbiting bodies: {}\n\
-//             Radius: {} km\n\
-//             Revolution period: {} earth days",
-//         main_body.body_type,
-//         main_body.orbiting_bodies.len(),
-//         main_body.radius,
-//         main_body.revolution_period,
-//     ))
-//     .block(popup_block);
-//     f.render_widget(info, area);
-// }

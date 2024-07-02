@@ -23,7 +23,7 @@ use crate::{
     },
 };
 
-use super::{tree_plugin::TreeState, InitializeUiSet};
+use super::{tree_plugin::TreeState, UiInitSet};
 
 const OFFSET_STEP: f64 = 1e8;
 
@@ -34,15 +34,11 @@ impl Plugin for SpaceMapPlugin {
         app.add_event::<SpaceMapEvent>()
             .add_systems(
                 OnEnter(AppState::Game),
-                initialize_space_map.in_set(InitializeUiSet),
+                initialize_space_map.in_set(UiInitSet),
             )
             .add_systems(
                 Update,
-                (
-                    handle_space_map_events,
-                    // update_selected.run_if(resource_exists::<TreeState>),
-                    update_space_map,
-                )
+                (handle_space_map_events, update_space_map)
                     .in_set(GameSet)
                     .chain(),
             );
@@ -92,31 +88,6 @@ impl WidgetRef for SpaceMap {
             .render_ref(area, buf)
     }
 }
-
-// fn update_selected(
-//     mut map: ResMut<SpaceMap>,
-//     mut reader: EventReader<TreeViewEvent>,
-//     mut search_reader: EventReader<SearchViewEvent>,
-//     tree: Res<TreeState>,
-// ) {
-//     for event in reader.read() {
-//         match event {
-//             TreeViewEvent::SelectTree(_) => {
-//                 map.selected_body = Some(tree.selected_body_id());
-//             }
-//             _ => continue,
-//         }
-//     }
-
-//     for event in search_reader.read() {
-//         match event {
-//             SearchViewEvent::ValidateSearch => {
-//                 map.selected_body = Some(tree.selected_body_id());
-//             }
-//             _ => continue,
-//         }
-//     }
-// }
 
 fn update_space_map(
     mut map: ResMut<SpaceMap>,

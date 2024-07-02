@@ -230,7 +230,6 @@ pub struct TreeViewKeymap {
     pub select_previous: Key,
     pub zoom_in: Key,
     pub zoom_out: Key,
-    pub display_info: Key,
     pub toggle_expand: Key,
     pub map_offset_up: Key,
     pub map_offset_down: Key,
@@ -244,6 +243,7 @@ pub struct TreeViewKeymap {
     pub speed_up: Key,
     pub slow_down: Key,
     pub toggle_time: Key,
+    pub toggle_info: Key,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -272,7 +272,7 @@ impl Default for TreeViewKeymap {
             select_previous: Key::from_str_unchecked("up"),
             zoom_in: Key::from_str_unchecked("+"),
             zoom_out: Key::from_str_unchecked("-"),
-            display_info: Key::from_str_unchecked("i"),
+            toggle_info: Key::from_str_unchecked("i"),
             toggle_expand: Key::from_str_unchecked("space"),
             map_offset_up: Key::from_str_unchecked(w),
             map_offset_down: Key::from_str_unchecked("s"),

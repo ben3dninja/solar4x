@@ -7,7 +7,9 @@ use bevy::{
 
 use crate::{
     bodies::body_data::BodyData,
-    core_plugin::{build_system, AppState, BodyInfo, EntityMapping, GameSet, PrimaryBody},
+    core_plugin::{
+        build_system, AppState, BodyInfo, EntityMapping, GameSet, PrimaryBody, SystemInitSet,
+    },
     utils::{
         algebra::{degs, mod_180, rads, rotate},
         ui::Direction2,
@@ -28,7 +30,10 @@ impl Plugin for EnginePlugin {
             .insert_resource(ToggleTime(true))
             .add_systems(
                 OnEnter(AppState::Game),
-                (update_local, update_global).chain().after(build_system),
+                (update_local, update_global)
+                    .chain()
+                    .after(build_system)
+                    .in_set(SystemInitSet),
             )
             .add_systems(
                 FixedUpdate,
