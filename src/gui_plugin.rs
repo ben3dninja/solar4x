@@ -4,10 +4,7 @@ use bevy::{
     input::{mouse::MouseButtonInput, ButtonState, InputPlugin},
     math::DVec3,
     prelude::*,
-    render::{
-        camera::ScalingMode, pipelined_rendering::PipelinedRenderingPlugin,
-        render_resource::ShaderType, RenderPlugin,
-    },
+    render::{camera::ScalingMode, pipelined_rendering::PipelinedRenderingPlugin, RenderPlugin},
     sprite::{MaterialMesh2dBundle, Mesh2dHandle, SpritePlugin},
     text::TextPlugin,
     ui::UiPlugin,
@@ -21,7 +18,7 @@ use ratatui::style::Color as TuiColor;
 use crate::{
     bodies::body_data::BodyType,
     core_plugin::{AppState, BodyInfo},
-    engine_plugin::{GameSpeed, Position, Velocity, SECONDS_PER_DAY},
+    engine_plugin::{GameSpeed, Position, Velocity},
     gravity::{Acceleration, GravityBound},
     tui_plugin::{
         space_map_plugin::{initialize_space_map, FocusBody, SpaceMap},
@@ -182,12 +179,12 @@ fn shoot(
     colors: Res<Colors>,
     camera_query: Query<(&Camera, &GlobalTransform)>,
     space_map: Res<SpaceMap>,
-    focus: Query<(&Position, &Velocity), With<FocusBody>>,
+    focus: Query<&Velocity, With<FocusBody>>,
     time: Res<Time>,
     game_speed: Res<GameSpeed>,
 ) {
     if let Some(mouse_position) = window.single().cursor_position() {
-        let (&Position(focus_pos), &Velocity(focus_speed)) = focus.single();
+        let &Velocity(focus_speed) = focus.single();
         let (camera, camera_transform) = camera_query.single();
         let scale = MAX_WIDTH as f64 / space_map.system_size;
         for event in buttons.read() {
@@ -232,13 +229,13 @@ fn shoot(
                                     .insert(Position(pos))
                                     .insert(Acceleration(DVec3::ZERO))
                                     .insert(GravityBound);
-                                println!(
-                                    "pos: {:?}, speed: {:?}, focus: {:?}, d: {:?}",
-                                    pos,
-                                    speed,
-                                    focus.single(),
-                                    d
-                                );
+                                // println!(
+                                //     "pos: {:?}, speed: {:?}, focus: {:?}, d: {:?}",
+                                //     pos,
+                                //     speed,
+                                //     focus.single(),
+                                //     d
+                                // );
                             }
                         }
                         *shooting_state = ShootingState::Idle;
