@@ -22,7 +22,7 @@ use crate::{
     gravity::{Acceleration, GravityBound},
     tui_plugin::{
         space_map_plugin::{initialize_space_map, FocusBody, SpaceMap},
-        InitializeUiSet,
+        UiInitSet,
     },
     utils::algebra::project_onto_plane,
 };
@@ -55,7 +55,7 @@ impl Plugin for GuiPlugin {
             OnEnter(AppState::Game),
             (insert_display_components, update_transform)
                 .chain()
-                .in_set(InitializeUiSet)
+                .in_set(UiInitSet)
                 .after(initialize_space_map),
         )
         .add_systems(
@@ -133,12 +133,6 @@ fn insert_display_components(
         });
     });
 }
-
-// fn update_radius(mut query: Query<&mut Mesh2dHandle>, mut meshes: ResMut<Assets<Mesh>>) {
-//     query
-//         .iter_mut()
-//         .for_each(|mut mesh| mesh.0 = meshes.add(Circle { radius: MIN_RADIUS }))
-// }
 
 fn update_camera_pos(
     mut cam: Query<(&mut Transform, &mut OrthographicProjection)>,
@@ -229,13 +223,6 @@ fn shoot(
                                     .insert(Position(pos))
                                     .insert(Acceleration(DVec3::ZERO))
                                     .insert(GravityBound);
-                                // println!(
-                                //     "pos: {:?}, speed: {:?}, focus: {:?}, d: {:?}",
-                                //     pos,
-                                //     speed,
-                                //     focus.single(),
-                                //     d
-                                // );
                             }
                         }
                         *shooting_state = ShootingState::Idle;

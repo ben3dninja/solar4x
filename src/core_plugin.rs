@@ -6,9 +6,9 @@ use crate::{
         body_data::{BodyData, BodyType},
         body_id::BodyID,
     },
-    engine_plugin::{update_global, EllipticalOrbit, Position, Velocity},
+    engine_plugin::{EllipticalOrbit, Position, Velocity},
     gravity::Mass,
-    tui_plugin::InitializeUiSet,
+    tui_plugin::UiInitSet,
     utils::de::read_main_bodies,
 };
 pub struct CorePlugin;
@@ -50,17 +50,17 @@ impl Plugin for CorePlugin {
         .configure_sets(PreUpdate, GameSet.run_if(in_state(AppState::Game)))
         .configure_sets(PostUpdate, GameSet.run_if(in_state(AppState::Game)))
         .configure_sets(FixedUpdate, GameSet.run_if(in_state(AppState::Game)))
-        .configure_sets(
-            OnEnter(AppState::Game),
-            InitializeUiSet.after(update_global),
-        )
-        .add_systems(OnEnter(AppState::Game), (build_system).chain())
+        .configure_sets(OnEnter(AppState::Game), (SystemInitSet, UiInitSet).chain())
+        .add_systems(OnEnter(AppState::Game), build_system.in_set(SystemInitSet))
         .add_systems(Update, handle_core_events.in_set(GameSet));
     }
 }
 
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct GameSet;
+
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct SystemInitSet;
 
 #[derive(States, Debug, PartialEq, Eq, Clone, Hash)]
 pub enum AppState {

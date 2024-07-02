@@ -10,8 +10,8 @@ use rust_space_trading::{
     input_plugin::InputPlugin,
     standalone_plugin::StandalonePlugin,
     tui_plugin::{
-        search_plugin::SearchPlugin, space_map_plugin::SpaceMapPlugin, tree_plugin::TreePlugin,
-        TuiPlugin,
+        info_plugin::InfoPlugin, search_plugin::SearchPlugin, space_map_plugin::SpaceMapPlugin,
+        tree_plugin::TreePlugin, TuiPlugin,
     },
     utils::args::get_keymap,
 };
@@ -32,6 +32,7 @@ fn main() {
             TreePlugin,
             SpaceMapPlugin,
             SearchPlugin,
+            InfoPlugin,
             GuiPlugin,
         ))
         .run();

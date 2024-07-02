@@ -16,17 +16,15 @@ use crate::{
     },
 };
 
-use super::InitializeUiSet;
+use super::{info_plugin::InfoToggle, UiInitSet};
 
 pub struct TreePlugin;
 
 impl Plugin for TreePlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<TreeViewEvent>()
-            .add_systems(
-                OnEnter(AppState::Game),
-                initialize_tree.in_set(InitializeUiSet),
-            )
+            .add_event::<ChangeSelectionEvent>()
+            .add_systems(OnEnter(AppState::Game), initialize_tree.in_set(UiInitSet))
             .add_systems(
                 Update,
                 (
@@ -41,7 +39,11 @@ impl Plugin for TreePlugin {
 pub enum TreeViewEvent {
     SelectTree(Direction2),
     ToggleTreeExpansion,
+    ToggleInfo,
 }
+
+#[derive(Event, Default)]
+pub struct ChangeSelectionEvent;
 
 #[derive(Debug, Clone)]
 struct TreeEntry {
@@ -167,16 +169,29 @@ pub fn initialize_tree(
     });
 }
 
-fn handle_tree_events(mut tree_state: ResMut<TreeState>, mut reader: EventReader<TreeViewEvent>) {
+fn handle_tree_events(
+    mut tree_state: ResMut<TreeState>,
+    mut reader: EventReader<TreeViewEvent>,
+    mut info: Option<ResMut<InfoToggle>>,
+    mut change_selection: EventWriter<ChangeSelectionEvent>,
+) {
     use Direction2::*;
     use TreeViewEvent::*;
     for event in reader.read() {
         match event {
-            SelectTree(d) => match d {
-                Down => tree_state.select_next_tree(),
-                Up => tree_state.select_previous_tree(),
-            },
+            SelectTree(d) => {
+                match d {
+                    Down => tree_state.select_next_tree(),
+                    Up => tree_state.select_previous_tree(),
+                }
+                change_selection.send_default();
+            }
             ToggleTreeExpansion => tree_state.toggle_selection_expansion(),
+            ToggleInfo => {
+                if let Some(info) = info.as_mut() {
+                    info.0 = !info.0
+                }
+            }
         }
     }
 }
