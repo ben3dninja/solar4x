@@ -4,40 +4,16 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph, WidgetRef},
 };
 
-use crate::{
-    bodies::body_data::BodyData,
-    core_plugin::{AppState, BodyInfo, EntityMapping, GameSet, PrimaryBody},
-};
+use crate::bodies::body_data::BodyData;
 
-use super::{
-    tree_plugin::{initialize_tree, ChangeSelectionEvent, TreeState},
-    UiInitSet,
-};
 
-pub struct InfoPlugin;
-
-impl Plugin for InfoPlugin {
-    fn build(&self, app: &mut App) {
-        app.insert_resource(InfoToggle(false))
-            .add_systems(
-                OnEnter(AppState::Game),
-                initialize_info.in_set(UiInitSet).after(initialize_tree),
-            )
-            .add_systems(
-                Update,
-                update_info
-                    .in_set(GameSet)
-                    .run_if(on_event::<ChangeSelectionEvent>()),
-            );
-    }
-}
 
 #[derive(Resource)]
 pub struct InfoToggle(pub bool);
 
 #[derive(Resource)]
 pub struct InfoWidget {
-    body_info: BodyData,
+    pub body_info: BodyData,
 }
 
 impl WidgetRef for InfoWidget {
@@ -59,25 +35,5 @@ impl WidgetRef for InfoWidget {
                 .borders(Borders::ALL),
         );
         info.render_ref(area, buf);
-    }
-}
-
-fn initialize_info(mut commands: Commands, primary: Query<&BodyInfo, With<PrimaryBody>>) {
-    commands.insert_resource(InfoWidget {
-        body_info: primary.single().0.clone(),
-    });
-}
-
-fn update_info(
-    mut widget: ResMut<InfoWidget>,
-    tree: Option<Res<TreeState>>,
-    bodies: Query<&BodyInfo>,
-    mapping: Res<EntityMapping>,
-) {
-    if let Some(tree) = tree {
-        let id = tree.selected_body_id();
-        if let Ok(body_info) = bodies.get(mapping.id_mapping[&id]) {
-            widget.body_info = body_info.0.clone();
-        }
     }
 }

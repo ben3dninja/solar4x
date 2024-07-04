@@ -1,5 +1,5 @@
 use std::{
-    env,
+    // env,
     net::{IpAddr, Ipv4Addr},
 };
 
@@ -7,12 +7,14 @@ use bevy::app::{App, ScheduleRunnerPlugin};
 use rust_space_trading::{
     client_plugin::{ClientNetworkInfo, ClientPlugin},
     engine_plugin::EnginePlugin,
-    input_plugin::InputPlugin,
+    // input_plugin::InputPlugin,
     tui_plugin::{
-        search_plugin::SearchPlugin, space_map_plugin::SpaceMapPlugin, tree_plugin::TreePlugin,
+        // search_plugin::SearchPlugin,
+        space_map_plugin::SpaceMapPlugin,
+        // tree_plugin::TreePlugin,
         TuiPlugin,
     },
-    utils::args::get_keymap,
+    // utils::args::get_keymap,
 };
 
 fn main() {
@@ -24,13 +26,16 @@ fn main() {
             }),
             ScheduleRunnerPlugin::default(),
             EnginePlugin,
-            InputPlugin {
-                keymap: get_keymap(env::args()).unwrap(),
-            },
-            TuiPlugin,
-            TreePlugin,
+            // GravityPlugin,
+            // InputPlugin {
+            //     keymap: get_keymap(env::args()).unwrap(),
+            // },
+            TuiPlugin::default(),
+            // TreePlugin,
             SpaceMapPlugin,
-            SearchPlugin,
+            // SearchPlugin,
+            // InfoPlugin,
+            // GuiPlugin,
         ))
         .run();
 }

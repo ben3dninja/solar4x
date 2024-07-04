@@ -61,7 +61,7 @@ impl Default for GameSpeed {
     }
 }
 
-#[derive(Event)]
+#[derive(Event, Clone, Copy)]
 pub enum EngineEvent {
     EngineSpeed(Direction2),
     ToggleTime,

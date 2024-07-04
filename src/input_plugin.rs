@@ -61,8 +61,8 @@ fn send_tree_events(
             return;
         }
         writer.send(match event {
-            e if codes.select_next.matches(e) => SelectTree(Down),
-            e if codes.select_previous.matches(e) => SelectTree(Up),
+            e if codes.select_next.matches(e) => Select(Down),
+            e if codes.select_previous.matches(e) => Select(Up),
             e if codes.toggle_expand.matches(e) => ToggleTreeExpansion,
             e if codes.toggle_info.matches(e) => ToggleInfo,
             _ => continue,

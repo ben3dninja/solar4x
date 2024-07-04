@@ -1,115 +1,152 @@
 use bevy::prelude::*;
-use bevy_ratatui::{error::exit_on_error, terminal::RatatuiContext, RatatuiPlugins};
-use ratatui::layout::{Constraint, Layout};
+use bevy_ratatui::{
+    error::exit_on_error, event::KeyEvent, terminal::RatatuiContext, RatatuiPlugins,
+};
+use explorer_screen::ExplorerPlugin;
 
-use crate::core_plugin::GameSet;
-
-use self::{
-    info_plugin::{InfoToggle, InfoWidget},
-    search_plugin::{SearchState, SearchViewEvent, SearchWidget},
-    space_map_plugin::SpaceMap,
-    tree_plugin::{TreeState, TreeWidget},
+use crate::{
+    core_plugin::{BodyInfo, GameSet, PrimaryBody},
+    engine_plugin::Position,
+    keyboard::Keymap,
 };
 
+use self::explorer_screen::{ExplorerContext, ExplorerEvent, ExplorerScreen};
+
+pub mod explorer_screen;
 pub mod info_plugin;
 pub mod search_plugin;
 pub mod space_map_plugin;
 pub mod tree_plugin;
 
-pub struct TuiPlugin;
+#[derive(Default)]
+pub struct TuiPlugin {
+    headless: bool,
+    start_in_explorer: bool,
+}
+
+impl TuiPlugin {
+    pub fn testing() -> TuiPlugin {
+        TuiPlugin {
+            headless: true,
+            start_in_explorer: true,
+        }
+    }
+}
 
 impl Plugin for TuiPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins(RatatuiPlugins::default())
-            .add_event::<WindowEvent>()
-            .insert_state(FocusView::default())
-            .add_systems(
-                Update,
-                (
-                    handle_window_events,
-                    handle_search_validate.run_if(resource_exists::<SearchState>),
-                )
-                    .in_set(GameSet),
-            )
-            .add_systems(PostUpdate, render.pipe(exit_on_error).in_set(GameSet));
+        if !self.headless {
+            app.add_plugins(RatatuiPlugins::default())
+                .add_systems(PostUpdate, render.pipe(exit_on_error).in_set(GameSet))
+                .add_systems(
+                    PreUpdate,
+                    handle_input.before(change_screen).in_set(GameSet),
+                );
+        }
+        app.add_plugins(ExplorerPlugin)
+            .insert_resource(AppScreen::default())
+            .add_event::<ChangeAppScreen>()
+            .add_systems(PreUpdate, change_screen.in_set(GameSet));
+        if self.start_in_explorer {
+            app.world.send_event(ChangeAppScreen::Explorer);
+        }
     }
 }
 
 #[derive(SystemSet, Debug, Clone, Hash, PartialEq, Eq)]
 pub struct UiInitSet;
 
-#[derive(Default, Copy, Clone, States, PartialEq, Eq, Debug, Hash)]
-pub enum FocusView {
+#[derive(Resource, Default)]
+pub enum AppScreen {
     #[default]
-    Tree,
-    Search,
-}
-#[derive(Debug, Event)]
-pub enum WindowEvent {
-    ChangeFocus(FocusView),
+    StartMenu,
+    Explorer(ExplorerContext),
 }
 
-fn handle_window_events(
-    mut focus_view: ResMut<NextState<FocusView>>,
-    mut reader: EventReader<WindowEvent>,
+#[derive(Event)]
+pub enum ChangeAppScreen {
+    StartMenu,
+    Explorer,
+}
+
+trait ScreenContext {
+    type ScreenEvent: Event;
+    type ScreenKeymap;
+
+    fn read_input(
+        &mut self,
+        key_event: &KeyEvent,
+        keymap: &Self::ScreenKeymap,
+        internal_event: &mut Events<Self::ScreenEvent>,
+    ) -> Option<ChangeAppScreen>;
+}
+
+fn handle_input(
+    mut screen: ResMut<AppScreen>,
+    mut next_screen: EventWriter<ChangeAppScreen>,
+    mut key_reader: EventReader<KeyEvent>,
+    mut explorer_events: ResMut<Events<ExplorerEvent>>,
+    keymap: Res<Keymap>,
 ) {
-    for event in reader.read() {
-        match *event {
-            WindowEvent::ChangeFocus(new_focus) => focus_view.set(new_focus),
-        }
+    match screen.as_mut() {
+        AppScreen::StartMenu => todo!(),
+        AppScreen::Explorer(ctx) => key_reader.read().for_each(|e| {
+            if let Some(s) = ctx.read_input(e, keymap.as_ref(), explorer_events.as_mut()) {
+                next_screen.send(s);
+            }
+        }),
     }
 }
 
-fn handle_search_validate(
-    mut focus_view: ResMut<NextState<FocusView>>,
-    mut reader: EventReader<SearchViewEvent>,
+fn change_screen<'a>(
+    mut screen: ResMut<AppScreen>,
+    mut next_screen: EventReader<ChangeAppScreen>,
+    primary: Query<Entity, With<PrimaryBody>>,
+    bodies: Query<(&'a BodyInfo, &'a Position)>,
 ) {
-    for event in reader.read() {
-        match event {
-            SearchViewEvent::ValidateSearch => focus_view.set(FocusView::Tree),
-            _ => continue,
+    for s in next_screen.read() {
+        *screen = match s {
+            ChangeAppScreen::StartMenu => AppScreen::StartMenu,
+            ChangeAppScreen::Explorer => {
+                AppScreen::Explorer(ExplorerContext::new(primary.single(), &bodies))
+            }
         }
     }
 }
 
 fn render(
     mut ctx: ResMut<RatatuiContext>,
-    tree: Option<ResMut<TreeState>>,
-    search: Option<ResMut<SearchState>>,
-    space_map: Option<Res<SpaceMap>>,
-    focus: Res<State<FocusView>>,
-    is_info_toggled: Option<Res<InfoToggle>>,
-    info_widget: Option<Res<InfoWidget>>,
+    mut screen: ResMut<AppScreen>,
+    explorer_screen: Res<ExplorerScreen>,
 ) -> color_eyre::Result<()> {
-    ctx.draw(|f| {
-        let mut c = vec![Constraint::Percentage(25), Constraint::Fill(1)];
-        if let Some(ref toggle) = is_info_toggled {
-            if toggle.0 {
-                c.push(Constraint::Percentage(25));
-            }
-        }
-        let chunks = Layout::horizontal(c).split(f.size());
-
-        match focus.get() {
-            FocusView::Tree => {
-                if let Some(mut tree) = tree {
-                    f.render_stateful_widget(TreeWidget, chunks[0], tree.as_mut());
-                }
-            }
-            FocusView::Search => {
-                if let Some(mut search) = search {
-                    f.render_stateful_widget(SearchWidget, chunks[0], search.as_mut());
-                }
-            }
-        }
-        if let Some(space_map) = space_map {
-            f.render_widget(space_map.as_ref(), chunks[1]);
-        }
-        if let Some(info_widget) = info_widget {
-            if is_info_toggled.unwrap().0 {
-                f.render_widget(info_widget.as_ref(), chunks[2]);
-            }
+    ctx.draw(|f| match screen.as_mut() {
+        AppScreen::StartMenu => todo!(),
+        AppScreen::Explorer(ctx) => {
+            f.render_stateful_widget(explorer_screen.as_ref(), f.size(), ctx)
         }
     })?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use bevy::app::App;
+
+    use crate::{
+        standalone_plugin::StandalonePlugin,
+        tui_plugin::{AppScreen, TuiPlugin},
+    };
+
+    #[test]
+    fn test_change_screen() {
+        let mut app = App::new();
+        app.add_plugins((StandalonePlugin::default(), TuiPlugin::testing()));
+        app.update();
+        app.update();
+        let world = &mut app.world;
+        assert!(matches!(
+            *world.resource::<AppScreen>(),
+            AppScreen::Explorer(_)
+        ));
+    }
 }
