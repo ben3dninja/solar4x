@@ -7,37 +7,16 @@ use ratatui::{
 };
 
 use crate::{
-    bodies::body_id::BodyID,
-    core_plugin::{AppState, BodyInfo, GameSet, PrimaryBody},
-    tui_plugin::space_map_plugin::FocusBody,
+    bodies::{body_data::BodyData, body_id::BodyID},
     utils::{
         list::{select_next_clamp, select_previous_clamp},
         ui::Direction2,
     },
 };
 
-use super::{info_plugin::InfoToggle, UiInitSet};
-
-pub struct TreePlugin;
-
-impl Plugin for TreePlugin {
-    fn build(&self, app: &mut App) {
-        app.add_event::<TreeViewEvent>()
-            .add_event::<ChangeSelectionEvent>()
-            .add_systems(OnEnter(AppState::Game), initialize_tree.in_set(UiInitSet))
-            .add_systems(
-                Update,
-                (
-                    handle_tree_events,
-                    update_focus_body.run_if(any_with_component::<FocusBody>),
-                )
-                    .in_set(GameSet),
-            );
-    }
-}
 #[derive(Debug, Event)]
 pub enum TreeViewEvent {
-    SelectTree(Direction2),
+    Select(Direction2),
     ToggleTreeExpansion,
     ToggleInfo,
 }
@@ -54,12 +33,12 @@ struct TreeEntry {
     is_expanded: bool,
 }
 
-#[derive(Resource, Debug)]
+#[derive(Debug)]
 pub struct TreeState {
     /// Indices of the entries in the system tree, and whether they are expanded or not
     visible_tree_entries: Vec<usize>,
     system_tree: Vec<TreeEntry>,
-    focus_body: Option<BodyID>,
+    pub focus_body: Option<BodyID>,
     list_state: ListState,
 }
 
@@ -103,104 +82,70 @@ impl StatefulWidget for TreeWidget {
     }
 }
 
-pub fn initialize_tree(
-    mut commands: Commands,
-    primary: Query<&BodyInfo, With<PrimaryBody>>,
-    focus_body: Query<&BodyInfo, With<FocusBody>>,
-    bodies: Query<&BodyInfo>,
-) {
-    #[derive(Clone)]
-    struct Temp {
-        children: Vec<BodyID>,
-        semimajor_axis: f64,
-        name: String,
-    }
-    let mut info: HashMap<BodyID, Temp> = bodies
-        .iter()
-        .map(|BodyInfo(data)| {
-            (
-                data.id,
-                Temp {
-                    children: data.orbiting_bodies.clone(),
-                    semimajor_axis: data.semimajor_axis,
-                    name: data.name.clone(),
-                },
-            )
-        })
-        .collect();
-    let info_bis = info.clone();
-    for entry in info.values_mut() {
-        entry.children.retain(|b| info_bis.get(b).is_some());
-        entry.children.sort_by(|a, b| {
-            info_bis[a]
-                .semimajor_axis
-                .total_cmp(&info_bis[b].semimajor_axis)
-        });
-    }
-    fn fill_tree_rec(
-        tree: &mut Vec<TreeEntry>,
-        info: &HashMap<BodyID, Temp>,
-        id: BodyID,
-        index_of_parent: Option<usize>,
-        is_last_child: bool,
-    ) {
-        let Temp { children, name, .. } = &info[&id];
-        tree.push(TreeEntry {
-            id,
-            name: name.clone(),
-            is_last_child,
-            index_of_parent,
-            is_expanded: false,
-        });
-        let index_of_parent = tree.len() - 1;
-        let size = children.len();
-        for (i, &child) in children.iter().enumerate() {
-            fill_tree_rec(tree, info, child, Some(index_of_parent), i == size - 1);
+impl TreeState {
+    pub fn new<'a>(
+        primary: &'a BodyData,
+        focus_body: Option<&'a BodyData>,
+        bodies: impl Iterator<Item = &'a BodyData>,
+    ) -> TreeState {
+        #[derive(Clone)]
+        struct Temp {
+            children: Vec<BodyID>,
+            semimajor_axis: f64,
+            name: String,
         }
-    }
-    let mut system_tree = Vec::new();
-    fill_tree_rec(&mut system_tree, &info, primary.single().0.id, None, true);
-
-    commands.insert_resource(TreeState {
-        system_tree,
-        visible_tree_entries: vec![0],
-        focus_body: focus_body.get_single().map(|r| r.0.id).ok(),
-        list_state: ListState::default().with_selected(Some(0)),
-    });
-}
-
-fn handle_tree_events(
-    mut tree_state: ResMut<TreeState>,
-    mut reader: EventReader<TreeViewEvent>,
-    mut info: Option<ResMut<InfoToggle>>,
-    mut change_selection: EventWriter<ChangeSelectionEvent>,
-) {
-    use Direction2::*;
-    use TreeViewEvent::*;
-    for event in reader.read() {
-        match event {
-            SelectTree(d) => {
-                match d {
-                    Down => tree_state.select_next_tree(),
-                    Up => tree_state.select_previous_tree(),
-                }
-                change_selection.send_default();
-            }
-            ToggleTreeExpansion => tree_state.toggle_selection_expansion(),
-            ToggleInfo => {
-                if let Some(info) = info.as_mut() {
-                    info.0 = !info.0
-                }
+        let mut info: HashMap<BodyID, Temp> = bodies
+            .map(|data| {
+                (
+                    data.id,
+                    Temp {
+                        children: data.orbiting_bodies.clone(),
+                        semimajor_axis: data.semimajor_axis,
+                        name: data.name.clone(),
+                    },
+                )
+            })
+            .collect();
+        let info_bis = info.clone();
+        for entry in info.values_mut() {
+            entry.children.retain(|b| info_bis.get(b).is_some());
+            entry.children.sort_by(|a, b| {
+                info_bis[a]
+                    .semimajor_axis
+                    .total_cmp(&info_bis[b].semimajor_axis)
+            });
+        }
+        fn fill_tree_rec(
+            tree: &mut Vec<TreeEntry>,
+            info: &HashMap<BodyID, Temp>,
+            id: BodyID,
+            index_of_parent: Option<usize>,
+            is_last_child: bool,
+        ) {
+            let Temp { children, name, .. } = &info[&id];
+            tree.push(TreeEntry {
+                id,
+                name: name.clone(),
+                is_last_child,
+                index_of_parent,
+                is_expanded: false,
+            });
+            let index_of_parent = tree.len() - 1;
+            let size = children.len();
+            for (i, &child) in children.iter().enumerate() {
+                fill_tree_rec(tree, info, child, Some(index_of_parent), i == size - 1);
             }
         }
-    }
-}
+        let mut system_tree = Vec::new();
+        fill_tree_rec(&mut system_tree, &info, primary.id, None, true);
 
-fn update_focus_body(
-    mut tree_state: ResMut<TreeState>,
-    focus_body: Query<&BodyInfo, With<FocusBody>>,
-) {
-    tree_state.focus_body = focus_body.get_single().map(|i| i.0.id).ok();
+        TreeState {
+            system_tree,
+            visible_tree_entries: vec![0],
+            focus_body: focus_body.map(|r| r.id),
+            list_state: ListState::default().with_selected(Some(0)),
+        }
+    }
 }
 
 impl TreeState {
@@ -374,53 +319,63 @@ mod tests {
     use bevy::app::App;
 
     use crate::{
-        bodies::body_data::BodyType, core_plugin::BodiesConfig, standalone_plugin::StandalonePlugin,
+        bodies::body_data::BodyType,
+        core_plugin::BodiesConfig,
+        standalone_plugin::StandalonePlugin,
+        tui_plugin::{AppScreen, TuiPlugin},
     };
-
-    use super::{TreePlugin, TreeState};
 
     #[test]
     fn test_initialize_tree() {
         let mut app = App::new();
-        app.add_plugins((StandalonePlugin::default(), TreePlugin));
+        app.add_plugins((StandalonePlugin::default(), TuiPlugin::testing()));
         app.update();
         let world = &app.world;
-        let tree = world.resource::<TreeState>();
-        assert_eq!(tree.system_tree.len(), 9);
-        assert!(tree.system_tree[0].is_last_child);
-        assert!(tree.system_tree[8].is_last_child);
-        for i in 1..8 {
-            assert!(!tree.system_tree[i].is_last_child);
+        if let AppScreen::Explorer(ctx) = world.resource::<AppScreen>() {
+            let tree = &ctx.tree;
+            assert_eq!(tree.system_tree.len(), 9);
+            assert!(tree.system_tree[0].is_last_child);
+            assert!(tree.system_tree[8].is_last_child);
+            for i in 1..8 {
+                assert!(!tree.system_tree[i].is_last_child);
+            }
         }
     }
     #[test]
     fn test_select_body() {
         let mut app = App::new();
-        app.add_plugins((StandalonePlugin::default(), TreePlugin));
+        app.add_plugins((StandalonePlugin::default(), TuiPlugin::testing()));
+        app.update();
         app.update();
         let world = &mut app.world;
-        let mut tree = world.resource_mut::<TreeState>();
-        let earth = "terre".into();
-        tree.select_body(earth);
-        assert_eq!(tree.selected_body_id(), earth)
+        if let AppScreen::Explorer(ctx) = world.resource_mut::<AppScreen>().as_mut() {
+            let tree = &mut ctx.tree;
+            let earth = "terre".into();
+            tree.select_body(earth);
+            assert_eq!(tree.selected_body_id(), earth)
+        }
     }
 
     #[test]
     fn test_toggle_entry_expansion() {
         let mut app = App::new();
-        app.add_plugins((StandalonePlugin::default(), TreePlugin));
+        app.add_plugins((StandalonePlugin::default(), TuiPlugin::testing()));
         app.update();
-        let mut tree = app.world.resource_mut::<TreeState>();
-        tree.toggle_selection_expansion();
-        assert_eq!(tree.visible_tree_entries.len(), 9);
-        assert!(tree.nth_visible_entry(0).unwrap().is_expanded);
-        for i in 1..9 {
-            tree.toggle_entry_expansion(i);
+        app.update();
+        let world = &mut app.world;
+        if let AppScreen::Explorer(ctx) = world.resource_mut::<AppScreen>().as_mut() {
+            let tree = &mut ctx.tree;
+            tree.toggle_selection_expansion();
+            assert_eq!(tree.visible_tree_entries.len(), 9);
+            assert!(tree.nth_visible_entry(0).unwrap().is_expanded);
+            for i in 1..9 {
+                tree.toggle_entry_expansion(i);
+            }
+            assert_eq!(tree.visible_tree_entries.len(), 9);
+            tree.toggle_selection_expansion();
+            assert_eq!(tree.visible_tree_entries.len(), 1);
+            assert!(!tree.nth_visible_entry(0).unwrap().is_expanded);
         }
-        assert_eq!(tree.visible_tree_entries.len(), 9);
-        tree.toggle_selection_expansion();
-        assert_eq!(tree.visible_tree_entries.len(), 1);
-        assert!(!tree.nth_visible_entry(0).unwrap().is_expanded);
     }
 
     #[test]
@@ -428,15 +383,19 @@ mod tests {
         let mut app = App::new();
         app.add_plugins((
             StandalonePlugin(BodiesConfig::SmallestBodyType(BodyType::Moon)),
-            TreePlugin,
+            TuiPlugin::testing(),
         ));
         app.update();
+        app.update();
         let world = &app.world;
-        let tree_state = world.resource::<TreeState>();
-        assert_eq!(
-            tree_state.compute_deepness_map(tree_state.index_of("lune".into()).unwrap()),
-            vec![true, false, true]
-        );
+        if let AppScreen::Explorer(ctx) = world.resource::<AppScreen>() {
+            let tree = &ctx.tree;
+
+            assert_eq!(
+                tree.compute_deepness_map(tree.index_of("lune".into()).unwrap()),
+                vec![true, false, true]
+            );
+        }
     }
 
     #[test]
@@ -444,23 +403,27 @@ mod tests {
         let mut app = App::new();
         app.add_plugins((
             StandalonePlugin(BodiesConfig::SmallestBodyType(BodyType::Moon)),
-            TreePlugin,
+            TuiPlugin::testing(),
         ));
         app.update();
-        let mut tree_state = app.world.resource_mut::<TreeState>();
-        assert_eq!(tree_state.build_deepness_prefix(0), "");
-        dbg!(&tree_state.visible_tree_entries);
-        tree_state.toggle_selection_expansion();
-        dbg!(&tree_state.visible_tree_entries);
-        dbg!(tree_state.compute_deepness_map(tree_state.index_of_nth_visible_entry(8).unwrap()));
-        assert_eq!(
-            tree_state.build_deepness_prefix(tree_state.index_of_nth_visible_entry(8).unwrap()),
-            "└─"
-        );
-        tree_state.toggle_entry_expansion(8);
-        assert_eq!(
-            tree_state.build_deepness_prefix(tree_state.index_of_nth_visible_entry(9).unwrap()),
-            "  ├─"
-        );
+        app.update();
+        let world = &mut app.world;
+        if let AppScreen::Explorer(ctx) = world.resource_mut::<AppScreen>().as_mut() {
+            let tree_state = &mut ctx.tree;
+            assert_eq!(tree_state.build_deepness_prefix(0), "");
+            dbg!(&tree_state.visible_tree_entries);
+            tree_state.toggle_selection_expansion();
+            dbg!(&tree_state.visible_tree_entries);
+            dbg!(tree_state.compute_deepness_map(tree_state.index_of_nth_visible_entry(8).unwrap()));
+            assert_eq!(
+                tree_state.build_deepness_prefix(tree_state.index_of_nth_visible_entry(8).unwrap()),
+                "└─"
+            );
+            tree_state.toggle_entry_expansion(8);
+            assert_eq!(
+                tree_state.build_deepness_prefix(tree_state.index_of_nth_visible_entry(9).unwrap()),
+                "  ├─"
+            );
+        }
     }
 }

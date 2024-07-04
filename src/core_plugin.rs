@@ -75,7 +75,7 @@ pub struct EntityMapping {
     pub id_mapping: HashMap<BodyID, Entity>,
 }
 
-#[derive(Component, Debug)]
+#[derive(Component, Debug, Clone)]
 pub struct BodyInfo(pub BodyData);
 
 pub fn start_game(mut app_state: ResMut<NextState<AppState>>) {
@@ -111,7 +111,7 @@ pub fn build_system(mut commands: Commands, config: Res<BodiesConfig>) {
     commands.insert_resource(EntityMapping { id_mapping });
 }
 
-#[derive(Event)]
+#[derive(Event, Clone, Copy)]
 pub enum CoreEvent {
     Quit,
 }

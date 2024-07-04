@@ -1,4 +1,3 @@
-use bevy::prelude::*;
 use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
 use ratatui::{
     layout::{Alignment, Constraint, Layout},
@@ -9,35 +8,14 @@ use ratatui::{
 
 use crate::{
     bodies::{body_data::BodyData, body_id::BodyID},
-    core_plugin::{AppState, BodyInfo, GameSet},
+    core_plugin::BodyInfo,
     utils::{
         list::{select_next_clamp, select_previous_clamp},
         ui::Direction2,
     },
 };
 
-use super::{
-    tree_plugin::{ChangeSelectionEvent, TreeState},
-    FocusView, UiInitSet, WindowEvent,
-};
-
-pub struct SearchPlugin;
-
-impl Plugin for SearchPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_event::<SearchViewEvent>()
-            .add_systems(OnEnter(AppState::Game), initialize_search.in_set(UiInitSet))
-            .add_systems(
-                Update,
-                (handle_search_events, update_search_entries)
-                    .in_set(GameSet)
-                    .chain(),
-            )
-            .add_systems(OnEnter(FocusView::Search), reset_on_enter_search);
-    }
-}
-
-#[derive(Debug, Event)]
+#[derive(Debug)]
 pub enum SearchViewEvent {
     MoveCursor(Direction2),
     SelectSearch(Direction2),
@@ -46,7 +24,6 @@ pub enum SearchViewEvent {
     DeleteChar,
 }
 
-#[derive(Resource)]
 pub struct SearchState {
     search_entries: Vec<SearchEntry>,
     search_character_index: usize,
@@ -103,82 +80,18 @@ impl StatefulWidget for SearchWidget {
     }
 }
 
-// TODO : only on key event q
-fn update_search_entries(mut state: ResMut<SearchState>, query: Query<&BodyInfo>) {
-    let mut ids_score: Vec<_> = query
-        .iter()
-        .filter_map(|BodyInfo(body)| {
-            state
-                .search_matcher
-                .fuzzy_match(&body.name, &state.search_input)
-                .map(|score| (body, score))
-        })
-        .collect();
-    ids_score.sort_by(|a, b| a.0.name.cmp(&b.0.name));
-    ids_score.sort_by(|a, b| a.1.cmp(&b.1).reverse());
-    state.search_entries = ids_score.into_iter().map(|(data, _)| data.into()).collect();
-    if state.list_state.selected().is_none() && !state.search_entries.is_empty() {
-        state.list_state.select(Some(0));
-    }
-}
-
-fn initialize_search(mut commands: Commands, query: Query<&BodyInfo>) {
-    let search_entries: Vec<_> = query.iter().map(|BodyInfo(data)| data.into()).collect();
-    commands.insert_resource(SearchState {
-        search_entries,
-        search_character_index: 0,
-        search_input: String::new(),
-        search_matcher: SkimMatcherV2::default(),
-        list_state: ListState::default(),
-    });
-}
-
-fn reset_on_enter_search(
-    mut search_state: ResMut<SearchState>,
-    mut reader: EventReader<WindowEvent>,
-    mut event: EventWriter<ChangeSelectionEvent>,
-) {
-    reader
-        .read()
-        .find(|event| matches!(event, WindowEvent::ChangeFocus(FocusView::Search)))
-        .inspect(|_| search_state.reset_search());
-    event.send_default();
-}
-
-fn handle_search_events(
-    mut search: ResMut<SearchState>,
-    mut reader: EventReader<SearchViewEvent>,
-    mut tree: Option<ResMut<TreeState>>,
-    mut change_selection: EventWriter<ChangeSelectionEvent>,
-) {
-    use Direction2::*;
-    use SearchViewEvent::*;
-    for event in reader.read() {
-        match event {
-            DeleteChar => search.delete_char(),
-            MoveCursor(d) => match d {
-                Down => search.move_cursor_left(),
-                Up => search.move_cursor_right(),
-            },
-            SelectSearch(d) => match d {
-                Down => search.select_next_search(),
-                Up => search.select_previous_search(),
-            },
-            ValidateSearch => {
-                if let Some(ref mut tree) = tree {
-                    if let Some(id) = search.selected_body_id() {
-                        tree.select_body(id);
-                        change_selection.send_default();
-                    }
-                }
-            }
-            WriteChar(char) => search.enter_char(*char),
-        }
-    }
-}
-
 // Code from https://ratatui.rs/examples/apps/user_input/
 impl SearchState {
+    pub fn new<'a>(bodies: impl Iterator<Item = &'a BodyData>) -> SearchState {
+        let search_entries: Vec<_> = bodies.map(|data| data.into()).collect();
+        SearchState {
+            search_entries,
+            search_character_index: 0,
+            search_input: String::new(),
+            search_matcher: SkimMatcherV2::default(),
+            list_state: ListState::default(),
+        }
+    }
     pub fn move_cursor_left(&mut self) {
         let cursor_moved_left = self.search_character_index.saturating_sub(1);
         self.search_character_index = self.clamp_cursor(cursor_moved_left);
@@ -253,6 +166,22 @@ impl SearchState {
         self.search_input = String::new();
         self.list_state.select(Some(0));
     }
+
+    pub fn update_search_entries<'a>(&mut self, bodies: impl Iterator<Item = &'a BodyInfo>) {
+        let mut ids_score: Vec<_> = bodies
+            .filter_map(|BodyInfo(body)| {
+                self.search_matcher
+                    .fuzzy_match(&body.name, &self.search_input)
+                    .map(|score| (body, score))
+            })
+            .collect();
+        ids_score.sort_by(|a, b| a.0.name.cmp(&b.0.name));
+        ids_score.sort_by(|a, b| a.1.cmp(&b.1).reverse());
+        self.search_entries = ids_score.into_iter().map(|(data, _)| data.into()).collect();
+        if self.list_state.selected().is_none() && !self.search_entries.is_empty() {
+            self.list_state.select(Some(0));
+        }
+    }
 }
 
 #[cfg(test)]
@@ -261,11 +190,10 @@ mod tests {
 
     use crate::{
         bodies::body_data::BodyType,
-        core_plugin::BodiesConfig,
+        core_plugin::{BodiesConfig, BodyInfo},
         standalone_plugin::StandalonePlugin,
         tui_plugin::{
-            search_plugin::{SearchPlugin, SearchState, SearchViewEvent},
-            tree_plugin::{TreePlugin, TreeState},
+            explorer_screen::ExplorerEvent, search_plugin::SearchViewEvent, AppScreen, TuiPlugin,
         },
     };
 
@@ -274,16 +202,28 @@ mod tests {
         let mut app = App::new();
         app.add_plugins((
             StandalonePlugin(BodiesConfig::SmallestBodyType(BodyType::Moon)),
-            SearchPlugin,
-            TreePlugin,
+            TuiPlugin::testing(),
         ));
         app.update();
-        let mut search = app.world.resource_mut::<SearchState>();
-        search.search_input = "Moo".into();
         app.update();
-        app.world.send_event(SearchViewEvent::ValidateSearch);
+        let bodies: Vec<_> = app
+            .world
+            .query::<&BodyInfo>()
+            .iter(&app.world)
+            .cloned()
+            .collect();
+        if let AppScreen::Explorer(ctx) = app.world.resource_mut::<AppScreen>().as_mut() {
+            ctx.search.search_input = "Moo".into();
+            ctx.search.update_search_entries(bodies.iter());
+        }
         app.update();
-        let id = app.world.resource::<TreeState>().selected_body_id();
-        assert_eq!(id, "lune".into())
+
+        app.world
+            .send_event(ExplorerEvent::Search(SearchViewEvent::ValidateSearch));
+        app.update();
+        if let AppScreen::Explorer(ctx) = app.world.resource_mut::<AppScreen>().as_mut() {
+            let id = ctx.tree.selected_body_id();
+            assert_eq!(id, "lune".into())
+        }
     }
 }

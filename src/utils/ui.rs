@@ -23,13 +23,13 @@ pub fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
         .split(popup_layout[1])[1] // Return the middle chunk
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum Direction2 {
     Up,
     Down,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum Direction4 {
     Front,
     Back,
