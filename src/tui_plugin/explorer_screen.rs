@@ -19,7 +19,7 @@ use crate::{
 
 use super::{
     info_plugin::InfoWidget,
-    search_plugin::{SearchEvent, SearchState, SearchWidget},
+    search_plugin::{SearchEvent, SearchMatcher, SearchState, SearchWidget},
     space_map_plugin::{SpaceMap, SpaceMapEvent},
     tree_plugin::{TreeEvent, TreeState, TreeWidget},
     AppScreen, ChangeAppScreen, ScreenContext,
@@ -53,9 +53,9 @@ pub struct ExplorerContext {
 }
 
 impl ExplorerContext {
-    pub fn new<'a, 'b>(
+    pub fn new<'b>(
         primary: Entity,
-        bodies: &'a Query<(&'b BodyInfo, &'b Position)>,
+        bodies: &Query<(&'b BodyInfo, &'b Position)>,
     ) -> ExplorerContext {
         let primary_data = &bodies.get(primary).unwrap().0 .0;
         let (infos, positions): (Vec<_>, Vec<_>) = bodies.iter().map(|(i, p)| (&i.0, p)).unzip();
@@ -69,6 +69,12 @@ impl ExplorerContext {
                 body_info: primary_data.clone(),
             },
             focus_body: primary,
+        }
+    }
+    fn update_info(&mut self, mapping: &HashMap<BodyID, Entity>, bodies: &Query<&BodyInfo>) {
+        let id = self.tree_state.selected_body_id();
+        if let Ok(body_info) = bodies.get(mapping[&id]) {
+            self.info.body_info = body_info.0.clone();
         }
     }
 }
@@ -159,100 +165,78 @@ impl ScreenContext for ExplorerContext {
     }
 }
 
-impl ExplorerContext {
-    fn update_info(&mut self, mapping: &HashMap<BodyID, Entity>, bodies: &Query<&BodyInfo>) {
-        let id = self.tree_state.selected_body_id();
-        if let Ok(body_info) = bodies.get(mapping[&id]) {
-            self.info.body_info = body_info.0.clone();
-        }
-    }
-}
-
 pub fn handle_explorer_events(
     mut screen: ResMut<AppScreen>,
     mut events: EventReader<ExplorerEvent>,
     mapping: Res<EntityMapping>,
     bodies: Query<&BodyInfo>,
     mut engine_events: Option<ResMut<Events<EngineEvent>>>,
+    fuzzy_matcher: Res<SearchMatcher>,
 ) {
-    if let AppScreen::Explorer(context) = screen.as_mut() {
+    if let AppScreen::Explorer(ctx) = screen.as_mut() {
         for event in events.read() {
             match event {
                 ExplorerEvent::Tree(event) => {
                     use TreeEvent::*;
                     match event {
                         Select(d) => {
-                            context.tree_state.select_adjacent(*d);
-                            context.update_info(&mapping.id_mapping, &bodies);
+                            ctx.tree_state.select_adjacent(*d);
+                            ctx.update_info(&mapping.id_mapping, &bodies);
                         }
-                        ToggleTreeExpansion => context.tree_state.toggle_selection_expansion(),
+                        ToggleTreeExpansion => ctx.tree_state.toggle_selection_expansion(),
                     }
                 }
                 ExplorerEvent::Search(event) => {
                     use SearchEvent::*;
                     match event {
                         DeleteChar => {
-                            context.search_state.delete_char();
-                            context.search_state.update_search_entries(bodies.iter());
+                            ctx.search_state.delete_char();
+                            ctx.search_state
+                                .update_search_entries(bodies.iter(), &fuzzy_matcher.0);
                         }
-                        Select(d) => context.search_state.select_adjacent(*d),
+                        Select(d) => ctx.search_state.select_adjacent(*d),
                         ValidateSearch => {
-                            if let Some(id) = context.search_state.selected_body_id() {
-                                context.tree_state.select_body(id);
-                                context.update_info(&mapping.id_mapping, &bodies);
+                            if let Some(id) = ctx.search_state.selected_body_id() {
+                                ctx.tree_state.select_body(id);
+                                ctx.update_info(&mapping.id_mapping, &bodies);
                             }
-                            context.side_pane_mode = SidePaneMode::Tree;
+                            ctx.side_pane_mode = SidePaneMode::Tree;
                         }
                         WriteChar(char) => {
-                            context.search_state.enter_char(*char);
-                            context.search_state.update_search_entries(bodies.iter());
+                            ctx.search_state.enter_char(*char);
+                            ctx.search_state
+                                .update_search_entries(bodies.iter(), &fuzzy_matcher.0);
                         }
                     }
                 }
                 ExplorerEvent::SpaceMap(event) => {
                     use SpaceMapEvent::*;
                     match event {
-                        Zoom(d) => context.space_map.zoom(*d),
-                        MapOffset(d) => context.space_map.offset(*d),
-                        MapOffsetReset => context.space_map.reset_offset(),
+                        Zoom(d) => ctx.space_map.zoom(*d),
+                        MapOffset(d) => ctx.space_map.offset(*d),
+                        MapOffsetReset => ctx.space_map.reset_offset(),
                         FocusBody => {
-                            if let Some(entity) = mapping
-                                .id_mapping
-                                .get(&context.tree_state.selected_body_id())
+                            if let Some(entity) =
+                                mapping.id_mapping.get(&ctx.tree_state.selected_body_id())
                             {
-                                context.focus_body = *entity;
-                                println!("{entity:?}");
-                                context.tree_state.focus_body =
-                                    Some(bodies.get(*entity).unwrap().0.id)
+                                ctx.focus_body = *entity;
+                                ctx.tree_state.focus_body = Some(bodies.get(*entity).unwrap().0.id)
                             }
                         }
                         Autoscale => {
-                            let focus_data = &bodies.get(context.focus_body).unwrap().0;
-                            if let Some(max_dist) = focus_data
-                                .orbiting_bodies
-                                .iter()
-                                .filter_map(|id| {
-                                    mapping
-                                        .id_mapping
-                                        .get(id)
-                                        .and_then(|&e| bodies.get(e).ok())
-                                        .map(|body| body.0.semimajor_axis)
-                                })
-                                .max_by(|a, b| a.total_cmp(b))
-                            {
-                                context.space_map.zoom_level =
-                                    context.space_map.system_size / max_dist;
-                            }
+                            let focus_data = &bodies.get(ctx.focus_body).unwrap().0;
+                            ctx.space_map
+                                .autoscale(focus_data, &mapping.id_mapping, &bodies);
                         }
                     }
                 }
                 ExplorerEvent::View(event) => match *event {
                     ViewEvent::ChangeSidePaneMode(new_focus) => {
-                        context.search_state.reset_search();
-                        context.side_pane_mode = new_focus
+                        ctx.search_state.reset_search();
+                        ctx.side_pane_mode = new_focus
                     }
 
-                    ViewEvent::ToggleInfo => context.info_toggle = !context.info_toggle,
+                    ViewEvent::ToggleInfo => ctx.info_toggle = !ctx.info_toggle,
                 },
                 ExplorerEvent::Engine(event) => {
                     engine_events.as_mut().map(|e| e.send(*event));

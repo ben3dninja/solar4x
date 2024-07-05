@@ -21,15 +21,18 @@ pub fn select_previous_clamp(list_state: &mut ListState, min: usize) {
 pub trait ClampedList {
     fn list_state(&mut self) -> &mut ListState;
 
-    fn len(&mut self) -> usize;
+    fn len(&self) -> usize;
+    fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 
     fn select_next(&mut self) {
         let len = self.len();
-        select_next_clamp(&mut self.list_state(), len - 1);
+        select_next_clamp(self.list_state(), len - 1);
     }
 
     fn select_previous(&mut self) {
-        select_previous_clamp(&mut self.list_state(), 0);
+        select_previous_clamp(self.list_state(), 0);
     }
 
     fn select_adjacent(&mut self, direction: Direction2) {

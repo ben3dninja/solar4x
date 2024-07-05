@@ -1,3 +1,4 @@
+use bevy::prelude::*;
 use fuzzy_matcher::{skim::SkimMatcherV2, FuzzyMatcher};
 use ratatui::{
     layout::{Alignment, Constraint, Layout},
@@ -20,11 +21,21 @@ pub enum SearchEvent {
     DeleteChar,
 }
 
+pub struct SearchPlugin;
+
+impl Plugin for SearchPlugin {
+    fn build(&self, app: &mut App) {
+        app.insert_resource(SearchMatcher(SkimMatcherV2::default()));
+    }
+}
+
+#[derive(Resource)]
+pub struct SearchMatcher(pub SkimMatcherV2);
+
 pub struct SearchState {
     search_entries: Vec<SearchEntry>,
     list_state: ListState,
     search_input: String,
-    search_matcher: SkimMatcherV2,
 }
 
 struct SearchEntry {
@@ -80,7 +91,7 @@ impl ClampedList for SearchState {
         &mut self.list_state
     }
 
-    fn len(&mut self) -> usize {
+    fn len(&self) -> usize {
         self.search_entries.len()
     }
 }
@@ -91,7 +102,6 @@ impl SearchState {
         SearchState {
             search_entries,
             search_input: String::new(),
-            search_matcher: SkimMatcherV2::default(),
             list_state: ListState::default(),
         }
     }
@@ -116,10 +126,14 @@ impl SearchState {
         self.list_state.select(Some(0));
     }
 
-    pub fn update_search_entries<'a>(&mut self, bodies: impl Iterator<Item = &'a BodyInfo>) {
+    pub fn update_search_entries<'a>(
+        &mut self,
+        bodies: impl Iterator<Item = &'a BodyInfo>,
+        fuzzy_matcher: &SkimMatcherV2,
+    ) {
         let mut ids_score: Vec<_> = bodies
             .filter_map(|BodyInfo(body)| {
-                self.search_matcher
+                fuzzy_matcher
                     .fuzzy_match(&body.name, &self.search_input)
                     .map(|score| (body, score))
             })
@@ -139,7 +153,7 @@ mod tests {
 
     use crate::{
         bodies::body_data::BodyType,
-        core_plugin::{BodiesConfig, BodyInfo},
+        core_plugin::BodiesConfig,
         standalone_plugin::StandalonePlugin,
         tui_plugin::{
             explorer_screen::ExplorerEvent, search_plugin::SearchEvent, AppScreen, TuiPlugin,
@@ -155,16 +169,13 @@ mod tests {
         ));
         app.update();
         app.update();
-        let bodies: Vec<_> = app
-            .world
-            .query::<&BodyInfo>()
-            .iter(&app.world)
-            .cloned()
-            .collect();
-        if let AppScreen::Explorer(ctx) = app.world.resource_mut::<AppScreen>().as_mut() {
-            ctx.search_state.search_input = "Moo".into();
-            ctx.search_state.update_search_entries(bodies.iter());
-        }
+        use ExplorerEvent::Search;
+        use SearchEvent::*;
+        app.world.send_event_batch([
+            Search(WriteChar('M')),
+            Search(WriteChar('o')),
+            Search(WriteChar('o')),
+        ]);
         app.update();
 
         app.world

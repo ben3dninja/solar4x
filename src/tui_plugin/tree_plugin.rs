@@ -40,7 +40,7 @@ impl ClampedList for TreeState {
         &mut self.list_state
     }
 
-    fn len(&mut self) -> usize {
+    fn len(&self) -> usize {
         self.visible_tree_entries.len()
     }
 }

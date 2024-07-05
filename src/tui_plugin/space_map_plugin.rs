@@ -1,6 +1,7 @@
 use bevy::{
     math::{DVec2, DVec3},
     prelude::*,
+    utils::HashMap,
 };
 use ratatui::{
     buffer::Buffer,
@@ -14,7 +15,10 @@ use ratatui::{
 };
 
 use crate::{
-    bodies::body_data::BodyType,
+    bodies::{
+        body_data::{BodyData, BodyType},
+        body_id::BodyID,
+    },
     core_plugin::{BodyInfo, GameSet},
     engine_plugin::Position,
     utils::{
@@ -147,6 +151,27 @@ impl SpaceMap {
     pub fn reset_offset(&mut self) {
         self.offset_amount = DVec2::ZERO;
     }
+
+    pub fn autoscale(
+        &mut self,
+        focus_data: &BodyData,
+        id_mapping: &HashMap<BodyID, Entity>,
+        bodies: &Query<&BodyInfo>,
+    ) {
+        if let Some(max_dist) = focus_data
+            .orbiting_bodies
+            .iter()
+            .filter_map(|id| {
+                id_mapping
+                    .get(id)
+                    .and_then(|&e| bodies.get(e).ok())
+                    .map(|body| body.0.semimajor_axis)
+            })
+            .max_by(|a, b| a.total_cmp(b))
+        {
+            self.zoom_level = self.system_size / max_dist;
+        }
+    }
 }
 
 #[cfg(test)]
@@ -168,8 +193,6 @@ mod tests {
         },
     };
 
-    use super::SpaceMapPlugin;
-
     #[test]
     fn test_update_space_map() {
         let mut app = App::new();
@@ -177,7 +200,6 @@ mod tests {
             StandalonePlugin(BodiesConfig::SmallestBodyType(BodyType::Planet)),
             EnginePlugin,
             TuiPlugin::testing(),
-            SpaceMapPlugin,
         ))
         .add_systems(
             Update,
@@ -204,7 +226,6 @@ mod tests {
             StandalonePlugin::default(),
             EnginePlugin,
             TuiPlugin::testing(),
-            SpaceMapPlugin,
         ));
         app.update();
         app.update();
