@@ -6,18 +6,25 @@ use std::{
     path::Path,
 };
 
-use bevy::ecs::system::Resource;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use serde::{
     de::{value::StrDeserializer, IntoDeserializer, Visitor},
     Deserialize, Serialize,
 };
 
-#[derive(Default, Debug, Serialize, Deserialize, Resource, Clone)]
-pub struct Keymap {
+#[derive(Default, Debug, Serialize, Deserialize, Clone)]
+pub struct ExplorerKeymap {
     pub tree: TreeViewKeymap,
     pub search: SearchViewKeymap,
     pub info: InfoViewKeymap,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct MainScreenKeymap {
+    pub select_next: Key,
+    pub select_previous: Key,
+    pub quit: Key,
+    pub validate: Key,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -202,7 +209,7 @@ impl<'de> Deserialize<'de> for Key {
     }
 }
 
-impl Keymap {
+impl ExplorerKeymap {
     pub fn from_toml_file(path: impl AsRef<Path>) -> Result<Self> {
         let mut file = File::open(path)?;
         let mut buf = String::new();
@@ -312,12 +319,23 @@ impl Default for InfoViewKeymap {
     }
 }
 
+impl Default for MainScreenKeymap {
+    fn default() -> Self {
+        Self {
+            select_next: Key::from_str_unchecked("down"),
+            select_previous: Key::from_str_unchecked("up"),
+            quit: Key::from_str_unchecked("esc"),
+            validate: Key::from_str_unchecked("enter"),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use super::Keymap;
+    use super::ExplorerKeymap;
 
     #[test]
     fn test_default_keymap() {
-        dbg!(Keymap::default());
+        dbg!(ExplorerKeymap::default());
     }
 }

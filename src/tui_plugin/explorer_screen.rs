@@ -10,7 +10,7 @@ use crate::{
     bodies::body_id::BodyID,
     core_plugin::{BodyInfo, CoreEvent, EntityMapping, GameSet},
     engine_plugin::{EngineEvent, Position},
-    keyboard::Keymap,
+    keyboard::ExplorerKeymap,
     tui_plugin::space_map_plugin::OFFSET_STEP,
     utils::ui::{Direction2, Direction4},
 };
@@ -28,6 +28,7 @@ pub struct ExplorerPlugin;
 impl Plugin for ExplorerPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<ExplorerEvent>()
+            .insert_resource(ExplorerScreen)
             .add_systems(Update, handle_explorer_events.in_set(GameSet));
     }
 }
@@ -88,7 +89,7 @@ pub enum WindowEvent {
 impl ScreenContext for ExplorerContext {
     type ScreenEvent = ExplorerEvent;
 
-    type ScreenKeymap = Keymap;
+    type ScreenKeymap = ExplorerKeymap;
 
     fn read_input(
         &mut self,
