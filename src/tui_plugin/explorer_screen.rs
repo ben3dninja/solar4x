@@ -1,4 +1,4 @@
-use bevy::{math::DVec2, prelude::*, utils::HashMap};
+use bevy::{prelude::*, utils::HashMap};
 use bevy_ratatui::event::KeyEvent;
 use crossterm::event::{KeyCode, KeyEvent as CKeyEvent, KeyEventKind};
 use ratatui::{
@@ -8,18 +8,20 @@ use ratatui::{
 
 use crate::{
     bodies::body_id::BodyID,
-    core_plugin::{BodyInfo, CoreEvent, EntityMapping, GameSet},
+    core_plugin::{BodyInfo, EntityMapping, GameSet},
     engine_plugin::{EngineEvent, Position},
     keyboard::ExplorerKeymap,
-    tui_plugin::space_map_plugin::OFFSET_STEP,
-    utils::ui::{Direction2, Direction4},
+    utils::{
+        list::ClampedList,
+        ui::{Direction2, Direction4},
+    },
 };
 
 use super::{
     info_plugin::InfoWidget,
-    search_plugin::{SearchState, SearchViewEvent, SearchWidget},
+    search_plugin::{SearchEvent, SearchState, SearchWidget},
     space_map_plugin::{SpaceMap, SpaceMapEvent},
-    tree_plugin::{TreeState, TreeViewEvent, TreeWidget},
+    tree_plugin::{TreeEvent, TreeState, TreeWidget},
     AppScreen, ChangeAppScreen, ScreenContext,
 };
 
@@ -34,17 +36,17 @@ impl Plugin for ExplorerPlugin {
 }
 
 #[derive(Default, Debug, Clone, Copy)]
-pub enum FocusView {
+pub enum SidePaneMode {
     #[default]
     Tree,
     Search,
 }
 
 pub struct ExplorerContext {
-    pub(super) focus_view: FocusView,
+    pub(super) side_pane_mode: SidePaneMode,
     pub(super) info_toggle: bool,
-    pub(super) tree: TreeState,
-    pub(super) search: SearchState,
+    pub(super) tree_state: TreeState,
+    pub(super) search_state: SearchState,
     pub(super) space_map: SpaceMap,
     pub(super) info: InfoWidget,
     pub(super) focus_body: Entity,
@@ -58,10 +60,10 @@ impl ExplorerContext {
         let primary_data = &bodies.get(primary).unwrap().0 .0;
         let (infos, positions): (Vec<_>, Vec<_>) = bodies.iter().map(|(i, p)| (&i.0, p)).unzip();
         ExplorerContext {
-            focus_view: FocusView::default(),
+            side_pane_mode: SidePaneMode::default(),
             info_toggle: false,
-            tree: TreeState::new(primary_data, Some(primary_data), infos.clone().into_iter()),
-            search: SearchState::new(infos.into_iter()),
+            tree_state: TreeState::new(primary_data, Some(primary_data), infos.clone().into_iter()),
+            search_state: SearchState::new(infos.into_iter()),
             space_map: SpaceMap::new(positions.iter()),
             info: InfoWidget {
                 body_info: primary_data.clone(),
@@ -73,17 +75,17 @@ impl ExplorerContext {
 
 #[derive(Event)]
 pub enum ExplorerEvent {
-    Tree(TreeViewEvent),
-    Search(SearchViewEvent),
+    Tree(TreeEvent),
+    Search(SearchEvent),
     SpaceMap(SpaceMapEvent),
-    View(WindowEvent),
-    Core(CoreEvent),
+    View(ViewEvent),
     Engine(EngineEvent),
 }
 
 #[derive(Debug, Event)]
-pub enum WindowEvent {
-    ChangeFocus(FocusView),
+pub enum ViewEvent {
+    ChangeSidePaneMode(SidePaneMode),
+    ToggleInfo,
 }
 
 impl ScreenContext for ExplorerContext {
@@ -102,20 +104,18 @@ impl ScreenContext for ExplorerContext {
         }
         use Direction2::*;
         use ExplorerEvent::*;
-        use WindowEvent::*;
-        internal_event.send(match self.focus_view {
-            FocusView::Tree => {
+        use ViewEvent::*;
+        internal_event.send(match self.side_pane_mode {
+            SidePaneMode::Tree => {
                 let codes = &keymap.tree;
-                use CoreEvent::*;
                 use Direction4::*;
                 use EngineEvent::*;
                 use SpaceMapEvent::*;
-                use TreeViewEvent::*;
+                use TreeEvent::*;
                 match &key_event {
                     e if codes.select_next.matches(e) => Tree(Select(Down)),
                     e if codes.select_previous.matches(e) => Tree(Select(Up)),
                     e if codes.toggle_expand.matches(e) => Tree(ToggleTreeExpansion),
-                    e if codes.toggle_info.matches(e) => Tree(ToggleInfo),
                     e if codes.zoom_in.matches(e) => SpaceMap(Zoom(Up)),
                     e if codes.zoom_out.matches(e) => SpaceMap(Zoom(Down)),
                     e if codes.map_offset_up.matches(e) => SpaceMap(MapOffset(Front)),
@@ -125,25 +125,28 @@ impl ScreenContext for ExplorerContext {
                     e if codes.map_offset_reset.matches(e) => SpaceMap(MapOffsetReset),
                     e if codes.focus.matches(e) => SpaceMap(FocusBody),
                     e if codes.autoscale.matches(e) => SpaceMap(Autoscale),
-                    e if codes.enter_search.matches(e) => View(ChangeFocus(FocusView::Search)),
-                    e if codes.quit.matches(e) => Core(Quit),
+                    e if codes.enter_search.matches(e) => {
+                        View(ChangeSidePaneMode(SidePaneMode::Search))
+                    }
+                    e if codes.toggle_info.matches(e) => View(ToggleInfo),
+                    e if codes.quit.matches(e) => return Some(ChangeAppScreen::StartMenu),
                     e if codes.speed_up.matches(e) => Engine(EngineSpeed(Up)),
                     e if codes.slow_down.matches(e) => Engine(EngineSpeed(Down)),
                     e if codes.toggle_time.matches(e) => Engine(ToggleTime),
                     _ => return None,
                 }
             }
-            FocusView::Search => {
-                use SearchViewEvent::*;
+            SidePaneMode::Search => {
+                use SearchEvent::*;
                 let codes = &keymap.search;
                 match &key_event {
                     e if codes.delete_char.matches(e) => Search(DeleteChar),
                     e if codes.validate_search.matches(e) => Search(ValidateSearch),
-                    e if codes.move_cursor_left.matches(e) => Search(MoveCursor(Down)),
-                    e if codes.move_cursor_right.matches(e) => Search(MoveCursor(Up)),
-                    e if codes.select_next.matches(e) => Search(SelectSearch(Down)),
-                    e if codes.select_previous.matches(e) => Search(SelectSearch(Up)),
-                    e if codes.leave_search.matches(e) => View(ChangeFocus(FocusView::Tree)),
+                    e if codes.select_next.matches(e) => Search(Select(Down)),
+                    e if codes.select_previous.matches(e) => Search(Select(Up)),
+                    e if codes.leave_search.matches(e) => {
+                        View(ChangeSidePaneMode(SidePaneMode::Tree))
+                    }
                     KeyEvent(CKeyEvent {
                         code: KeyCode::Char(char),
                         ..
@@ -158,7 +161,7 @@ impl ScreenContext for ExplorerContext {
 
 impl ExplorerContext {
     fn update_info(&mut self, mapping: &HashMap<BodyID, Entity>, bodies: &Query<&BodyInfo>) {
-        let id = self.tree.selected_body_id();
+        let id = self.tree_state.selected_body_id();
         if let Ok(body_info) = bodies.get(mapping[&id]) {
             self.info.body_info = body_info.0.clone();
         }
@@ -170,85 +173,57 @@ pub fn handle_explorer_events(
     mut events: EventReader<ExplorerEvent>,
     mapping: Res<EntityMapping>,
     bodies: Query<&BodyInfo>,
-    mut core_events: EventWriter<CoreEvent>,
     mut engine_events: Option<ResMut<Events<EngineEvent>>>,
 ) {
     if let AppScreen::Explorer(context) = screen.as_mut() {
         for event in events.read() {
             match event {
                 ExplorerEvent::Tree(event) => {
-                    use Direction2::*;
-                    use TreeViewEvent::*;
+                    use TreeEvent::*;
                     match event {
                         Select(d) => {
-                            match d {
-                                Down => context.tree.select_next_tree(),
-                                Up => context.tree.select_previous_tree(),
-                            }
+                            context.tree_state.select_adjacent(*d);
                             context.update_info(&mapping.id_mapping, &bodies);
                         }
-                        ToggleTreeExpansion => context.tree.toggle_selection_expansion(),
-                        ToggleInfo => context.info_toggle = !context.info_toggle,
+                        ToggleTreeExpansion => context.tree_state.toggle_selection_expansion(),
                     }
                 }
                 ExplorerEvent::Search(event) => {
-                    use Direction2::*;
-                    use SearchViewEvent::*;
+                    use SearchEvent::*;
                     match event {
                         DeleteChar => {
-                            context.search.delete_char();
-                            context.search.update_search_entries(bodies.iter());
+                            context.search_state.delete_char();
+                            context.search_state.update_search_entries(bodies.iter());
                         }
-                        MoveCursor(d) => match d {
-                            Down => context.search.move_cursor_left(),
-                            Up => context.search.move_cursor_right(),
-                        },
-                        SelectSearch(d) => match d {
-                            Down => context.search.select_next_search(),
-                            Up => context.search.select_previous_search(),
-                        },
+                        Select(d) => context.search_state.select_adjacent(*d),
                         ValidateSearch => {
-                            if let Some(id) = context.search.selected_body_id() {
-                                context.tree.select_body(id);
+                            if let Some(id) = context.search_state.selected_body_id() {
+                                context.tree_state.select_body(id);
                                 context.update_info(&mapping.id_mapping, &bodies);
                             }
-                            context.focus_view = FocusView::Tree;
+                            context.side_pane_mode = SidePaneMode::Tree;
                         }
                         WriteChar(char) => {
-                            context.search.enter_char(*char);
-                            context.search.update_search_entries(bodies.iter());
+                            context.search_state.enter_char(*char);
+                            context.search_state.update_search_entries(bodies.iter());
                         }
                     }
                 }
                 ExplorerEvent::SpaceMap(event) => {
-                    use Direction2::*;
-                    use Direction4::*;
                     use SpaceMapEvent::*;
                     match event {
-                        Zoom(d) => match d {
-                            Down => context.space_map.zoom_level /= 1.5,
-                            Up => context.space_map.zoom_level *= 1.5,
-                        },
-                        MapOffset(d) => {
-                            let zoom = context.space_map.zoom_level;
-                            context.space_map.offset += (match d {
-                                Front | Right => 1.,
-                                _ => -1.,
-                            } * OFFSET_STEP
-                                / zoom)
-                                * match d {
-                                    Front | Back => DVec2::Y,
-                                    _ => DVec2::X,
-                                }
-                        }
-                        MapOffsetReset => context.space_map.offset = DVec2::ZERO,
+                        Zoom(d) => context.space_map.zoom(*d),
+                        MapOffset(d) => context.space_map.offset(*d),
+                        MapOffsetReset => context.space_map.reset_offset(),
                         FocusBody => {
-                            if let Some(entity) =
-                                mapping.id_mapping.get(&context.tree.selected_body_id())
+                            if let Some(entity) = mapping
+                                .id_mapping
+                                .get(&context.tree_state.selected_body_id())
                             {
                                 context.focus_body = *entity;
                                 println!("{entity:?}");
-                                context.tree.focus_body = Some(bodies.get(*entity).unwrap().0.id)
+                                context.tree_state.focus_body =
+                                    Some(bodies.get(*entity).unwrap().0.id)
                             }
                         }
                         Autoscale => {
@@ -272,14 +247,13 @@ pub fn handle_explorer_events(
                     }
                 }
                 ExplorerEvent::View(event) => match *event {
-                    WindowEvent::ChangeFocus(new_focus) => {
-                        context.search.reset_search();
-                        context.focus_view = new_focus
+                    ViewEvent::ChangeSidePaneMode(new_focus) => {
+                        context.search_state.reset_search();
+                        context.side_pane_mode = new_focus
                     }
+
+                    ViewEvent::ToggleInfo => context.info_toggle = !context.info_toggle,
                 },
-                ExplorerEvent::Core(event) => {
-                    core_events.send(*event);
-                }
                 ExplorerEvent::Engine(event) => {
                     engine_events.as_mut().map(|e| e.send(*event));
                 }
@@ -306,10 +280,10 @@ impl StatefulWidget for &ExplorerScreen {
         }
         let chunks = Layout::horizontal(c).split(area);
 
-        match state.focus_view {
-            FocusView::Tree => TreeWidget.render(chunks[0], buf, &mut state.tree),
-            FocusView::Search => {
-                SearchWidget.render(chunks[0], buf, &mut state.search);
+        match state.side_pane_mode {
+            SidePaneMode::Tree => TreeWidget.render(chunks[0], buf, &mut state.tree_state),
+            SidePaneMode::Search => {
+                SearchWidget.render(chunks[0], buf, &mut state.search_state);
             }
         }
         state.space_map.render_ref(chunks[1], buf);
