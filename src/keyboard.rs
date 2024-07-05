@@ -6,21 +6,27 @@ use std::{
     path::Path,
 };
 
+use bevy::ecs::system::Resource;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use serde::{
     de::{value::StrDeserializer, IntoDeserializer, Visitor},
     Deserialize, Serialize,
 };
 
+#[derive(Resource, Default, Clone, Serialize, Deserialize)]
+pub struct Keymap {
+    pub explorer: ExplorerKeymap,
+    pub start_menu: StartMenuKeymap,
+}
+
 #[derive(Default, Debug, Serialize, Deserialize, Clone)]
 pub struct ExplorerKeymap {
     pub tree: TreeViewKeymap,
     pub search: SearchViewKeymap,
-    pub info: InfoViewKeymap,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct MainScreenKeymap {
+pub struct StartMenuKeymap {
     pub select_next: Key,
     pub select_previous: Key,
     pub quit: Key,
@@ -209,7 +215,7 @@ impl<'de> Deserialize<'de> for Key {
     }
 }
 
-impl ExplorerKeymap {
+impl Keymap {
     pub fn from_toml_file(path: impl AsRef<Path>) -> Result<Self> {
         let mut file = File::open(path)?;
         let mut buf = String::new();
@@ -264,11 +270,6 @@ pub struct SearchViewKeymap {
     pub delete_char: Key,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct InfoViewKeymap {
-    pub leave_info: Key,
-}
-
 impl Default for TreeViewKeymap {
     fn default() -> Self {
         let (w, a) = ("w", "a");
@@ -311,15 +312,7 @@ impl Default for SearchViewKeymap {
     }
 }
 
-impl Default for InfoViewKeymap {
-    fn default() -> Self {
-        Self {
-            leave_info: Key::from_str_unchecked("i"),
-        }
-    }
-}
-
-impl Default for MainScreenKeymap {
+impl Default for StartMenuKeymap {
     fn default() -> Self {
         Self {
             select_next: Key::from_str_unchecked("down"),

@@ -1,4 +1,4 @@
-[tree]
+[explorer.tree]
 select_next = "down"
 select_previous = "up"
 zoom_in = "+"
@@ -18,7 +18,7 @@ slow_down = "<"
 toggle_time = "t"
 toggle_info = "i"
 
-[search]
+[explorer.search]
 move_cursor_right = "right"
 move_cursor_left = "left"
 select_next = "down"
@@ -27,5 +27,8 @@ leave_search = "esc"
 validate_search = "enter"
 delete_char = "backspace"
 
-[info]
-leave_info = "i"
+[start_menu]
+select_next = "down"
+select_previous = "up"
+quit = "esc"
+validate = "enter"

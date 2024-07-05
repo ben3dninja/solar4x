@@ -4,7 +4,7 @@ use ratatui::widgets::{List, ListState, StatefulWidget};
 
 use crate::{
     core_plugin::CoreEvent,
-    keyboard::MainScreenKeymap,
+    keyboard::StartMenuKeymap,
     utils::{
         list::{select_next_clamp, select_previous_clamp},
         ui::Direction2,
@@ -19,33 +19,33 @@ const SCREENS: [(ChangeAppScreen, &str); 3] = [
     (ChangeAppScreen::Explorer, "Explore"),
 ];
 
-pub struct MainScreenPlugin;
+pub struct StartMenuPlugin;
 
 #[derive(Event)]
-pub enum MainScreenEvent {
+pub enum StartMenuEvent {
     Quit,
     Select(Direction2),
 }
 
-pub struct MainScreenContext {
+pub struct StartMenuContext {
     list_state: ListState,
 }
 
 #[derive(Resource)]
-pub struct MainScreen;
+pub struct StartMenu;
 
-impl Plugin for MainScreenPlugin {
+impl Plugin for StartMenuPlugin {
     fn build(&self, app: &mut App) {
-        app.add_event::<MainScreenEvent>()
-            .insert_resource(MainScreen)
-            .add_systems(Update, handle_main_screen_events);
+        app.add_event::<StartMenuEvent>()
+            .insert_resource(StartMenu)
+            .add_systems(Update, handle_start_menu_events);
     }
 }
 
-impl ScreenContext for MainScreenContext {
-    type ScreenEvent = MainScreenEvent;
+impl ScreenContext for StartMenuContext {
+    type ScreenEvent = StartMenuEvent;
 
-    type ScreenKeymap = MainScreenKeymap;
+    type ScreenKeymap = StartMenuKeymap;
 
     fn read_input(
         &mut self,
@@ -57,7 +57,7 @@ impl ScreenContext for MainScreenContext {
             return None;
         }
         use Direction2::*;
-        use MainScreenEvent::*;
+        use StartMenuEvent::*;
 
         internal_event.send(match key_event {
             e if keymap.select_next.matches(e) => Select(Down),
@@ -69,7 +69,7 @@ impl ScreenContext for MainScreenContext {
         None
     }
 }
-impl MainScreenContext {
+impl StartMenuContext {
     fn get_next_screen(&self) -> ChangeAppScreen {
         match self.list_state.selected().unwrap() {
             i if i < SCREENS.len() => SCREENS[i].0,
@@ -78,7 +78,7 @@ impl MainScreenContext {
     }
 }
 
-impl Default for MainScreenContext {
+impl Default for StartMenuContext {
     fn default() -> Self {
         Self {
             list_state: ListState::default().with_selected(Some(0)),
@@ -86,18 +86,18 @@ impl Default for MainScreenContext {
     }
 }
 
-pub fn handle_main_screen_events(
+pub fn handle_start_menu_events(
     mut screen: ResMut<AppScreen>,
-    mut events: EventReader<MainScreenEvent>,
+    mut events: EventReader<StartMenuEvent>,
     mut core_events: EventWriter<CoreEvent>,
 ) {
     if let AppScreen::StartMenu(context) = screen.as_mut() {
         for event in events.read() {
             match event {
-                MainScreenEvent::Quit => {
+                StartMenuEvent::Quit => {
                     core_events.send(CoreEvent::Quit);
                 }
-                MainScreenEvent::Select(d) => match d {
+                StartMenuEvent::Select(d) => match d {
                     Direction2::Down => {
                         select_next_clamp(&mut context.list_state, SCREENS.len() - 1)
                     }
@@ -108,8 +108,8 @@ pub fn handle_main_screen_events(
     }
 }
 
-impl StatefulWidget for &MainScreen {
-    type State = MainScreenContext;
+impl StatefulWidget for &StartMenu {
+    type State = StartMenuContext;
 
     fn render(
         self,
