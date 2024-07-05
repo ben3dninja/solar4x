@@ -25,8 +25,8 @@ use crate::{
 
 use super::AppScreen;
 
-pub const OFFSET_STEP: f64 = 1e8;
-
+const OFFSET_STEP: f64 = 1e8;
+const ZOOM_STEP: f64 = 1.5;
 pub struct SpaceMapPlugin;
 
 impl Plugin for SpaceMapPlugin {
@@ -47,7 +47,7 @@ pub enum SpaceMapEvent {
 #[derive(Default, Debug)]
 pub struct SpaceMap {
     circles: Vec<Circle>,
-    pub offset: DVec2,
+    pub offset_amount: DVec2,
     pub zoom_level: f64,
     pub system_size: f64,
 }
@@ -80,10 +80,10 @@ fn update_space_map(query: Query<(&Position, &BodyInfo)>, mut screen: ResMut<App
     if let AppScreen::Explorer(ctx) = screen.as_mut() {
         let mut circles = Vec::new();
         let &Position(focus_pos) = query.get(ctx.focus_body).unwrap().0;
-        let selected = ctx.tree.selected_body_id();
+        let selected = ctx.tree_state.selected_body_id();
         for (&Position(pos), BodyInfo(data)) in query.iter() {
-            let proj =
-                project_onto_plane(pos - focus_pos, (DVec3::X, DVec3::Y)) - ctx.space_map.offset;
+            let proj = project_onto_plane(pos - focus_pos, (DVec3::X, DVec3::Y))
+                - ctx.space_map.offset_amount;
             let color = match data.body_type {
                 _ if data.id == selected => Color::Red,
                 BodyType::Star => Color::Yellow,
@@ -110,10 +110,42 @@ impl SpaceMap {
             .unwrap();
         SpaceMap {
             circles: Vec::new(),
-            offset: DVec2::ZERO,
+            offset_amount: DVec2::ZERO,
             zoom_level: 1.,
             system_size,
         }
+    }
+
+    pub fn zoom_in(&mut self) {
+        self.zoom_level *= ZOOM_STEP;
+    }
+
+    pub fn zoom_out(&mut self) {
+        self.zoom_level /= ZOOM_STEP;
+    }
+
+    pub fn zoom(&mut self, direction: Direction2) {
+        match direction {
+            Direction2::Up => self.zoom_in(),
+            Direction2::Down => self.zoom_out(),
+        }
+    }
+
+    pub fn offset(&mut self, direction: Direction4) {
+        use Direction4::*;
+        self.offset_amount += (match direction {
+            Front | Right => 1.,
+            _ => -1.,
+        } * OFFSET_STEP
+            / self.zoom_level)
+            * match direction {
+                Front | Back => DVec2::Y,
+                _ => DVec2::X,
+            }
+    }
+
+    pub fn reset_offset(&mut self) {
+        self.offset_amount = DVec2::ZERO;
     }
 }
 
@@ -180,7 +212,7 @@ mod tests {
         if let AppScreen::Explorer(ctx) = app.world.resource_mut::<AppScreen>().as_mut() {
             println!("{:?} HAHAHAHA", ctx.focus_body);
 
-            ctx.tree.select_body(earth);
+            ctx.tree_state.select_body(earth);
         }
         app.update();
 

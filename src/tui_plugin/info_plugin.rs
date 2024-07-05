@@ -6,11 +6,6 @@ use ratatui::{
 
 use crate::bodies::body_data::BodyData;
 
-
-
-#[derive(Resource)]
-pub struct InfoToggle(pub bool);
-
 #[derive(Resource)]
 pub struct InfoWidget {
     pub body_info: BodyData,

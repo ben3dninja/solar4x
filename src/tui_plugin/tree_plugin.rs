@@ -8,21 +8,14 @@ use ratatui::{
 
 use crate::{
     bodies::{body_data::BodyData, body_id::BodyID},
-    utils::{
-        list::{select_next_clamp, select_previous_clamp},
-        ui::Direction2,
-    },
+    utils::{list::ClampedList, ui::Direction2},
 };
 
 #[derive(Debug, Event)]
-pub enum TreeViewEvent {
+pub enum TreeEvent {
     Select(Direction2),
     ToggleTreeExpansion,
-    ToggleInfo,
 }
-
-#[derive(Event, Default)]
-pub struct ChangeSelectionEvent;
 
 #[derive(Debug, Clone)]
 struct TreeEntry {
@@ -42,7 +35,16 @@ pub struct TreeState {
     list_state: ListState,
 }
 
-#[derive(Resource)]
+impl ClampedList for TreeState {
+    fn list_state(&mut self) -> &mut ListState {
+        &mut self.list_state
+    }
+
+    fn len(&mut self) -> usize {
+        self.visible_tree_entries.len()
+    }
+}
+
 pub struct TreeWidget;
 
 impl StatefulWidget for TreeWidget {
@@ -269,14 +271,6 @@ impl TreeState {
         true
     }
 
-    pub fn select_next_tree(&mut self) {
-        select_next_clamp(&mut self.list_state, self.visible_tree_entries.len() - 1)
-    }
-
-    pub fn select_previous_tree(&mut self) {
-        select_previous_clamp(&mut self.list_state, 0)
-    }
-
     pub fn selected_body_id(&self) -> BodyID {
         self.nth_visible_entry(self.list_state.selected().unwrap())
             .unwrap()
@@ -332,7 +326,7 @@ mod tests {
         app.update();
         let world = &app.world;
         if let AppScreen::Explorer(ctx) = world.resource::<AppScreen>() {
-            let tree = &ctx.tree;
+            let tree = &ctx.tree_state;
             assert_eq!(tree.system_tree.len(), 9);
             assert!(tree.system_tree[0].is_last_child);
             assert!(tree.system_tree[8].is_last_child);
@@ -349,7 +343,7 @@ mod tests {
         app.update();
         let world = &mut app.world;
         if let AppScreen::Explorer(ctx) = world.resource_mut::<AppScreen>().as_mut() {
-            let tree = &mut ctx.tree;
+            let tree = &mut ctx.tree_state;
             let earth = "terre".into();
             tree.select_body(earth);
             assert_eq!(tree.selected_body_id(), earth)
@@ -364,7 +358,7 @@ mod tests {
         app.update();
         let world = &mut app.world;
         if let AppScreen::Explorer(ctx) = world.resource_mut::<AppScreen>().as_mut() {
-            let tree = &mut ctx.tree;
+            let tree = &mut ctx.tree_state;
             tree.toggle_selection_expansion();
             assert_eq!(tree.visible_tree_entries.len(), 9);
             assert!(tree.nth_visible_entry(0).unwrap().is_expanded);
@@ -389,7 +383,7 @@ mod tests {
         app.update();
         let world = &app.world;
         if let AppScreen::Explorer(ctx) = world.resource::<AppScreen>() {
-            let tree = &ctx.tree;
+            let tree = &ctx.tree_state;
 
             assert_eq!(
                 tree.compute_deepness_map(tree.index_of("lune".into()).unwrap()),
@@ -409,7 +403,7 @@ mod tests {
         app.update();
         let world = &mut app.world;
         if let AppScreen::Explorer(ctx) = world.resource_mut::<AppScreen>().as_mut() {
-            let tree_state = &mut ctx.tree;
+            let tree_state = &mut ctx.tree_state;
             assert_eq!(tree_state.build_deepness_prefix(0), "");
             dbg!(&tree_state.visible_tree_entries);
             tree_state.toggle_selection_expansion();
