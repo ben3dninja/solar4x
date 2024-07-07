@@ -314,15 +314,15 @@ mod tests {
 
     use crate::{
         bodies::body_data::BodyType,
+        client_plugin::ClientPlugin,
         core_plugin::BodiesConfig,
-        standalone_plugin::StandalonePlugin,
         tui_plugin::{AppScreen, TuiPlugin},
     };
 
     #[test]
     fn test_initialize_tree() {
         let mut app = App::new();
-        app.add_plugins((StandalonePlugin::default(), TuiPlugin::testing()));
+        app.add_plugins((ClientPlugin::default(), TuiPlugin::testing()));
         app.update();
         let world = &app.world;
         if let AppScreen::Explorer(ctx) = world.resource::<AppScreen>() {
@@ -338,7 +338,7 @@ mod tests {
     #[test]
     fn test_select_body() {
         let mut app = App::new();
-        app.add_plugins((StandalonePlugin::default(), TuiPlugin::testing()));
+        app.add_plugins((ClientPlugin::default(), TuiPlugin::testing()));
         app.update();
         app.update();
         let world = &mut app.world;
@@ -353,7 +353,7 @@ mod tests {
     #[test]
     fn test_toggle_entry_expansion() {
         let mut app = App::new();
-        app.add_plugins((StandalonePlugin::default(), TuiPlugin::testing()));
+        app.add_plugins((ClientPlugin::default(), TuiPlugin::testing()));
         app.update();
         app.update();
         let world = &mut app.world;
@@ -376,7 +376,7 @@ mod tests {
     fn test_deepness_map() {
         let mut app = App::new();
         app.add_plugins((
-            StandalonePlugin(BodiesConfig::SmallestBodyType(BodyType::Moon)),
+            ClientPlugin::testing(BodiesConfig::SmallestBodyType(BodyType::Moon)),
             TuiPlugin::testing(),
         ));
         app.update();
@@ -396,7 +396,7 @@ mod tests {
     fn test_build_deepness_prefix() {
         let mut app = App::new();
         app.add_plugins((
-            StandalonePlugin(BodiesConfig::SmallestBodyType(BodyType::Moon)),
+            ClientPlugin::testing(BodiesConfig::SmallestBodyType(BodyType::Moon)),
             TuiPlugin::testing(),
         ));
         app.update();

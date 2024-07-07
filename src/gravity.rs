@@ -13,7 +13,7 @@ pub struct GravityPlugin;
 impl Plugin for GravityPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
-            OnEnter(AppState::Game),
+            OnEnter(AppState::Loaded),
             setup_hill_spheres.after(build_system),
         )
         .add_systems(FixedUpdate, (apply_gravity_force, integrate_positions));

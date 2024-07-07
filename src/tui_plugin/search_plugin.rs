@@ -153,8 +153,8 @@ mod tests {
 
     use crate::{
         bodies::body_data::BodyType,
+        client_plugin::ClientPlugin,
         core_plugin::BodiesConfig,
-        standalone_plugin::StandalonePlugin,
         tui_plugin::{
             explorer_screen::ExplorerEvent, search_plugin::SearchEvent, AppScreen, TuiPlugin,
         },
@@ -164,7 +164,7 @@ mod tests {
     fn test_search() {
         let mut app = App::new();
         app.add_plugins((
-            StandalonePlugin(BodiesConfig::SmallestBodyType(BodyType::Moon)),
+            ClientPlugin::testing(BodiesConfig::SmallestBodyType(BodyType::Moon)),
             TuiPlugin::testing(),
         ));
         app.update();
