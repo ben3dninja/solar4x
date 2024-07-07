@@ -8,7 +8,8 @@ use ratatui::{
 
 use crate::{
     bodies::body_id::BodyID,
-    core_plugin::{BodyInfo, EntityMapping, GameSet},
+    client_plugin::ClientMode,
+    core_plugin::{AppState, BodyInfo, EntityMapping, PrimaryBody, SimulationSet, UiInitSet},
     engine_plugin::{EngineEvent, Position},
     keyboard::ExplorerKeymap,
     utils::{
@@ -18,20 +19,27 @@ use crate::{
 };
 
 use super::{
-    info_plugin::InfoWidget,
-    search_plugin::{SearchEvent, SearchMatcher, SearchState, SearchWidget},
+    info_widget::InfoWidget,
+    search_plugin::{SearchEvent, SearchMatcher, SearchPlugin, SearchState, SearchWidget},
     space_map_plugin::{SpaceMap, SpaceMapEvent},
-    tree_plugin::{TreeEvent, TreeState, TreeWidget},
+    tree_widget::{TreeEvent, TreeState, TreeWidget},
     AppScreen, ChangeAppScreen, ScreenContext,
 };
 
-pub struct ExplorerPlugin;
+pub struct ExplorerScreenPlugin;
 
-impl Plugin for ExplorerPlugin {
+impl Plugin for ExplorerScreenPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<ExplorerEvent>()
             .insert_resource(ExplorerScreen)
-            .add_systems(Update, handle_explorer_events.in_set(GameSet));
+            .add_plugins(SearchPlugin)
+            .add_systems(Update, handle_explorer_events.in_set(SimulationSet))
+            .add_systems(
+                OnEnter(AppState::Loaded),
+                change_screen
+                    .in_set(UiInitSet)
+                    .run_if(in_state(ClientMode::Explorer)),
+            );
     }
 }
 
@@ -244,6 +252,14 @@ pub fn handle_explorer_events(
             }
         }
     }
+}
+
+fn change_screen<'a>(
+    mut screen: ResMut<AppScreen>,
+    primary: Query<Entity, With<PrimaryBody>>,
+    bodies: Query<(&'a BodyInfo, &'a Position)>,
+) {
+    *screen = AppScreen::Explorer(ExplorerContext::new(primary.single(), &bodies));
 }
 
 #[derive(Resource)]

@@ -2,27 +2,19 @@ use bevy::prelude::*;
 use bevy_ratatui::{
     error::exit_on_error, event::KeyEvent, terminal::RatatuiContext, RatatuiPlugins,
 };
-use explorer_screen::ExplorerPlugin;
-use main_screen::{StartMenu, StartMenuContext, StartMenuEvent, StartMenuPlugin};
+use explorer_screen::ExplorerScreenPlugin;
+use start_menu::{StartMenu, StartMenuContext, StartMenuEvent, StartMenuPlugin};
 
-use crate::{
-    core_plugin::{BodyInfo, GameSet, PrimaryBody},
-    engine_plugin::Position,
-    keyboard::Keymap,
-};
+use crate::{client_plugin::ClientMode, keyboard::Keymap};
 
-use self::{
-    explorer_screen::{ExplorerContext, ExplorerEvent, ExplorerScreen},
-    search_plugin::SearchPlugin,
-    space_map_plugin::SpaceMapPlugin,
-};
+use self::explorer_screen::{ExplorerContext, ExplorerEvent, ExplorerScreen};
 
 pub mod explorer_screen;
-pub mod info_plugin;
-pub mod main_screen;
+pub mod info_widget;
 pub mod search_plugin;
 pub mod space_map_plugin;
-pub mod tree_plugin;
+pub mod start_menu;
+pub mod tree_widget;
 
 #[derive(Default)]
 pub struct TuiPlugin {
@@ -46,30 +38,23 @@ impl Plugin for TuiPlugin {
         if !self.headless {
             app.add_plugins(RatatuiPlugins::default())
                 .insert_resource(self.keymap.clone())
-                .add_systems(PostUpdate, render.pipe(exit_on_error).in_set(GameSet))
-                .add_systems(
-                    PreUpdate,
-                    handle_input.before(change_screen).in_set(GameSet),
-                );
+                .add_systems(PostUpdate, render.pipe(exit_on_error))
+                .add_systems(PreUpdate, handle_input.before(change_screen));
         }
-        app.add_plugins((
-            StartMenuPlugin,
-            ExplorerPlugin,
-            SearchPlugin,
-            SpaceMapPlugin,
-        ))
-        .insert_resource(AppScreen::default())
-        .add_event::<ChangeAppScreen>()
-        .add_systems(PreUpdate, change_screen.in_set(GameSet));
+        app.add_plugins((StartMenuPlugin, ExplorerScreenPlugin))
+            .insert_resource(AppScreen::default())
+            .add_event::<ChangeAppScreen>()
+            .add_systems(PreUpdate, change_screen);
         if self.start_in_explorer {
+            // Since we only send the event and don't do the change manually, we have to wait for 2 schedule updates to get the new screen.
+            // Hence the initial double update call in the tests
             app.world.send_event(ChangeAppScreen::Explorer);
         }
     }
 }
 
-#[derive(SystemSet, Debug, Clone, Hash, PartialEq, Eq)]
-pub struct UiInitSet;
-
+/// A resource storing the current screen and its associated context, with only one context valid at a time
+/// In systems, checking the screen is done at the same time as acquiring the context so no run conditions are needed
 #[allow(clippy::large_enum_variant)]
 #[derive(Resource)]
 pub enum AppScreen {
@@ -127,14 +112,16 @@ fn handle_input(
 fn change_screen<'a>(
     mut screen: ResMut<AppScreen>,
     mut next_screen: EventReader<ChangeAppScreen>,
-    primary: Query<Entity, With<PrimaryBody>>,
-    bodies: Query<(&'a BodyInfo, &'a Position)>,
+    mut next_client_mode: ResMut<NextState<ClientMode>>,
 ) {
     for s in next_screen.read() {
-        *screen = match s {
-            ChangeAppScreen::StartMenu => AppScreen::StartMenu(StartMenuContext::default()),
+        match s {
+            ChangeAppScreen::StartMenu => {
+                next_client_mode.set(ClientMode::None);
+                *screen = AppScreen::StartMenu(StartMenuContext::default());
+            }
             ChangeAppScreen::Explorer => {
-                AppScreen::Explorer(ExplorerContext::new(primary.single(), &bodies))
+                next_client_mode.set(ClientMode::Explorer);
             }
             _ => todo!(),
         }
@@ -145,10 +132,10 @@ fn render(
     mut ctx: ResMut<RatatuiContext>,
     mut screen: ResMut<AppScreen>,
     explorer_screen: Res<ExplorerScreen>,
-    main_screen: Res<StartMenu>,
+    start_menu: Res<StartMenu>,
 ) -> color_eyre::Result<()> {
     ctx.draw(|f| match screen.as_mut() {
-        AppScreen::StartMenu(ctx) => f.render_stateful_widget(main_screen.as_ref(), f.size(), ctx),
+        AppScreen::StartMenu(ctx) => f.render_stateful_widget(start_menu.as_ref(), f.size(), ctx),
         AppScreen::Explorer(ctx) => {
             f.render_stateful_widget(explorer_screen.as_ref(), f.size(), ctx)
         }
@@ -161,14 +148,14 @@ mod tests {
     use bevy::app::App;
 
     use crate::{
-        standalone_plugin::StandalonePlugin,
+        client_plugin::ClientPlugin,
         tui_plugin::{AppScreen, TuiPlugin},
     };
 
     #[test]
     fn test_change_screen() {
         let mut app = App::new();
-        app.add_plugins((StandalonePlugin::default(), TuiPlugin::testing()));
+        app.add_plugins((ClientPlugin::default(), TuiPlugin::testing()));
         app.update();
         app.update();
         let world = &mut app.world;

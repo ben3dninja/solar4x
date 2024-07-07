@@ -19,8 +19,8 @@ use crate::{
         body_data::{BodyData, BodyType},
         body_id::BodyID,
     },
-    core_plugin::{BodyInfo, GameSet},
-    engine_plugin::Position,
+    core_plugin::BodyInfo,
+    engine_plugin::{Position, ToggleTime},
     utils::{
         algebra::project_onto_plane,
         ui::{Direction2, Direction4},
@@ -35,7 +35,11 @@ pub struct SpaceMapPlugin;
 
 impl Plugin for SpaceMapPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(Update, update_space_map.in_set(GameSet));
+        app.add_systems(
+            Update,
+            // No need to ask it to run only in explorer screen as the check is done inside the function to acquire the context
+            update_space_map.run_if(resource_equals(ToggleTime(true))),
+        );
     }
 }
 
@@ -183,9 +187,9 @@ mod tests {
 
     use crate::{
         bodies::body_data::BodyType,
-        core_plugin::{BodiesConfig, BodyInfo, GameSet},
+        client_plugin::ClientPlugin,
+        core_plugin::{BodiesConfig, BodyInfo, SimulationSet},
         engine_plugin::{update_global, update_local, update_time, EnginePlugin},
-        standalone_plugin::StandalonePlugin,
         tui_plugin::{
             explorer_screen::ExplorerEvent,
             space_map_plugin::{update_space_map, SpaceMapEvent},
@@ -197,14 +201,14 @@ mod tests {
     fn test_update_space_map() {
         let mut app = App::new();
         app.add_plugins((
-            StandalonePlugin(BodiesConfig::SmallestBodyType(BodyType::Planet)),
+            ClientPlugin::testing(BodiesConfig::SmallestBodyType(BodyType::Planet)),
             EnginePlugin,
             TuiPlugin::testing(),
         ))
         .add_systems(
             Update,
             (update_time, update_local, update_global, update_space_map)
-                .in_set(GameSet)
+                .in_set(SimulationSet)
                 .chain(),
         );
         app.update();
@@ -222,11 +226,7 @@ mod tests {
     #[test]
     fn test_change_focus_body() {
         let mut app = App::new();
-        app.add_plugins((
-            StandalonePlugin::default(),
-            EnginePlugin,
-            TuiPlugin::testing(),
-        ));
+        app.add_plugins((ClientPlugin::default(), EnginePlugin, TuiPlugin::testing()));
         app.update();
         app.update();
         let earth = "terre".into();

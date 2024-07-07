@@ -1,36 +1,41 @@
-use std::{
-    // env,
-    net::{IpAddr, Ipv4Addr},
-};
+use std::env;
 
 use bevy::app::{App, ScheduleRunnerPlugin};
 use rust_space_trading::{
-    client_plugin::{ClientNetworkInfo, ClientPlugin},
+    bodies::body_data::BodyType,
+    client_plugin::ClientPlugin,
+    core_plugin::BodiesConfig,
     engine_plugin::EnginePlugin,
-    // input_plugin::InputPlugin,
     tui_plugin::{
         // search_plugin::SearchPlugin,
         space_map_plugin::SpaceMapPlugin,
         // tree_plugin::TreePlugin,
         TuiPlugin,
     },
-    // utils::args::get_keymap,
+    utils::args::get_keymap, // utils::args::get_keymap,
 };
 
 fn main() {
+    #[allow(unused_variables)]
+    let explorer_bodies_config = BodiesConfig::SmallestBodyType(BodyType::Moon);
+    #[cfg(feature = "asteroids")]
+    let explorer_bodies_config = BodiesConfig::SmallestBodyType(BodyType::Comet);
     App::new()
         .add_plugins((
-            ClientPlugin(ClientNetworkInfo {
-                server_address: (IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 6000),
-                client_address: (IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 0),
-            }),
+            ClientPlugin {
+                explorer_bodies_config,
+                ..Default::default()
+            },
             ScheduleRunnerPlugin::default(),
             EnginePlugin,
             // GravityPlugin,
             // InputPlugin {
             //     keymap: get_keymap(env::args()).unwrap(),
             // },
-            TuiPlugin::default(),
+            TuiPlugin {
+                keymap: get_keymap(env::args()).unwrap(),
+                ..Default::default()
+            },
             // TreePlugin,
             SpaceMapPlugin,
             // SearchPlugin,

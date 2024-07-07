@@ -1,4 +1,3 @@
-use bevy::prelude::*;
 use ratatui::{
     buffer::Buffer,
     widgets::{Block, Borders, Paragraph, WidgetRef},
@@ -6,7 +5,6 @@ use ratatui::{
 
 use crate::bodies::body_data::BodyData;
 
-#[derive(Resource)]
 pub struct InfoWidget {
     pub body_info: BodyData,
 }
