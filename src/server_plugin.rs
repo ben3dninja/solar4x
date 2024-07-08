@@ -17,7 +17,7 @@ use crate::{
 };
 
 pub struct ServerPlugin {
-    pub server_address: (IpAddr, u16),
+    pub server_address: ServerNetworkInfo,
     pub config: BodiesConfig,
 }
 
@@ -25,16 +25,14 @@ impl Plugin for ServerPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins((CorePlugin, QuinnetServerPlugin::default()))
             .add_event::<ClientConnectionEvent>()
-            .insert_resource(ServerNetworkInfo {
-                server_address: self.server_address,
-            })
+            .insert_resource(self.server_address.clone())
             .insert_resource(self.config.clone())
+            .insert_resource(Clients::default())
             .insert_resource(PeriodicUpdatesTimer(Timer::from_seconds(
                 1.,
                 TimerMode::Repeating,
             )))
-            .insert_resource(Clients::default())
-            .add_systems(Startup, start_connection.pipe(exit_on_error))
+            .add_systems(Startup, start_endpoint.pipe(exit_on_error))
             .add_systems(
                 Update,
                 (
@@ -48,9 +46,7 @@ impl Plugin for ServerPlugin {
 }
 
 #[derive(Clone, Resource)]
-pub struct ServerNetworkInfo {
-    pub server_address: (IpAddr, u16),
-}
+pub struct ServerNetworkInfo(pub IpAddr, pub u16);
 
 #[derive(Resource, Default)]
 struct Clients(Vec<ClientId>);
@@ -64,13 +60,12 @@ enum ClientConnectionEvent {
 #[derive(Resource)]
 struct PeriodicUpdatesTimer(Timer);
 
-fn start_connection(
+fn start_endpoint(
     mut server: ResMut<QuinnetServer>,
     network_info: Res<ServerNetworkInfo>,
 ) -> color_eyre::Result<()> {
-    let ServerNetworkInfo { server_address } = *network_info;
     server.start_endpoint(
-        ServerEndpointConfiguration::from_ip(server_address.0, server_address.1),
+        ServerEndpointConfiguration::from_ip(network_info.0, network_info.1),
         CertificateRetrievalMode::GenerateSelfSigned {
             server_hostname: "rust_space_trading_server".into(),
         },
