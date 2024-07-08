@@ -40,3 +40,17 @@ pub fn rotate(u: DVec2, o: f64, O: f64, I: f64) -> DVec3 {
 pub fn project_onto_plane(v: DVec3, basis: (DVec3, DVec3)) -> DVec2 {
     DVec2::new(v.dot(basis.0), v.dot(basis.1))
 }
+
+pub fn convert_orbital_to_global(
+    thrust: DVec3,
+    origin: DVec3,
+    origin_speed: DVec3,
+    pos: DVec3,
+    speed: DVec3,
+) -> DVec3 {
+    let v1 = (pos - origin).normalize();
+    let v2 = (speed - origin_speed).try_normalize().unwrap_or(DVec3::Z);
+    let v3 = v1.cross(v2);
+
+    thrust.x * v1 + thrust.y * v2 + thrust.z * v3
+}
