@@ -3604,6 +3604,7 @@ dependencies = [
 name = "rust_space_trading"
 version = "0.1.0"
 dependencies = [
+ "arrayvec",
  "bevy",
  "bevy_quinnet",
  "bevy_ratatui",
