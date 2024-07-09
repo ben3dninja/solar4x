@@ -1,21 +1,5 @@
-use std::f64::consts::PI;
-
 use bevy::math::{DVec2, DVec3};
-use nalgebra::Vector3;
 
-pub fn inorm(v: Vector3<i64>) -> i64 {
-    ((v.x.pow(2) + v.y.pow(2) + v.z.pow(2)) as f64)
-        .sqrt()
-        .round() as i64
-}
-
-pub fn rads(x: f64) -> f64 {
-    x * PI / 180.
-}
-
-pub fn degs(x: f64) -> f64 {
-    x * 180. / PI
-}
 pub fn mod_180(x: f64) -> f64 {
     let x = x % 360.;
     if x > 180. {
@@ -41,6 +25,7 @@ pub fn project_onto_plane(v: DVec3, basis: (DVec3, DVec3)) -> DVec2 {
     DVec2::new(v.dot(basis.0), v.dot(basis.1))
 }
 
+/// Transforms radial/orthoradial/perp coordinates into absolute coordinates
 pub fn convert_orbital_to_global(
     thrust: DVec3,
     origin: DVec3,

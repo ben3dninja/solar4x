@@ -11,7 +11,7 @@ use crate::{
         build_system, AppState, BodiesMapping, BodyInfo, PrimaryBody, SimulationSet, SystemInitSet,
     },
     utils::{
-        algebra::{degs, mod_180, rads, rotate},
+        algebra::{mod_180, rotate},
         ui::Direction2,
     },
 };
@@ -156,17 +156,17 @@ impl EllipticalOrbit {
         self.update_M(time);
         let M = self.mean_anomaly;
         let e = self.eccentricity;
-        let ed = degs(e);
-        let mut E = M + ed * rads(M).sin();
+        let ed = e.to_degrees();
+        let mut E = M + ed * M.to_radians().sin();
         // TODO : change formulas to use radians instead
-        let mut dM = M - (E - ed * rads(E).sin());
-        let mut dE = dM / (1. - e * rads(E).cos());
+        let mut dM = M - (E - ed * E.to_radians().sin());
+        let mut dE = dM / (1. - e * E.to_radians().cos());
         for _ in 0..10 {
             if dE.abs() <= E_TOLERANCE {
                 break;
             }
-            dM = M - (E - ed * rads(E).sin());
-            dE = dM / (1. - e * rads(E).cos());
+            dM = M - (E - ed * E.to_radians().sin());
+            dE = dM / (1. - e * E.to_radians().cos());
             E += dE;
         }
         self.eccentric_anomaly = E;
@@ -174,7 +174,7 @@ impl EllipticalOrbit {
     fn update_orb_pos(&mut self, time: f64) {
         self.update_E(time);
         let a = self.semimajor_axis;
-        let E = rads(self.eccentric_anomaly);
+        let E = self.eccentric_anomaly.to_radians();
         let e = self.eccentricity;
         let x = a * (E.cos() - e);
         let y = a * (1. - e * e).sqrt() * E.sin();
@@ -191,9 +191,9 @@ impl EllipticalOrbit {
 
     pub fn update_pos(&mut self, time: f64) {
         self.update_orb_pos(time);
-        let o = rads(self.arg_periapsis);
-        let O = rads(self.long_asc_node);
-        let I = rads(self.inclination);
+        let o = self.arg_periapsis.to_radians();
+        let O = self.long_asc_node.to_radians();
+        let I = self.inclination.to_radians();
         self.local_pos = rotate(self.orbital_position, o, O, I);
         self.local_velocity = rotate(self.orbital_velocity, o, O, I);
     }
