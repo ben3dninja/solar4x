@@ -19,15 +19,15 @@ pub mod tree_widget;
 #[derive(Default)]
 pub struct TuiPlugin {
     pub headless: bool,
-    pub start_in_explorer: bool,
+    pub change_initial_screen: Option<ChangeAppScreen>,
     pub keymap: Keymap,
 }
 
 impl TuiPlugin {
-    pub fn testing() -> TuiPlugin {
+    pub fn testing(change_initial_screen: Option<ChangeAppScreen>) -> TuiPlugin {
         TuiPlugin {
             headless: true,
-            start_in_explorer: true,
+            change_initial_screen,
             ..default()
         }
     }
@@ -45,10 +45,10 @@ impl Plugin for TuiPlugin {
             .insert_resource(AppScreen::default())
             .add_event::<ChangeAppScreen>()
             .add_systems(PreUpdate, change_screen);
-        if self.start_in_explorer {
+        if let Some(s) = self.change_initial_screen {
             // Since we only send the event and don't do the change manually, we have to wait for 2 schedule updates to get the new screen.
-            // Hence the initial double update call in the tests
-            app.world.send_event(ChangeAppScreen::Explorer);
+            // Hence the initial doungeAppScreeble update call in the tests
+            app.world.send_event(s);
         }
     }
 }
@@ -149,13 +149,16 @@ mod tests {
 
     use crate::{
         client_plugin::ClientPlugin,
-        tui_plugin::{AppScreen, TuiPlugin},
+        tui_plugin::{AppScreen, ChangeAppScreen, TuiPlugin},
     };
 
     #[test]
     fn test_change_screen() {
         let mut app = App::new();
-        app.add_plugins((ClientPlugin::default(), TuiPlugin::testing()));
+        app.add_plugins((
+            ClientPlugin::default(),
+            TuiPlugin::testing(Some(ChangeAppScreen::Explorer)),
+        ));
         app.update();
         app.update();
         let world = &mut app.world;

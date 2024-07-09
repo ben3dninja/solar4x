@@ -14,9 +14,3 @@ pub struct ShipInfo {
 
 #[derive(Resource, Default)]
 pub struct ShipsMapping(pub HashMap<ShipID, Entity>);
-
-#[derive(Event)]
-pub enum ShipEvent {
-    Create(ShipInfo),
-    Remove(ShipID),
-}

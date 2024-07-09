@@ -22,12 +22,14 @@ pub mod singleplayer;
 pub struct ClientPlugin {
     pub network_info: ClientNetworkInfo,
     pub singleplayer_bodies_config: BodiesConfig,
+    pub initial_mode: ClientMode,
 }
 
 impl ClientPlugin {
-    pub fn testing(singleplayer_bodies_config: BodiesConfig) -> Self {
+    pub fn testing(singleplayer_bodies_config: BodiesConfig, initial_mode: ClientMode) -> Self {
         Self {
             singleplayer_bodies_config,
+            initial_mode,
             ..Default::default()
         }
     }
@@ -40,7 +42,7 @@ impl Plugin for ClientPlugin {
                 config: self.singleplayer_bodies_config.clone(),
             })
             .insert_resource(self.network_info.clone())
-            .insert_state(ClientMode::default())
+            .insert_state(self.initial_mode)
             .add_systems(OnEnter(ClientMode::None), unload)
             .add_systems(
                 OnEnter(ClientMode::Multiplayer),
@@ -53,7 +55,7 @@ impl Plugin for ClientPlugin {
     }
 }
 
-#[derive(Default, States, Debug, PartialEq, Eq, Clone, Hash)]
+#[derive(Default, States, Debug, PartialEq, Eq, Clone, Hash, Copy)]
 pub enum ClientMode {
     #[default]
     None,

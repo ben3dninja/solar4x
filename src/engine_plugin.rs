@@ -217,7 +217,7 @@ impl From<&BodyData> for EllipticalOrbit {
 
 #[cfg(test)]
 mod tests {
-    use bevy::{app::App, prelude::NextState};
+    use bevy::app::App;
 
     use crate::{
         bodies::body_data::BodyType,
@@ -230,12 +230,12 @@ mod tests {
     fn test_update_local() {
         let mut app = App::new();
         app.add_plugins((
-            ClientPlugin::testing(BodiesConfig::SmallestBodyType(BodyType::Planet)),
+            ClientPlugin::testing(
+                BodiesConfig::SmallestBodyType(BodyType::Planet),
+                ClientMode::Explorer,
+            ),
             EnginePlugin,
         ));
-        app.world
-            .resource_mut::<NextState<ClientMode>>()
-            .set(ClientMode::Explorer);
         app.update();
         let mut world = app.world;
         let mut query = world.query::<(&EllipticalOrbit, &BodyInfo)>();
@@ -253,12 +253,12 @@ mod tests {
     fn test_update_global() {
         let mut app = App::new();
         app.add_plugins((
-            ClientPlugin::testing(BodiesConfig::SmallestBodyType(BodyType::Moon)),
+            ClientPlugin::testing(
+                BodiesConfig::SmallestBodyType(BodyType::Moon),
+                ClientMode::Explorer,
+            ),
             EnginePlugin,
         ));
-        app.world
-            .resource_mut::<NextState<ClientMode>>()
-            .set(ClientMode::Explorer);
         app.update();
         let mut world = app.world;
         let mut query = world.query::<(&Position, &BodyInfo)>();
