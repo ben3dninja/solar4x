@@ -68,7 +68,9 @@ pub fn handle_ship_events(
                 );
             }
             ShipEvent::Remove(id) => {
-                ships.0.remove(id).map(|e| commands.entity(e).despawn());
+                if let Some(e) = ships.0.remove(id) {
+                    commands.entity(e).despawn()
+                }
             }
         }
     }

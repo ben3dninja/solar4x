@@ -26,6 +26,10 @@ fn start_explorer(
     mut toggle_time: Option<ResMut<ToggleTime>>,
 ) {
     app_state.set(AppState::Loaded);
-    time.as_mut().map(|t| t.0 = 0.);
-    toggle_time.as_mut().map(|t| t.0 = true);
+    if let Some(t) = time.as_mut() {
+        t.0 = 0.
+    }
+    if let Some(t) = toggle_time.as_mut() {
+        t.0 = true
+    }
 }

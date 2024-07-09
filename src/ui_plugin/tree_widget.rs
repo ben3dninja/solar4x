@@ -316,7 +316,7 @@ mod tests {
         bodies::body_data::BodyType,
         client_plugin::{ClientMode, ClientPlugin},
         core_plugin::BodiesConfig,
-        tui_plugin::{AppScreen, ChangeAppScreen, TuiPlugin},
+        ui_plugin::{AppScreen, ChangeAppScreen, TuiPlugin},
     };
 
     #[test]
