@@ -5,9 +5,9 @@ use std::sync::Mutex;
 
 use crate::{
     bodies::body_id::BodyID,
-    core_plugin::EntityMapping,
+    core_plugin::BodiesMapping,
     engine_plugin::{GameTime, Position, Velocity},
-    spaceship::{ShipID, ShipInfo},
+    spaceship::{ShipID, ShipInfo, ShipsMapping},
     utils::algebra::convert_orbital_to_global,
 };
 
@@ -34,7 +34,7 @@ pub struct VelocityUpdate {
 
 pub fn follow_trajectory(
     mut velocity_events: EventWriter<VelocityUpdate>,
-    mapping: Res<EntityMapping>,
+    mapping: Res<BodiesMapping>,
     coords: Query<(&Position, &Velocity)>,
     mut trajectories: Query<(Entity, &mut Trajectory, &ShipInfo)>,
     time: Res<GameTime>,
@@ -43,7 +43,7 @@ pub fn follow_trajectory(
     trajectories.par_iter_mut().for_each(|(e, mut t, info)| {
         if let Some(n) = t.nodes.get(t.current + 1) {
             if n.time >= time.0 {
-                if let Some(origin) = mapping.id_mapping.get(&n.origin) {
+                if let Some(origin) = mapping.0.get(&n.origin) {
                     let (&Position(o_pos), &Velocity(o_speed)) = coords.get(*origin).unwrap();
                     let (&Position(pos), &Velocity(speed)) = coords.get(e).unwrap();
                     let thrust = convert_orbital_to_global(n.thrust, o_pos, o_speed, pos, speed);
@@ -57,4 +57,16 @@ pub fn follow_trajectory(
         }
     });
     velocity_events.send_batch(Arc::try_unwrap(events).unwrap().into_inner().unwrap());
+}
+
+pub fn update_speed(
+    mut velocity_events: EventReader<VelocityUpdate>,
+    mut speeds: Query<&mut Velocity>,
+    mapping: Res<ShipsMapping>,
+) {
+    for event in velocity_events.read() {
+        if let Some(entity) = mapping.0.get(&event.ship_id) {
+            speeds.get_mut(*entity).unwrap().0 += event.thrust;
+        }
+    }
 }

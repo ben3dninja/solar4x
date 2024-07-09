@@ -88,9 +88,7 @@ pub enum AppState {
 pub struct PrimaryBody;
 
 #[derive(Resource)]
-pub struct EntityMapping {
-    pub id_mapping: HashMap<BodyID, Entity>,
-}
+pub struct BodiesMapping(pub HashMap<BodyID, Entity>);
 
 #[derive(Component, Debug, Clone)]
 pub struct BodyInfo(pub BodyData);
@@ -125,18 +123,18 @@ pub fn build_system(mut commands: Commands, config: Res<BodiesConfig>) {
         }
         id_mapping.insert(id, entity.id());
     }
-    commands.insert_resource(EntityMapping { id_mapping });
+    commands.insert_resource(BodiesMapping(id_mapping));
 }
 
 fn clear_system(
     mut commands: Commands,
-    mapping: Res<EntityMapping>,
+    mapping: Res<BodiesMapping>,
     mut toggle_time: Option<ResMut<ToggleTime>>,
 ) {
-    for entity in mapping.id_mapping.values() {
+    for entity in mapping.0.values() {
         commands.entity(*entity).despawn();
     }
-    commands.remove_resource::<EntityMapping>();
+    commands.remove_resource::<BodiesMapping>();
     if let Some(toggle) = toggle_time.as_mut() {
         toggle.0 = false;
     }
@@ -164,7 +162,7 @@ mod tests {
     use crate::{
         bodies::body_data::BodyType,
         client_plugin::{ClientMode, ClientPlugin},
-        core_plugin::{BodiesConfig, EntityMapping, PrimaryBody},
+        core_plugin::{BodiesConfig, BodiesMapping, PrimaryBody},
         engine_plugin::EllipticalOrbit,
     };
 
@@ -183,7 +181,7 @@ mod tests {
             .set(ClientMode::Explorer);
         app.update();
         let mut world = app.world;
-        assert_eq!(world.resource::<EntityMapping>().id_mapping.len(), 9);
+        assert_eq!(world.resource::<BodiesMapping>().0.len(), 9);
         assert_eq!(world.query::<&BodyInfo>().iter(&world).len(), 9);
         let (orbit, BodyInfo(data)) = world
             .query::<(&EllipticalOrbit, &BodyInfo)>()

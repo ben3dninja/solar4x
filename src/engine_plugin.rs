@@ -8,7 +8,7 @@ use bevy::{
 use crate::{
     bodies::body_data::BodyData,
     core_plugin::{
-        build_system, AppState, BodyInfo, EntityMapping, PrimaryBody, SimulationSet, SystemInitSet,
+        build_system, AppState, BodiesMapping, BodyInfo, PrimaryBody, SimulationSet, SystemInitSet,
     },
     utils::{
         algebra::{degs, mod_180, rads, rotate},
@@ -95,13 +95,13 @@ pub fn update_local(mut orbits: Query<&mut EllipticalOrbit>, time: Res<GameTime>
 pub fn update_global(
     mut query: Query<(&mut Position, &mut Velocity, &EllipticalOrbit, &BodyInfo)>,
     primary: Query<&BodyInfo, With<PrimaryBody>>,
-    mapping: Res<EntityMapping>,
+    mapping: Res<BodiesMapping>,
 ) {
     let mut queue = vec![(primary.single().0.id, (DVec3::ZERO, DVec3::ZERO))];
     let mut i = 0;
     while i < queue.len() {
         let (id, (parent_pos, parent_velocity)) = queue[i];
-        if let Some(entity) = mapping.id_mapping.get(&id) {
+        if let Some(entity) = mapping.0.get(&id) {
             if let Ok((mut world_pos, mut world_velocity, orbit, info)) = query.get_mut(*entity) {
                 let pos = parent_pos + orbit.local_pos;
                 let velocity = parent_velocity + orbit.local_velocity;

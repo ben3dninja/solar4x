@@ -9,7 +9,7 @@ use ratatui::{
 use crate::{
     bodies::body_id::BodyID,
     client_plugin::ClientMode,
-    core_plugin::{AppState, BodyInfo, EntityMapping, PrimaryBody, SimulationSet, UiInitSet},
+    core_plugin::{AppState, BodiesMapping, BodyInfo, PrimaryBody, SimulationSet, UiInitSet},
     engine_plugin::{EngineEvent, Position},
     keyboard::ExplorerKeymap,
     utils::{
@@ -176,7 +176,7 @@ impl ScreenContext for ExplorerContext {
 pub fn handle_explorer_events(
     mut screen: ResMut<AppScreen>,
     mut events: EventReader<ExplorerEvent>,
-    mapping: Res<EntityMapping>,
+    mapping: Res<BodiesMapping>,
     bodies: Query<&BodyInfo>,
     mut engine_events: Option<ResMut<Events<EngineEvent>>>,
     fuzzy_matcher: Res<SearchMatcher>,
@@ -189,7 +189,7 @@ pub fn handle_explorer_events(
                     match event {
                         Select(d) => {
                             ctx.tree_state.select_adjacent(*d);
-                            ctx.update_info(&mapping.id_mapping, &bodies);
+                            ctx.update_info(&mapping.0, &bodies);
                         }
                         ToggleTreeExpansion => ctx.tree_state.toggle_selection_expansion(),
                     }
@@ -206,7 +206,7 @@ pub fn handle_explorer_events(
                         ValidateSearch => {
                             if let Some(id) = ctx.search_state.selected_body_id() {
                                 ctx.tree_state.select_body(id);
-                                ctx.update_info(&mapping.id_mapping, &bodies);
+                                ctx.update_info(&mapping.0, &bodies);
                             }
                             ctx.side_pane_mode = SidePaneMode::Tree;
                         }
@@ -224,8 +224,7 @@ pub fn handle_explorer_events(
                         MapOffset(d) => ctx.space_map.offset(*d),
                         MapOffsetReset => ctx.space_map.reset_offset(),
                         FocusBody => {
-                            if let Some(entity) =
-                                mapping.id_mapping.get(&ctx.tree_state.selected_body_id())
+                            if let Some(entity) = mapping.0.get(&ctx.tree_state.selected_body_id())
                             {
                                 ctx.focus_body = *entity;
                                 ctx.tree_state.focus_body = Some(bodies.get(*entity).unwrap().0.id)
@@ -233,8 +232,7 @@ pub fn handle_explorer_events(
                         }
                         Autoscale => {
                             let focus_data = &bodies.get(ctx.focus_body).unwrap().0;
-                            ctx.space_map
-                                .autoscale(focus_data, &mapping.id_mapping, &bodies);
+                            ctx.space_map.autoscale(focus_data, &mapping.0, &bodies);
                         }
                     }
                 }

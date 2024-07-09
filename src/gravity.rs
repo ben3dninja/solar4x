@@ -1,7 +1,7 @@
 use bevy::{math::DVec3, prelude::*};
 
 use crate::{
-    core_plugin::{build_system, AppState, BodyInfo, EntityMapping, PrimaryBody},
+    core_plugin::{build_system, AppState, BodiesMapping, BodyInfo, PrimaryBody},
     engine_plugin::{GameSpeed, Position, Velocity, SECONDS_PER_DAY},
 };
 
@@ -33,13 +33,13 @@ pub fn setup_hill_spheres(
     mut commands: Commands,
     mut query: Query<&BodyInfo>,
     primary: Query<(Entity, &BodyInfo), With<PrimaryBody>>,
-    mapping: Res<EntityMapping>,
+    mapping: Res<BodiesMapping>,
 ) {
     let mut queue = vec![(primary.single().1 .0.id, 0.)];
     let mut i = 0;
     while i < queue.len() {
         let (id, parent_mass) = queue[i];
-        if let Some(entity) = mapping.id_mapping.get(&id) {
+        if let Some(entity) = mapping.0.get(&id) {
             if let Ok(BodyInfo(data)) = query.get_mut(*entity) {
                 let radius = data.semimajor_axis
                     * (1. - data.eccentricity)
