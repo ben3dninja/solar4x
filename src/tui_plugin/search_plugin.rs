@@ -153,10 +153,11 @@ mod tests {
 
     use crate::{
         bodies::body_data::BodyType,
-        client_plugin::ClientPlugin,
+        client_plugin::{ClientMode, ClientPlugin},
         core_plugin::BodiesConfig,
         tui_plugin::{
-            explorer_screen::ExplorerEvent, search_plugin::SearchEvent, AppScreen, TuiPlugin,
+            explorer_screen::ExplorerEvent, search_plugin::SearchEvent, AppScreen, ChangeAppScreen,
+            TuiPlugin,
         },
     };
 
@@ -164,8 +165,11 @@ mod tests {
     fn test_search() {
         let mut app = App::new();
         app.add_plugins((
-            ClientPlugin::testing(BodiesConfig::SmallestBodyType(BodyType::Moon)),
-            TuiPlugin::testing(),
+            ClientPlugin::testing(
+                BodiesConfig::SmallestBodyType(BodyType::Moon),
+                ClientMode::Explorer,
+            ),
+            TuiPlugin::testing(Some(ChangeAppScreen::Explorer)),
         ));
         app.update();
         app.update();

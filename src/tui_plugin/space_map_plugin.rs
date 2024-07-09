@@ -186,14 +186,13 @@ mod tests {
     };
 
     use crate::{
-        bodies::body_data::BodyType,
-        client_plugin::ClientPlugin,
+        client_plugin::{ClientMode, ClientPlugin},
         core_plugin::{BodiesConfig, BodyInfo, SimulationSet},
         engine_plugin::{update_global, update_local, update_time, EnginePlugin},
         tui_plugin::{
             explorer_screen::ExplorerEvent,
             space_map_plugin::{update_space_map, SpaceMapEvent},
-            AppScreen, TuiPlugin,
+            AppScreen, ChangeAppScreen, TuiPlugin,
         },
     };
 
@@ -201,9 +200,9 @@ mod tests {
     fn test_update_space_map() {
         let mut app = App::new();
         app.add_plugins((
-            ClientPlugin::testing(BodiesConfig::SmallestBodyType(BodyType::Planet)),
+            ClientPlugin::testing(BodiesConfig::default(), ClientMode::Explorer),
             EnginePlugin,
-            TuiPlugin::testing(),
+            TuiPlugin::testing(Some(ChangeAppScreen::Explorer)),
         ))
         .add_systems(
             Update,
@@ -214,7 +213,6 @@ mod tests {
         app.update();
         app.update();
         if let AppScreen::Explorer(ctx) = app.world.resource::<AppScreen>() {
-            println!("coucou?");
             let map = &ctx.space_map;
             assert_eq!(map.circles.len(), 9);
             dbg!(map);
@@ -226,13 +224,15 @@ mod tests {
     #[test]
     fn test_change_focus_body() {
         let mut app = App::new();
-        app.add_plugins((ClientPlugin::default(), EnginePlugin, TuiPlugin::testing()));
+        app.add_plugins((
+            ClientPlugin::testing(BodiesConfig::default(), ClientMode::Explorer),
+            EnginePlugin,
+            TuiPlugin::testing(Some(ChangeAppScreen::Explorer)),
+        ));
         app.update();
         app.update();
         let earth = "terre".into();
         if let AppScreen::Explorer(ctx) = app.world.resource_mut::<AppScreen>().as_mut() {
-            println!("{:?} HAHAHAHA", ctx.focus_body);
-
             ctx.tree_state.select_body(earth);
         }
         app.update();

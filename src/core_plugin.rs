@@ -157,7 +157,7 @@ fn handle_core_events(mut reader: EventReader<CoreEvent>, mut quit_writer: Event
 
 #[cfg(test)]
 mod tests {
-    use bevy::{app::App, ecs::query::With, prelude::NextState};
+    use bevy::{app::App, ecs::query::With};
 
     use crate::{
         bodies::body_data::BodyType,
@@ -171,15 +171,13 @@ mod tests {
     #[test]
     fn test_build_system() {
         let mut app = App::new();
-        app.add_plugins(ClientPlugin::testing(BodiesConfig::SmallestBodyType(
-            BodyType::Planet,
-        )));
+        app.add_plugins(ClientPlugin::testing(
+            BodiesConfig::SmallestBodyType(BodyType::Planet),
+            ClientMode::Explorer,
+        ));
         app.update();
         app.update();
-        app.world
-            .resource_mut::<NextState<ClientMode>>()
-            .set(ClientMode::Explorer);
-        app.update();
+
         let mut world = app.world;
         assert_eq!(world.resource::<BodiesMapping>().0.len(), 9);
         assert_eq!(world.query::<&BodyInfo>().iter(&world).len(), 9);
