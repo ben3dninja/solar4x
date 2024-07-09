@@ -10,6 +10,7 @@ use crate::{client_plugin::ClientMode, keyboard::Keymap};
 use self::explorer_screen::{ExplorerContext, ExplorerEvent, ExplorerScreen};
 
 pub mod explorer_screen;
+pub mod gui_plugin;
 pub mod info_widget;
 pub mod search_plugin;
 pub mod space_map_plugin;
@@ -109,7 +110,7 @@ fn handle_input(
     }
 }
 
-fn change_screen<'a>(
+fn change_screen(
     mut screen: ResMut<AppScreen>,
     mut next_screen: EventReader<ChangeAppScreen>,
     mut next_client_mode: ResMut<NextState<ClientMode>>,
@@ -149,7 +150,7 @@ mod tests {
 
     use crate::{
         client_plugin::ClientPlugin,
-        tui_plugin::{AppScreen, ChangeAppScreen, TuiPlugin},
+        ui_plugin::{AppScreen, ChangeAppScreen, TuiPlugin},
     };
 
     #[test]

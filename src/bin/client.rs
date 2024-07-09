@@ -1,12 +1,12 @@
 use std::env;
 
-use bevy::app::{App, ScheduleRunnerPlugin};
+use bevy::app::App;
 use rust_space_trading::{
     bodies::body_data::BodyType,
     client_plugin::ClientPlugin,
     core_plugin::BodiesConfig,
     engine_plugin::EnginePlugin,
-    tui_plugin::{space_map_plugin::SpaceMapPlugin, TuiPlugin},
+    ui_plugin::{space_map_plugin::SpaceMapPlugin, TuiPlugin},
     utils::args::get_keymap,
 };
 
@@ -21,7 +21,7 @@ fn main() {
                 singleplayer_bodies_config: explorer_bodies_config,
                 ..Default::default()
             },
-            ScheduleRunnerPlugin::default(),
+            bevy::app::ScheduleRunnerPlugin::default(),
             EnginePlugin,
             // GravityPlugin,
             TuiPlugin {
@@ -29,7 +29,7 @@ fn main() {
                 ..Default::default()
             },
             SpaceMapPlugin,
-            // GuiPlugin,
+            rust_space_trading::ui_plugin::gui_plugin::GuiPlugin,
         ))
         .run();
 }

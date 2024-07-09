@@ -36,7 +36,7 @@ impl Plugin for ExplorerScreenPlugin {
             .add_systems(Update, handle_explorer_events.in_set(SimulationSet))
             .add_systems(
                 OnEnter(AppState::Loaded),
-                change_screen
+                change_screen_to_explorer
                     .in_set(UiInitSet)
                     .run_if(in_state(ClientMode::Explorer)),
             );
@@ -252,7 +252,7 @@ pub fn handle_explorer_events(
     }
 }
 
-fn change_screen<'a>(
+fn change_screen_to_explorer<'a>(
     mut screen: ResMut<AppScreen>,
     primary: Query<Entity, With<PrimaryBody>>,
     bodies: Query<(&'a BodyInfo, &'a Position)>,

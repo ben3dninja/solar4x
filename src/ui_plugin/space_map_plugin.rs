@@ -189,7 +189,7 @@ mod tests {
         client_plugin::{ClientMode, ClientPlugin},
         core_plugin::{BodiesConfig, BodyInfo, SimulationSet},
         engine_plugin::{update_global, update_local, update_time, EnginePlugin},
-        tui_plugin::{
+        ui_plugin::{
             explorer_screen::ExplorerEvent,
             space_map_plugin::{update_space_map, SpaceMapEvent},
             AppScreen, ChangeAppScreen, TuiPlugin,

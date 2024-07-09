@@ -155,7 +155,7 @@ mod tests {
         bodies::body_data::BodyType,
         client_plugin::{ClientMode, ClientPlugin},
         core_plugin::BodiesConfig,
-        tui_plugin::{
+        ui_plugin::{
             explorer_screen::ExplorerEvent, search_plugin::SearchEvent, AppScreen, ChangeAppScreen,
             TuiPlugin,
         },

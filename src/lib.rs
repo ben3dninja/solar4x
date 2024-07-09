@@ -8,6 +8,5 @@ pub mod main_game;
 pub mod network;
 pub mod server_plugin;
 pub mod spaceship;
-pub mod tui_plugin;
+pub mod ui_plugin;
 pub mod utils;
-// pub mod gui_plugin;
