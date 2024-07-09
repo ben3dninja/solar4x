@@ -16,17 +16,18 @@ use crate::{
 use self::explorer_mode::ExplorerPlugin;
 
 pub mod explorer_mode;
+pub mod singleplayer;
 
 #[derive(Default)]
 pub struct ClientPlugin {
     pub network_info: ClientNetworkInfo,
-    pub explorer_bodies_config: BodiesConfig,
+    pub singleplayer_bodies_config: BodiesConfig,
 }
 
 impl ClientPlugin {
-    pub fn testing(explorer_bodies_config: BodiesConfig) -> Self {
+    pub fn testing(singleplayer_bodies_config: BodiesConfig) -> Self {
         Self {
-            explorer_bodies_config,
+            singleplayer_bodies_config,
             ..Default::default()
         }
     }
@@ -36,7 +37,7 @@ impl Plugin for ClientPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins((CorePlugin, QuinnetClientPlugin::default()))
             .add_plugins(ExplorerPlugin {
-                config: self.explorer_bodies_config.clone(),
+                config: self.singleplayer_bodies_config.clone(),
             })
             .insert_resource(self.network_info.clone())
             .insert_state(ClientMode::default())

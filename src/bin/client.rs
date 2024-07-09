@@ -18,7 +18,7 @@ fn main() {
     App::new()
         .add_plugins((
             ClientPlugin {
-                explorer_bodies_config,
+                singleplayer_bodies_config: explorer_bodies_config,
                 ..Default::default()
             },
             ScheduleRunnerPlugin::default(),

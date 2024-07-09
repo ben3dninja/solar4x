@@ -4,6 +4,7 @@ pub mod core_plugin;
 pub mod engine_plugin;
 pub mod gravity;
 pub mod keyboard;
+pub mod main_game;
 pub mod network;
 pub mod server_plugin;
 pub mod spaceship;
