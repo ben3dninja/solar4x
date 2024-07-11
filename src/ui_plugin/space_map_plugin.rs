@@ -215,7 +215,6 @@ mod tests {
         if let AppScreen::Explorer(ctx) = app.world().resource::<AppScreen>() {
             let map = &ctx.space_map;
             assert_eq!(map.circles.len(), 9);
-            dbg!(map);
             assert!(4459753056. < map.system_size);
             assert!(map.system_size < 4537039826.);
         }
@@ -242,7 +241,6 @@ mod tests {
         if let AppScreen::Explorer(ctx) = app.world_mut().resource_mut::<AppScreen>().as_mut() {
             let focus = ctx.focus_body;
             let world = &mut app.world_mut();
-            println!("{focus:?}");
 
             assert_eq!(
                 world.query::<&BodyInfo>().get(world, focus).unwrap().0.id,

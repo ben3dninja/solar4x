@@ -98,7 +98,6 @@ pub fn read_trajectory(path: impl AsRef<Path>) -> color_eyre::Result<Trajectory>
 
 pub fn write_trajectory(path: impl AsRef<Path>, t: &Trajectory) -> color_eyre::Result<()> {
     let s = toml::to_string_pretty(t)?;
-    dbg!("writing", &s);
     File::create(path)?
         .write_all(s.as_bytes())
         .map_err(color_eyre::eyre::Error::from)

@@ -189,7 +189,6 @@ pub fn handle_trajectory_event(
     use TrajectoryEvent::*;
     for event in reader.read() {
         let mut path = dir.0.clone();
-        dbg!(event);
 
         path.push(
             match event {
@@ -200,10 +199,8 @@ pub fn handle_trajectory_event(
             }
             .to_string(),
         );
-        dbg!(&path);
         match event {
             Create { trajectory, .. } => {
-                println!("been here");
                 write_trajectory(path, trajectory)?;
             }
             Delete(_) => remove_file(path)?,
@@ -280,7 +277,6 @@ mod tests {
         let file_path = files.next().unwrap()?.path();
         let mut buf = String::new();
         File::open(&file_path)?.read_to_string(&mut buf)?;
-        dbg!(buf);
         let traj = read_trajectory(file_path)?;
         assert_eq!(traj, trajectory);
         Ok(())

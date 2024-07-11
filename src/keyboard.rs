@@ -363,6 +363,6 @@ mod tests {
 
     #[test]
     fn test_default_keymap() {
-        dbg!(ExplorerKeymap::default());
+        ExplorerKeymap::default();
     }
 }

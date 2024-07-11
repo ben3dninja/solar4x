@@ -398,10 +398,7 @@ mod tests {
         if let AppScreen::Explorer(ctx) = world.resource_mut::<AppScreen>().as_mut() {
             let tree_state = &mut ctx.tree_state;
             assert_eq!(tree_state.build_deepness_prefix(0), "");
-            dbg!(&tree_state.visible_tree_entries);
             tree_state.toggle_selection_expansion();
-            dbg!(&tree_state.visible_tree_entries);
-            dbg!(tree_state.compute_deepness_map(tree_state.index_of_nth_visible_entry(8).unwrap()));
             assert_eq!(
                 tree_state.build_deepness_prefix(tree_state.index_of_nth_visible_entry(8).unwrap()),
                 "└─"
