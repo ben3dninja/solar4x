@@ -186,13 +186,14 @@ mod tests {
     };
 
     use crate::{
+        bodies::body_id::id_from,
         client_plugin::{ClientMode, ClientPlugin},
-        core_plugin::{BodiesConfig, BodyInfo, SimulationSet},
-        engine_plugin::{update_global, update_local, update_time, EnginePlugin},
+        core_plugin::{BodyInfo, LoadedSet},
+        engine_plugin::{update_global, update_local, update_time},
         ui_plugin::{
             explorer_screen::ExplorerEvent,
             space_map_plugin::{update_space_map, SpaceMapEvent},
-            AppScreen, ChangeAppScreen, TuiPlugin,
+            AppScreen, TuiPlugin,
         },
     };
 
@@ -200,19 +201,18 @@ mod tests {
     fn test_update_space_map() {
         let mut app = App::new();
         app.add_plugins((
-            ClientPlugin::testing(BodiesConfig::default(), ClientMode::Explorer),
-            EnginePlugin,
-            TuiPlugin::testing(Some(ChangeAppScreen::Explorer)),
+            ClientPlugin::testing().in_mode(ClientMode::Explorer),
+            TuiPlugin::testing(),
         ))
         .add_systems(
             Update,
             (update_time, update_local, update_global, update_space_map)
-                .in_set(SimulationSet)
+                .in_set(LoadedSet)
                 .chain(),
         );
         app.update();
         app.update();
-        if let AppScreen::Explorer(ctx) = app.world.resource::<AppScreen>() {
+        if let AppScreen::Explorer(ctx) = app.world().resource::<AppScreen>() {
             let map = &ctx.space_map;
             assert_eq!(map.circles.len(), 9);
             dbg!(map);
@@ -225,24 +225,23 @@ mod tests {
     fn test_change_focus_body() {
         let mut app = App::new();
         app.add_plugins((
-            ClientPlugin::testing(BodiesConfig::default(), ClientMode::Explorer),
-            EnginePlugin,
-            TuiPlugin::testing(Some(ChangeAppScreen::Explorer)),
+            ClientPlugin::testing().in_mode(ClientMode::Explorer),
+            TuiPlugin::testing(),
         ));
         app.update();
         app.update();
-        let earth = "terre".into();
-        if let AppScreen::Explorer(ctx) = app.world.resource_mut::<AppScreen>().as_mut() {
+        let earth = id_from("terre");
+        if let AppScreen::Explorer(ctx) = app.world_mut().resource_mut::<AppScreen>().as_mut() {
             ctx.tree_state.select_body(earth);
         }
         app.update();
 
-        app.world
+        app.world_mut()
             .send_event(ExplorerEvent::SpaceMap(SpaceMapEvent::FocusBody));
         app.update();
-        if let AppScreen::Explorer(ctx) = app.world.resource_mut::<AppScreen>().as_mut() {
+        if let AppScreen::Explorer(ctx) = app.world_mut().resource_mut::<AppScreen>().as_mut() {
             let focus = ctx.focus_body;
-            let world = &mut app.world;
+            let world = &mut app.world_mut();
             println!("{focus:?}");
 
             assert_eq!(

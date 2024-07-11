@@ -9,7 +9,7 @@ use ratatui::{
 use crate::{
     bodies::body_id::BodyID,
     client_plugin::ClientMode,
-    core_plugin::{AppState, BodiesMapping, BodyInfo, PrimaryBody, SimulationSet, UiInitSet},
+    core_plugin::{BodiesMapping, BodyInfo, LoadedSet, LoadingState, PrimaryBody, UiInitSet},
     engine_plugin::{EngineEvent, Position},
     keyboard::ExplorerKeymap,
     utils::{
@@ -31,11 +31,10 @@ pub struct ExplorerScreenPlugin;
 impl Plugin for ExplorerScreenPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<ExplorerEvent>()
-            .insert_resource(ExplorerScreen)
             .add_plugins(SearchPlugin)
-            .add_systems(Update, handle_explorer_events.in_set(SimulationSet))
+            .add_systems(Update, handle_explorer_events.in_set(LoadedSet))
             .add_systems(
-                OnEnter(AppState::Loaded),
+                OnEnter(LoadingState::Loaded),
                 change_screen_to_explorer
                     .in_set(UiInitSet)
                     .run_if(in_state(ClientMode::Explorer)),
@@ -260,10 +259,9 @@ fn change_screen_to_explorer<'a>(
     *screen = AppScreen::Explorer(ExplorerContext::new(primary.single(), &bodies));
 }
 
-#[derive(Resource)]
 pub struct ExplorerScreen;
 
-impl StatefulWidget for &ExplorerScreen {
+impl StatefulWidget for ExplorerScreen {
     type State = ExplorerContext;
 
     fn render(

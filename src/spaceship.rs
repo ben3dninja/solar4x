@@ -1,7 +1,7 @@
 use arrayvec::ArrayString;
 use bevy::{math::DVec3, prelude::*, utils::HashMap};
 
-const MAX_ID_LENGTH: usize = 32;
+use crate::MAX_ID_LENGTH;
 
 pub type ShipID = ArrayString<MAX_ID_LENGTH>;
 

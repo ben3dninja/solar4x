@@ -1,8 +1,17 @@
-use std::{fs::File, io::Read};
+use std::{
+    fs::File,
+    io::{Read, Write},
+    path::Path,
+};
 
+use bevy::ecs::system::Resource;
 use serde::{de::Visitor, Deserialize, Deserializer};
+use tempfile::{tempdir, TempDir};
 
-use crate::bodies::body_data::{BodyData, MainBodyData};
+use crate::{
+    bodies::body_data::{BodyData, MainBodyData},
+    main_game::trajectory::Trajectory,
+};
 
 const MAIN_OBJECT_FILE_PATH: &str = "main_objects.json";
 const SUN_ID: &str = "soleil";
@@ -71,7 +80,7 @@ fn fix_bodies(mut bodies: Vec<MainBodyData>) -> std::io::Result<Vec<MainBodyData
         .orbiting_bodies = bodies
         .iter()
         .filter(|data| data.host_body.is_none() && data.id != SUN_ID.into())
-        .map(|planet| planet.id)
+        .map(|planet| planet.id.clone())
         .collect();
     bodies
         .iter_mut()
@@ -80,9 +89,36 @@ fn fix_bodies(mut bodies: Vec<MainBodyData>) -> std::io::Result<Vec<MainBodyData
     Ok(bodies)
 }
 
+pub fn read_trajectory(path: impl AsRef<Path>) -> color_eyre::Result<Trajectory> {
+    let mut file = File::open(&path)?;
+    let mut buf = String::new();
+    file.read_to_string(&mut buf)?;
+    toml::from_str(&buf).map_err(color_eyre::eyre::Error::from)
+}
+
+pub fn write_trajectory(path: impl AsRef<Path>, t: &Trajectory) -> color_eyre::Result<()> {
+    let s = toml::to_string_pretty(t)?;
+    dbg!("writing", &s);
+    File::create(path)?
+        .write_all(s.as_bytes())
+        .map_err(color_eyre::eyre::Error::from)
+}
+
+#[derive(Resource)]
+pub struct TempDirectory(pub TempDir);
+
+impl Default for TempDirectory {
+    fn default() -> Self {
+        Self(tempdir().unwrap())
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::{bodies::body_data::BodyType, utils::de::SUN_ID};
+    use crate::{
+        bodies::{body_data::BodyType, body_id::id_from},
+        utils::de::SUN_ID,
+    };
 
     use super::read_main_bodies;
 
@@ -95,13 +131,16 @@ mod tests {
     #[test]
     fn test_fix_bodies() {
         let bodies = read_main_bodies().unwrap();
-        let sun = bodies.iter().find(|data| data.id == SUN_ID.into()).unwrap();
+        let sun = bodies
+            .iter()
+            .find(|data| data.id == id_from(SUN_ID))
+            .unwrap();
         assert!(sun.host_body.is_none());
         for planet in bodies
             .iter()
             .filter(|data| matches!(data.body_type, BodyType::Planet))
         {
-            assert!(planet.host_body.is_some_and(|id| id == SUN_ID.into()))
+            assert!(planet.host_body.is_some_and(|id| id == id_from(SUN_ID)))
         }
     }
 }

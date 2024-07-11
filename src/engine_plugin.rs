@@ -8,7 +8,7 @@ use bevy::{
 use crate::{
     bodies::body_data::BodyData,
     core_plugin::{
-        build_system, AppState, BodiesMapping, BodyInfo, PrimaryBody, SimulationSet, SystemInitSet,
+        build_system, BodiesMapping, BodyInfo, LoadedSet, LoadingState, PrimaryBody, SystemInitSet,
     },
     utils::{
         algebra::{mod_180, rotate},
@@ -29,7 +29,7 @@ impl Plugin for EnginePlugin {
             .insert_resource(GameSpeed::default())
             .insert_resource(ToggleTime(false))
             .add_systems(
-                OnEnter(AppState::Loaded),
+                OnEnter(LoadingState::Loading),
                 (update_local, update_global)
                     .chain()
                     .after(build_system)
@@ -38,11 +38,11 @@ impl Plugin for EnginePlugin {
             .add_systems(
                 FixedUpdate,
                 (update_time, update_local, update_global)
-                    .in_set(SimulationSet)
+                    .in_set(LoadedSet)
                     .chain()
                     .run_if(resource_equals(ToggleTime(true))),
             )
-            .add_systems(Update, handle_engine_events.in_set(SimulationSet));
+            .add_systems(Update, handle_engine_events.in_set(LoadedSet));
     }
 }
 
@@ -220,28 +220,22 @@ mod tests {
     use bevy::app::App;
 
     use crate::{
-        bodies::body_data::BodyType,
+        bodies::{bodies_config::BodiesConfig, body_data::BodyType, body_id::id_from},
         client_plugin::{ClientMode, ClientPlugin},
-        core_plugin::{BodiesConfig, BodyInfo},
-        engine_plugin::{EllipticalOrbit, EnginePlugin, Position},
+        core_plugin::BodyInfo,
+        engine_plugin::{EllipticalOrbit, Position},
     };
 
     #[test]
     fn test_update_local() {
         let mut app = App::new();
-        app.add_plugins((
-            ClientPlugin::testing(
-                BodiesConfig::SmallestBodyType(BodyType::Planet),
-                ClientMode::Explorer,
-            ),
-            EnginePlugin,
-        ));
+        app.add_plugins(ClientPlugin::testing().in_mode(ClientMode::Explorer));
         app.update();
-        let mut world = app.world;
+        let world = app.world_mut();
         let mut query = world.query::<(&EllipticalOrbit, &BodyInfo)>();
         let (orbit, _) = query
-            .iter(&world)
-            .find(|(_, BodyInfo(data))| data.id == "terre".into())
+            .iter(world)
+            .find(|(_, BodyInfo(data))| data.id == id_from("terre"))
             .unwrap();
         let (earth_dist, earth_speed) = (orbit.local_pos.length(), orbit.local_velocity.length());
         assert!(147095000. <= earth_dist);
@@ -252,19 +246,16 @@ mod tests {
     #[test]
     fn test_update_global() {
         let mut app = App::new();
-        app.add_plugins((
-            ClientPlugin::testing(
-                BodiesConfig::SmallestBodyType(BodyType::Moon),
-                ClientMode::Explorer,
-            ),
-            EnginePlugin,
-        ));
+        let plugins = ClientPlugin::testing()
+            .in_mode(ClientMode::Explorer)
+            .with_bodies(BodiesConfig::SmallestBodyType(BodyType::Moon));
+        app.add_plugins(plugins);
         app.update();
-        let mut world = app.world;
+        let world = app.world_mut();
         let mut query = world.query::<(&Position, &BodyInfo)>();
         let (&Position(moon_pos), _) = query
-            .iter(&world)
-            .find(|(_, BodyInfo(data))| data.id == "lune".into())
+            .iter(world)
+            .find(|(_, BodyInfo(data))| data.id == id_from("lune"))
             .unwrap();
         let moon_length = moon_pos.length();
         let min = 147095000. - 405500.;

@@ -10,3 +10,5 @@ pub mod server_plugin;
 pub mod spaceship;
 pub mod ui_plugin;
 pub mod utils;
+
+const MAX_ID_LENGTH: usize = 32;

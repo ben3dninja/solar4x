@@ -8,12 +8,13 @@ use bevy_quinnet::{
     },
     shared::ClientId,
 };
-use bevy_ratatui::error::exit_on_error;
 
 use crate::{
-    core_plugin::{start_game, BodiesConfig, CorePlugin},
+    bodies::bodies_config::BodiesConfig,
+    core_plugin::{CorePlugin, LoadingState},
     engine_plugin::GameTime,
     network::{ServerChannel, ServerMessage},
+    utils::ecs::exit_on_error_if_app,
 };
 
 pub struct ServerPlugin {
@@ -32,17 +33,23 @@ impl Plugin for ServerPlugin {
                 1.,
                 TimerMode::Repeating,
             )))
-            .add_systems(Startup, start_endpoint.pipe(exit_on_error))
+            .add_systems(
+                Startup,
+                (start_endpoint.pipe(exit_on_error_if_app), start_game),
+            )
             .add_systems(
                 Update,
                 (
                     update_clients,
-                    handle_connection_events.pipe(exit_on_error),
+                    handle_connection_events.pipe(exit_on_error_if_app),
                     send_periodic_updates,
                 ),
-            )
-            .add_systems(Startup, start_game);
+            );
     }
+}
+
+fn start_game(mut loading_state: ResMut<NextState<LoadingState>>) {
+    loading_state.set(LoadingState::Loading);
 }
 
 #[derive(Clone, Resource)]

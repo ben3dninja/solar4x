@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::utils::de::deserialize_options;
 
-use super::body_id::BodyID;
+use super::body_id::{BodyID, MainBodyID};
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Default, PartialOrd)]
 pub enum BodyType {
@@ -35,14 +35,14 @@ impl Display for BodyType {
 #[serde(rename_all(deserialize = "camelCase"))]
 pub struct MainBodyData {
     #[serde(rename(deserialize = "rel"))]
-    pub id: BodyID,
+    pub id: MainBodyID,
     #[serde(rename(deserialize = "englishName"))]
     pub name: String,
     pub body_type: BodyType,
     #[serde(alias = "aroundPlanet")]
-    pub host_body: Option<BodyID>,
+    pub host_body: Option<MainBodyID>,
     #[serde(alias = "moons", deserialize_with = "deserialize_options")]
-    pub orbiting_bodies: Vec<BodyID>,
+    pub orbiting_bodies: Vec<MainBodyID>,
 
     // Orbital elements
     pub semimajor_axis: i64,
@@ -104,11 +104,15 @@ pub struct BodyData {
 impl From<MainBodyData> for BodyData {
     fn from(value: MainBodyData) -> Self {
         Self {
-            id: value.id,
+            id: value.id.into(),
             name: value.name,
             body_type: value.body_type,
-            host_body: value.host_body,
-            orbiting_bodies: value.orbiting_bodies,
+            host_body: value.host_body.map(Into::<BodyID>::into),
+            orbiting_bodies: value
+                .orbiting_bodies
+                .into_iter()
+                .map(Into::<BodyID>::into)
+                .collect(),
             semimajor_axis: value.semimajor_axis as f64,
             eccentricity: value.eccentricity,
             inclination: value.inclination,
@@ -141,7 +145,7 @@ impl From<Mass> for f64 {
 #[cfg(test)]
 mod tests {
 
-    use crate::bodies::body_data::MainBodyData;
+    use crate::bodies::{body_data::MainBodyData, body_id::id_from};
 
     use super::{BodyData, BodyType};
     use serde_json::from_str;
@@ -198,10 +202,10 @@ mod tests {
         assert_eq!(
             BodyData::from(body_data),
             BodyData {
-                id: "lune".into(),
+                id: id_from("lune"),
                 name: "Moon".into(),
                 body_type: BodyType::Moon,
-                host_body: Some("terre".into()),
+                host_body: Some(id_from("terre")),
                 orbiting_bodies: Vec::new(),
                 semimajor_axis: 384400.,
                 eccentricity: 0.0549,

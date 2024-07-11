@@ -3,7 +3,7 @@ use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use bevy_quinnet::shared::channels::{ChannelId, ChannelType, ChannelsConfiguration};
 use serde::{Deserialize, Serialize};
 
-use crate::core_plugin::BodiesConfig;
+use crate::bodies::bodies_config::BodiesConfig;
 
 pub const SERVER_ADDR: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 5000);
 pub const CLIENT_ADDR: SocketAddr = SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0);

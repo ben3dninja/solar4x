@@ -313,21 +313,27 @@ mod tests {
     use bevy::app::App;
 
     use crate::{
-        bodies::body_data::BodyType,
+        bodies::{bodies_config::BodiesConfig, body_data::BodyType, body_id::id_from},
         client_plugin::{ClientMode, ClientPlugin},
-        core_plugin::BodiesConfig,
-        ui_plugin::{AppScreen, ChangeAppScreen, TuiPlugin},
+        ui_plugin::{AppScreen, TuiPlugin},
     };
+
+    fn new_app(moons: bool) -> App {
+        let mut app = App::new();
+        let mut client = ClientPlugin::testing().in_mode(ClientMode::Explorer);
+        if moons {
+            client = client.with_bodies(BodiesConfig::SmallestBodyType(BodyType::Moon));
+        }
+        app.add_plugins((client, TuiPlugin::testing()));
+        app.update();
+        app.update();
+        app
+    }
 
     #[test]
     fn test_initialize_tree() {
-        let mut app = App::new();
-        app.add_plugins((
-            ClientPlugin::testing(BodiesConfig::default(), ClientMode::Explorer),
-            TuiPlugin::testing(Some(ChangeAppScreen::Explorer)),
-        ));
-        app.update();
-        let world = &app.world;
+        let app = new_app(false);
+        let world = app.world();
         if let AppScreen::Explorer(ctx) = world.resource::<AppScreen>() {
             let tree = &ctx.tree_state;
             assert_eq!(tree.system_tree.len(), 9);
@@ -340,17 +346,11 @@ mod tests {
     }
     #[test]
     fn test_select_body() {
-        let mut app = App::new();
-        app.add_plugins((
-            ClientPlugin::testing(BodiesConfig::default(), ClientMode::Explorer),
-            TuiPlugin::testing(Some(ChangeAppScreen::Explorer)),
-        ));
-        app.update();
-        app.update();
-        let world = &mut app.world;
+        let mut app = new_app(false);
+        let world = app.world_mut();
         if let AppScreen::Explorer(ctx) = world.resource_mut::<AppScreen>().as_mut() {
             let tree = &mut ctx.tree_state;
-            let earth = "terre".into();
+            let earth = id_from("terre");
             tree.select_body(earth);
             assert_eq!(tree.selected_body_id(), earth)
         }
@@ -358,14 +358,8 @@ mod tests {
 
     #[test]
     fn test_toggle_entry_expansion() {
-        let mut app = App::new();
-        app.add_plugins((
-            ClientPlugin::testing(BodiesConfig::default(), ClientMode::Explorer),
-            TuiPlugin::testing(Some(ChangeAppScreen::Explorer)),
-        ));
-        app.update();
-        app.update();
-        let world = &mut app.world;
+        let mut app = new_app(false);
+        let world = app.world_mut();
         if let AppScreen::Explorer(ctx) = world.resource_mut::<AppScreen>().as_mut() {
             let tree = &mut ctx.tree_state;
             tree.toggle_selection_expansion();
@@ -383,22 +377,15 @@ mod tests {
 
     #[test]
     fn test_deepness_map() {
-        let mut app = App::new();
-        app.add_plugins((
-            ClientPlugin::testing(
-                BodiesConfig::SmallestBodyType(BodyType::Moon),
-                ClientMode::Explorer,
-            ),
-            TuiPlugin::testing(Some(ChangeAppScreen::Explorer)),
-        ));
+        let mut app = new_app(true);
         app.update();
         app.update();
-        let world = &app.world;
+        let world = app.world();
         if let AppScreen::Explorer(ctx) = world.resource::<AppScreen>() {
             let tree = &ctx.tree_state;
 
             assert_eq!(
-                tree.compute_deepness_map(tree.index_of("lune".into()).unwrap()),
+                tree.compute_deepness_map(tree.index_of(id_from("lune")).unwrap()),
                 vec![true, false, true]
             );
         }
@@ -406,17 +393,8 @@ mod tests {
 
     #[test]
     fn test_build_deepness_prefix() {
-        let mut app = App::new();
-        app.add_plugins((
-            ClientPlugin::testing(
-                BodiesConfig::SmallestBodyType(BodyType::Moon),
-                ClientMode::Explorer,
-            ),
-            TuiPlugin::testing(Some(ChangeAppScreen::Explorer)),
-        ));
-        app.update();
-        app.update();
-        let world = &mut app.world;
+        let mut app = new_app(true);
+        let world = app.world_mut();
         if let AppScreen::Explorer(ctx) = world.resource_mut::<AppScreen>().as_mut() {
             let tree_state = &mut ctx.tree_state;
             assert_eq!(tree_state.build_deepness_prefix(0), "");
