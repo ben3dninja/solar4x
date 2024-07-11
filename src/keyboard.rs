@@ -17,6 +17,7 @@ use serde::{
 pub struct Keymap {
     pub explorer: ExplorerKeymap,
     pub start_menu: StartMenuKeymap,
+    pub fleet_screen: FleetScreenKeymap,
 }
 
 #[derive(Default, Debug, Serialize, Deserialize, Clone)]
@@ -31,6 +32,14 @@ pub struct StartMenuKeymap {
     pub select_previous: Key,
     pub quit: Key,
     pub validate: Key,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct FleetScreenKeymap {
+    pub select_next: Key,
+    pub select_previous: Key,
+    pub back: Key,
+    pub edit_trajectory: Key,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -318,7 +327,18 @@ impl Default for StartMenuKeymap {
             select_next: Key::from_str_unchecked("down"),
             select_previous: Key::from_str_unchecked("up"),
             quit: Key::from_str_unchecked("esc"),
-            validate: Key::from_str_unchecked("enter"),
+            validate: Key::from_str_unchecked("space"),
+        }
+    }
+}
+
+impl Default for FleetScreenKeymap {
+    fn default() -> Self {
+        Self {
+            select_next: Key::from_str_unchecked("down"),
+            select_previous: Key::from_str_unchecked("up"),
+            back: Key::from_str_unchecked("esc"),
+            edit_trajectory: Key::from_str_unchecked("space"),
         }
     }
 }

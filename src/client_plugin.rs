@@ -5,15 +5,17 @@ use bevy_quinnet::client::{
     certificate::CertificateVerificationMode, connection::ClientEndpointConfiguration,
     QuinnetClient, QuinnetClientPlugin,
 };
-use bevy_ratatui::error::exit_on_error;
 
 use crate::{
-    core_plugin::{AppState, BodiesConfig, CorePlugin},
-    engine_plugin::GameTime,
+    bodies::bodies_config::BodiesConfig,
+    core_plugin::{CorePlugin, LoadingState},
+    engine_plugin::{EnginePlugin, GameTime},
+    main_game::GamePlugin,
     network::{ClientChannel, ServerMessage},
+    utils::ecs::exit_on_error_if_app,
 };
 
-use self::explorer_mode::ExplorerPlugin;
+use self::{explorer_mode::ExplorerPlugin, singleplayer::SingleplayerPlugin};
 
 pub mod explorer_mode;
 pub mod singleplayer;
@@ -23,30 +25,55 @@ pub struct ClientPlugin {
     pub network_info: ClientNetworkInfo,
     pub singleplayer_bodies_config: BodiesConfig,
     pub initial_mode: ClientMode,
+    pub testing: bool,
 }
 
+#[derive(Resource)]
+pub struct Testing;
+
 impl ClientPlugin {
-    pub fn testing(singleplayer_bodies_config: BodiesConfig, initial_mode: ClientMode) -> Self {
+    pub fn testing() -> Self {
+        Self {
+            testing: true,
+            ..Default::default()
+        }
+    }
+
+    pub fn with_bodies(self, singleplayer_bodies_config: BodiesConfig) -> Self {
         Self {
             singleplayer_bodies_config,
+            ..self
+        }
+    }
+
+    pub fn in_mode(self, initial_mode: ClientMode) -> Self {
+        Self {
             initial_mode,
-            ..Default::default()
+            ..self
         }
     }
 }
 
 impl Plugin for ClientPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins((CorePlugin, QuinnetClientPlugin::default()))
-            .add_plugins(ExplorerPlugin {
-                config: self.singleplayer_bodies_config.clone(),
+        if self.testing {
+            app.insert_resource(Testing);
+        }
+        app.add_plugins((CorePlugin, QuinnetClientPlugin::default(), EnginePlugin))
+            .add_plugins(ExplorerPlugin(self.singleplayer_bodies_config.clone()))
+            .add_plugins(GamePlugin {
+                testing: self.testing,
             })
+            .add_plugins(SingleplayerPlugin(self.singleplayer_bodies_config.clone()))
             .insert_resource(self.network_info.clone())
             .insert_state(self.initial_mode)
-            .add_systems(OnEnter(ClientMode::None), unload)
+            .add_systems(
+                OnEnter(ClientMode::None),
+                unload.run_if(in_state(LoadingState::Loaded)),
+            )
             .add_systems(
                 OnEnter(ClientMode::Multiplayer),
-                start_connection.pipe(exit_on_error),
+                start_connection.pipe(exit_on_error_if_app),
             )
             .add_systems(
                 Update,
@@ -64,8 +91,8 @@ pub enum ClientMode {
     Explorer,
 }
 
-fn unload(mut app_state: ResMut<NextState<AppState>>) {
-    app_state.set(AppState::Setup);
+fn unload(mut app_state: ResMut<NextState<LoadingState>>) {
+    app_state.set(LoadingState::Unloading);
 }
 
 #[derive(Clone, Resource)]
@@ -98,7 +125,7 @@ fn handle_server_messages(
     mut client: ResMut<QuinnetClient>,
     mut commands: Commands,
     mut time: ResMut<GameTime>,
-    mut next_state: ResMut<NextState<AppState>>,
+    mut next_state: ResMut<NextState<LoadingState>>,
 ) {
     while let Some((_, message)) = client
         .connection_mut()
@@ -107,7 +134,7 @@ fn handle_server_messages(
         match message {
             ServerMessage::BodiesConfig(bodies) => {
                 commands.insert_resource(bodies);
-                next_state.set(AppState::Loaded);
+                next_state.set(LoadingState::Loaded);
             }
             ServerMessage::UpdateTime { game_time } => time.0 = game_time,
         }

@@ -152,12 +152,10 @@ mod tests {
     use bevy::app::App;
 
     use crate::{
-        bodies::body_data::BodyType,
+        bodies::{bodies_config::BodiesConfig, body_data::BodyType, body_id::id_from},
         client_plugin::{ClientMode, ClientPlugin},
-        core_plugin::BodiesConfig,
         ui_plugin::{
-            explorer_screen::ExplorerEvent, search_plugin::SearchEvent, AppScreen, ChangeAppScreen,
-            TuiPlugin,
+            explorer_screen::ExplorerEvent, search_plugin::SearchEvent, AppScreen, TuiPlugin,
         },
     };
 
@@ -165,29 +163,28 @@ mod tests {
     fn test_search() {
         let mut app = App::new();
         app.add_plugins((
-            ClientPlugin::testing(
-                BodiesConfig::SmallestBodyType(BodyType::Moon),
-                ClientMode::Explorer,
-            ),
-            TuiPlugin::testing(Some(ChangeAppScreen::Explorer)),
+            ClientPlugin::testing()
+                .in_mode(ClientMode::Explorer)
+                .with_bodies(BodiesConfig::SmallestBodyType(BodyType::Moon)),
+            TuiPlugin::testing(),
         ));
         app.update();
         app.update();
         use ExplorerEvent::Search;
         use SearchEvent::*;
-        app.world.send_event_batch([
+        app.world_mut().send_event_batch([
             Search(WriteChar('M')),
             Search(WriteChar('o')),
             Search(WriteChar('o')),
         ]);
         app.update();
 
-        app.world
+        app.world_mut()
             .send_event(ExplorerEvent::Search(SearchEvent::ValidateSearch));
         app.update();
-        if let AppScreen::Explorer(ctx) = app.world.resource_mut::<AppScreen>().as_mut() {
+        if let AppScreen::Explorer(ctx) = app.world_mut().resource_mut::<AppScreen>().as_mut() {
             let id = ctx.tree_state.selected_body_id();
-            assert_eq!(id, "lune".into())
+            assert_eq!(id, id_from("lune"))
         }
     }
 }

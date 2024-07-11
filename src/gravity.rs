@@ -1,7 +1,7 @@
 use bevy::{math::DVec3, prelude::*};
 
 use crate::{
-    core_plugin::{build_system, AppState, BodiesMapping, BodyInfo, PrimaryBody},
+    core_plugin::{build_system, BodiesMapping, BodyInfo, LoadingState, PrimaryBody},
     engine_plugin::{GameSpeed, Position, Velocity, SECONDS_PER_DAY},
 };
 
@@ -13,7 +13,7 @@ pub struct GravityPlugin;
 impl Plugin for GravityPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
-            OnEnter(AppState::Loaded),
+            OnEnter(LoadingState::Loaded),
             setup_hill_spheres.after(build_system),
         )
         .add_systems(FixedUpdate, (apply_gravity_force, integrate_positions));

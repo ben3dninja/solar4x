@@ -1,40 +1,34 @@
-use serde::{de::Visitor, Deserialize, Deserializer, Serialize};
+use arrayvec::ArrayString;
+use serde::{de::Visitor, Deserialize, Deserializer};
 
-use crate::utils::hash::hash;
+use crate::MAX_ID_LENGTH;
 
 const ID_PREFIX: &str = "https://api.le-systeme-solaire.net/rest/bodies/";
 
-// TODO : change default id
-#[derive(Default, PartialEq, PartialOrd, Ord, Eq, Debug, Clone, Copy, Hash, Serialize)]
-pub struct BodyID(u64);
+#[derive(PartialEq, Debug, Clone)]
+pub struct MainBodyID(pub String);
 
-impl std::fmt::Display for BodyID {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "@{}", self.0)
-    }
-}
-
-impl From<&str> for BodyID {
+impl From<&str> for MainBodyID {
     fn from(value: &str) -> Self {
-        Self(hash(&value.to_owned()))
+        Self(value.to_owned())
     }
+}
+pub type BodyID = ArrayString<MAX_ID_LENGTH>;
+
+pub fn id_from(s: &str) -> BodyID {
+    BodyID::from(s).unwrap()
 }
 
-impl From<u64> for BodyID {
-    fn from(value: u64) -> Self {
-        Self(value)
-    }
-}
-impl From<&BodyID> for u64 {
-    fn from(val: &BodyID) -> Self {
-        val.0
+impl From<MainBodyID> for BodyID {
+    fn from(value: MainBodyID) -> Self {
+        id_from(&value.0)
     }
 }
 
 struct IDVisitor;
 
 impl<'de> Visitor<'de> for IDVisitor {
-    type Value = BodyID;
+    type Value = MainBodyID;
 
     fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
         formatter.write_str("a body id")
@@ -63,20 +57,15 @@ impl<'de> Visitor<'de> for IDVisitor {
             "id could not be deserialized from string",
         ))
     }
-
-    fn visit_u64<E>(self, v: u64) -> Result<Self::Value, E>
-    where
-        E: serde::de::Error,
-    {
-        Ok(BodyID(v))
-    }
 }
 
-fn strip_id_prefix(s: &str) -> Option<BodyID> {
-    s.strip_prefix(ID_PREFIX).map(BodyID::from)
+fn strip_id_prefix(s: &str) -> Option<MainBodyID> {
+    s.strip_prefix(ID_PREFIX)
+        .map(MainBodyID::from)
+        .filter(|s| s.0.len() < MAX_ID_LENGTH)
 }
 
-impl<'de> Deserialize<'de> for BodyID {
+impl<'de> Deserialize<'de> for MainBodyID {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -92,7 +81,7 @@ mod tests {
 
     #[test]
     fn test_single() {
-        let id: BodyID = from_str(
+        let id: MainBodyID = from_str(
             r#"
             "https://api.le-systeme-solaire.net/rest/bodies/terre"
         "#,
@@ -103,7 +92,7 @@ mod tests {
 
     #[test]
     fn test_map() {
-        let id: BodyID = from_str(
+        let id: MainBodyID = from_str(
             r#"
         {
             "planet": "terre",

@@ -1,5 +1,6 @@
 use bevy::{
     a11y::AccessibilityPlugin,
+    color::palettes::css::{BLACK, DARK_GRAY, GOLD, TEAL},
     core_pipeline::CorePipelinePlugin,
     input::InputPlugin,
     math::DVec3,
@@ -8,14 +9,12 @@ use bevy::{
     sprite::{MaterialMesh2dBundle, Mesh2dHandle, SpritePlugin},
     text::TextPlugin,
     ui::UiPlugin,
-    winit::WinitPlugin,
+    winit::{WakeUp, WinitPlugin},
 };
-
-use bevy::render::color::Color as GuiColor;
 
 use crate::{
     bodies::body_data::BodyType,
-    core_plugin::{AppState, BodyInfo, UiInitSet},
+    core_plugin::{BodyInfo, LoadingState, UiInitSet},
     engine_plugin::Position,
     utils::algebra::project_onto_plane,
 };
@@ -34,7 +33,7 @@ impl Plugin for GuiPlugin {
             WindowPlugin::default(),
             AccessibilityPlugin,
             AssetPlugin::default(),
-            WinitPlugin::default(),
+            WinitPlugin::<WakeUp>::default(),
             RenderPlugin::default(),
             ImagePlugin::default(),
             PipelinedRenderingPlugin,
@@ -43,11 +42,11 @@ impl Plugin for GuiPlugin {
             TextPlugin,
             UiPlugin,
         ))
-        .insert_resource(ClearColor(GuiColor::BLACK))
+        .insert_resource(ClearColor(Color::Srgba(BLACK)))
         // .insert_resource(ShootingState::Idle)
         .add_systems(Startup, gui_setup)
         .add_systems(
-            OnEnter(AppState::Loaded),
+            OnEnter(LoadingState::Loaded),
             (insert_display_components, update_transform)
                 .chain()
                 .after(UiInitSet),
@@ -64,15 +63,12 @@ fn gui_setup(mut commands: Commands, mut materials: ResMut<Assets<ColorMaterial>
     cam.projection.scaling_mode = ScalingMode::FixedVertical(MAX_WIDTH);
     commands.spawn(cam);
     let colors = Colors {
-        stars: materials.add(GuiColor::GOLD),
-        planets: materials.add(GuiColor::TEAL),
-        other: materials.add(GuiColor::DARK_GRAY),
+        stars: materials.add(Color::Srgba(GOLD)),
+        planets: materials.add(Color::Srgba(TEAL)),
+        other: materials.add(Color::Srgba(DARK_GRAY)),
     };
     commands.insert_resource(colors);
 }
-
-#[derive(Clone)]
-pub struct Color();
 
 #[derive(Resource)]
 pub struct Colors {

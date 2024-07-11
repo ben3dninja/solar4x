@@ -31,13 +31,11 @@ pub struct StartMenuContext {
     list_state: ListState,
 }
 
-#[derive(Resource)]
 pub struct StartMenu;
 
 impl Plugin for StartMenuPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<StartMenuEvent>()
-            .insert_resource(StartMenu)
             .add_systems(Update, handle_start_menu_events);
     }
 }
@@ -108,7 +106,7 @@ pub fn handle_start_menu_events(
     }
 }
 
-impl StatefulWidget for &StartMenu {
+impl StatefulWidget for StartMenu {
     type State = StartMenuContext;
 
     fn render(

@@ -2,7 +2,7 @@ use std::net::{IpAddr, Ipv4Addr};
 
 use bevy::app::{App, ScheduleRunnerPlugin};
 use rust_space_trading::{
-    core_plugin::BodiesConfig,
+    bodies::bodies_config::BodiesConfig,
     engine_plugin::EnginePlugin,
     server_plugin::{ServerNetworkInfo, ServerPlugin},
 };

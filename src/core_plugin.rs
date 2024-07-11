@@ -1,39 +1,13 @@
-use bevy::{app::AppExit, prelude::*, time::TimePlugin, utils::HashMap};
-use serde::{Deserialize, Serialize};
+use bevy::{app::AppExit, prelude::*, state::app::StatesPlugin, time::TimePlugin, utils::HashMap};
 
 use crate::{
-    bodies::{
-        body_data::{BodyData, BodyType},
-        body_id::BodyID,
-    },
+    bodies::{bodies_config::BodiesConfig, body_data::BodyData, body_id::BodyID},
     engine_plugin::{EllipticalOrbit, Position, ToggleTime, Velocity},
     gravity::Mass,
     utils::de::read_main_bodies,
 };
+/// This plugin's role is to handle body system creation
 pub struct CorePlugin;
-
-#[derive(Resource, Clone, Serialize, Deserialize)]
-pub enum BodiesConfig {
-    SmallestBodyType(BodyType),
-    IDs(Vec<BodyID>),
-}
-
-impl Default for BodiesConfig {
-    fn default() -> Self {
-        BodiesConfig::SmallestBodyType(BodyType::Planet)
-    }
-}
-
-impl BodiesConfig {
-    fn into_filter(self) -> Box<dyn FnMut(&BodyData) -> bool> {
-        match self {
-            BodiesConfig::SmallestBodyType(body_type) => {
-                Box::new(move |data: &BodyData| data.body_type <= body_type)
-            }
-            BodiesConfig::IDs(v) => Box::new(move |data: &BodyData| v.contains(&data.id)),
-        }
-    }
-}
 
 impl Plugin for CorePlugin {
     fn build(&self, app: &mut App) {
@@ -43,31 +17,29 @@ impl Plugin for CorePlugin {
             TypeRegistrationPlugin,
             FrameCountPlugin,
             TimePlugin,
+            StatesPlugin,
         ))
-        .insert_state(AppState::Setup)
+        .init_state::<LoadingState>()
         .add_event::<CoreEvent>()
-        .configure_sets(Update, SimulationSet.run_if(in_state(AppState::Loaded)))
-        .configure_sets(PreUpdate, SimulationSet.run_if(in_state(AppState::Loaded)))
-        .configure_sets(PostUpdate, SimulationSet.run_if(in_state(AppState::Loaded)))
+        .configure_sets(Update, LoadedSet.run_if(in_state(LoadingState::Loaded)))
+        .configure_sets(PreUpdate, LoadedSet.run_if(in_state(LoadingState::Loaded)))
+        .configure_sets(PostUpdate, LoadedSet.run_if(in_state(LoadingState::Loaded)))
         .configure_sets(
             FixedUpdate,
-            SimulationSet.run_if(in_state(AppState::Loaded)),
+            LoadedSet.run_if(in_state(LoadingState::Loaded)),
         )
-        .configure_sets(
-            OnEnter(AppState::Loaded),
-            (SystemInitSet, UiInitSet).chain(),
-        )
+        .configure_sets(OnEnter(LoadingState::Loading), SystemInitSet)
         .add_systems(
-            OnEnter(AppState::Loaded),
+            OnEnter(LoadingState::Loading),
             build_system.in_set(SystemInitSet),
         )
-        .add_systems(OnExit(AppState::Loaded), clear_system)
+        .add_systems(OnEnter(LoadingState::Unloading), clear_system)
         .add_systems(Update, handle_core_events);
     }
 }
 
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
-pub struct SimulationSet;
+pub struct LoadedSet;
 
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct SystemInitSet;
@@ -78,9 +50,12 @@ pub struct UiInitSet;
 /// This state represents whether or not a planetary system is loaded in game.
 /// For server, is is automatically the case, but for a client a system is loaded only if one is connected to a server,
 /// or if the singleplayer or explore modes have been launched
-#[derive(States, Debug, PartialEq, Eq, Clone, Hash)]
-pub enum AppState {
-    Setup,
+#[derive(States, Debug, PartialEq, Eq, Clone, Hash, Default)]
+pub enum LoadingState {
+    #[default]
+    NotLoaded,
+    Unloading,
+    Loading,
     Loaded,
 }
 
@@ -93,11 +68,11 @@ pub struct BodiesMapping(pub HashMap<BodyID, Entity>);
 #[derive(Component, Debug, Clone)]
 pub struct BodyInfo(pub BodyData);
 
-pub fn start_game(mut app_state: ResMut<NextState<AppState>>) {
-    app_state.set(AppState::Loaded);
-}
-
-pub fn build_system(mut commands: Commands, config: Res<BodiesConfig>) {
+pub fn build_system(
+    mut commands: Commands,
+    config: Res<BodiesConfig>,
+    mut loading_state: ResMut<NextState<LoadingState>>,
+) {
     let bodies: Vec<_> = read_main_bodies()
         .expect("Failed to read bodies")
         .into_iter()
@@ -124,12 +99,14 @@ pub fn build_system(mut commands: Commands, config: Res<BodiesConfig>) {
         id_mapping.insert(id, entity.id());
     }
     commands.insert_resource(BodiesMapping(id_mapping));
+    loading_state.set(LoadingState::Loaded);
 }
 
 fn clear_system(
     mut commands: Commands,
     mapping: Res<BodiesMapping>,
     mut toggle_time: Option<ResMut<ToggleTime>>,
+    mut loading_state: ResMut<NextState<LoadingState>>,
 ) {
     for entity in mapping.0.values() {
         commands.entity(*entity).despawn();
@@ -138,6 +115,7 @@ fn clear_system(
     if let Some(toggle) = toggle_time.as_mut() {
         toggle.0 = false;
     }
+    loading_state.set(LoadingState::NotLoaded);
 }
 
 #[derive(Event, Clone, Copy)]
@@ -160,9 +138,9 @@ mod tests {
     use bevy::{app::App, ecs::query::With};
 
     use crate::{
-        bodies::body_data::BodyType,
+        bodies::body_id::id_from,
         client_plugin::{ClientMode, ClientPlugin},
-        core_plugin::{BodiesConfig, BodiesMapping, PrimaryBody},
+        core_plugin::{BodiesMapping, PrimaryBody},
         engine_plugin::EllipticalOrbit,
     };
 
@@ -171,30 +149,27 @@ mod tests {
     #[test]
     fn test_build_system() {
         let mut app = App::new();
-        app.add_plugins(ClientPlugin::testing(
-            BodiesConfig::SmallestBodyType(BodyType::Planet),
-            ClientMode::Explorer,
-        ));
+        app.add_plugins(ClientPlugin::testing().in_mode(ClientMode::Explorer));
         app.update();
         app.update();
 
-        let mut world = app.world;
+        let world = app.world_mut();
         assert_eq!(world.resource::<BodiesMapping>().0.len(), 9);
-        assert_eq!(world.query::<&BodyInfo>().iter(&world).len(), 9);
+        assert_eq!(world.query::<&BodyInfo>().iter(world).len(), 9);
         let (orbit, BodyInfo(data)) = world
             .query::<(&EllipticalOrbit, &BodyInfo)>()
-            .iter(&world)
-            .find(|(_, BodyInfo(data))| data.id == "terre".into())
+            .iter(world)
+            .find(|(_, BodyInfo(data))| data.id == id_from("terre"))
             .unwrap();
         assert_eq!(orbit.semimajor_axis, 149598023.);
         assert_eq!(data.semimajor_axis, 149598023.);
         assert_eq!(
             world
                 .query_filtered::<&BodyInfo, With<PrimaryBody>>()
-                .single(&world)
+                .single(world)
                 .0
                 .id,
-            "soleil".into()
+            id_from("soleil")
         )
     }
 }
