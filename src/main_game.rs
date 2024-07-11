@@ -81,6 +81,19 @@ pub enum GameStage {
     Action,
 }
 
+impl std::fmt::Display for GameStage {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "{}",
+            match self {
+                GameStage::Preparation => "Preparation",
+                GameStage::Action => "Action",
+            }
+        )
+    }
+}
+
 pub fn enable_time(mut toggle: ResMut<ToggleTime>) {
     toggle.0 = true;
 }

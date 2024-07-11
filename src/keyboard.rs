@@ -40,12 +40,22 @@ pub struct FleetScreenKeymap {
     pub select_previous: Key,
     pub back: Key,
     pub edit_trajectory: Key,
+    pub new_ship: Key,
+    pub cycle_create_options: Key,
+    pub validate_new_ship: Key,
+    pub delete_char: Key,
 }
 
 #[derive(Debug, Clone, Copy)]
 pub struct Key {
     pub code: KeyCode,
     pub modifiers: KeyModifiers,
+}
+
+impl From<Key> for KeyEvent {
+    fn from(value: Key) -> Self {
+        Self::new(value.code, value.modifiers)
+    }
 }
 
 const POSSIBLE_CODE_STRINGS: [&str; 26] = [
@@ -339,6 +349,10 @@ impl Default for FleetScreenKeymap {
             select_previous: Key::from_str_unchecked("up"),
             back: Key::from_str_unchecked("esc"),
             edit_trajectory: Key::from_str_unchecked("space"),
+            new_ship: Key::from_str_unchecked("n"),
+            cycle_create_options: Key::from_str_unchecked("tab"),
+            validate_new_ship: Key::from_str_unchecked("enter"),
+            delete_char: Key::from_str_unchecked("backspace"),
         }
     }
 }

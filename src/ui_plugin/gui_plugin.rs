@@ -14,12 +14,12 @@ use bevy::{
 
 use crate::{
     bodies::body_data::BodyType,
-    core_plugin::{BodyInfo, LoadingState, UiInitSet},
+    core_plugin::{BodyInfo, LoadingState},
     engine_plugin::Position,
     utils::algebra::project_onto_plane,
 };
 
-use super::AppScreen;
+use super::{AppScreen, UiInit};
 
 const MAX_WIDTH: f32 = 1000.;
 const MIN_RADIUS: f32 = 0.01;
@@ -49,7 +49,7 @@ impl Plugin for GuiPlugin {
             OnEnter(LoadingState::Loaded),
             (insert_display_components, update_transform)
                 .chain()
-                .after(UiInitSet),
+                .after(UiInit),
         )
         .add_systems(
             FixedPreUpdate,

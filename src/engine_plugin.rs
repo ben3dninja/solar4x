@@ -7,9 +7,7 @@ use bevy::{
 
 use crate::{
     bodies::body_data::BodyData,
-    core_plugin::{
-        build_system, BodiesMapping, BodyInfo, LoadedSet, LoadingState, PrimaryBody, SystemInitSet,
-    },
+    core_plugin::{build_system, BodiesMapping, BodyInfo, LoadedSet, LoadingState, PrimaryBody},
     utils::{
         algebra::{mod_180, rotate},
         ui::Direction2,
@@ -30,10 +28,7 @@ impl Plugin for EnginePlugin {
             .insert_resource(ToggleTime(false))
             .add_systems(
                 OnEnter(LoadingState::Loading),
-                (update_local, update_global)
-                    .chain()
-                    .after(build_system)
-                    .in_set(SystemInitSet),
+                (update_local, update_global).chain().after(build_system),
             )
             .add_systems(
                 FixedUpdate,

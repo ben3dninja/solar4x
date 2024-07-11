@@ -5,7 +5,7 @@ use crate::MAX_ID_LENGTH;
 
 pub type ShipID = ArrayString<MAX_ID_LENGTH>;
 
-#[derive(Component, Clone)]
+#[derive(Component, Clone, Default, PartialEq)]
 pub struct ShipInfo {
     pub id: ShipID,
     pub spawn_pos: DVec3,
