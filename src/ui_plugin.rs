@@ -4,7 +4,7 @@ use explorer_screen::ExplorerScreenPlugin;
 use start_menu::{StartMenu, StartMenuContext, StartMenuEvent, StartMenuPlugin};
 
 use crate::{
-    client_plugin::ClientMode, keyboard::Keymap, spaceship::ShipID,
+    client_plugin::ClientMode, core_plugin::LoadingState, keyboard::Keymap, spaceship::ShipID,
     utils::ecs::exit_on_error_if_app,
 };
 
@@ -42,15 +42,29 @@ impl Plugin for TuiPlugin {
         if !self.headless {
             app.add_plugins(RatatuiPlugins::default())
                 .insert_resource(self.keymap.clone())
-                .add_systems(PostUpdate, render.pipe(exit_on_error_if_app))
+                .add_systems(
+                    PostUpdate,
+                    render.pipe(exit_on_error_if_app).in_set(UiUpdate),
+                )
                 .add_systems(PreUpdate, handle_input.before(change_screen));
         }
         app.add_plugins((StartMenuPlugin, ExplorerScreenPlugin, FleetScreenPlugin))
             .insert_resource(AppScreen::default())
+            .configure_sets(PostUpdate, (ContextUpdate, UiUpdate).chain())
+            .configure_sets(OnEnter(LoadingState::Loaded), UiInit)
             .add_event::<ChangeAppScreen>()
             .add_systems(PreUpdate, change_screen);
     }
 }
+
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct ContextUpdate;
+
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct UiUpdate;
+
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct UiInit;
 
 /// A resource storing the current screen and its associated context, with only one context valid at a time
 /// In systems, checking the screen is done at the same time as acquiring the context so no run conditions are needed

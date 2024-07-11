@@ -36,3 +36,15 @@ pub enum Direction4 {
     Left,
     Right,
 }
+
+#[derive(Debug, Clone, Copy)]
+#[repr(u8)]
+pub enum Dimension {
+    X,
+    Y,
+    Z,
+}
+
+pub fn cycle_add(i: &mut usize, size: usize, value: isize) {
+    *i = ((*i as isize + value) % size as isize) as usize
+}

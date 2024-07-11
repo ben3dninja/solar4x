@@ -9,7 +9,7 @@ use ratatui::{
 use crate::{
     bodies::body_id::BodyID,
     client_plugin::ClientMode,
-    core_plugin::{BodiesMapping, BodyInfo, LoadedSet, LoadingState, PrimaryBody, UiInitSet},
+    core_plugin::{BodiesMapping, BodyInfo, LoadedSet, LoadingState, PrimaryBody},
     engine_plugin::{EngineEvent, Position},
     keyboard::ExplorerKeymap,
     utils::{
@@ -23,7 +23,7 @@ use super::{
     search_plugin::{SearchEvent, SearchMatcher, SearchPlugin, SearchState, SearchWidget},
     space_map_plugin::{SpaceMap, SpaceMapEvent},
     tree_widget::{TreeEvent, TreeState, TreeWidget},
-    AppScreen, ChangeAppScreen, ScreenContext,
+    AppScreen, ChangeAppScreen, ScreenContext, UiInit,
 };
 
 pub struct ExplorerScreenPlugin;
@@ -36,8 +36,8 @@ impl Plugin for ExplorerScreenPlugin {
             .add_systems(
                 OnEnter(LoadingState::Loaded),
                 change_screen_to_explorer
-                    .in_set(UiInitSet)
-                    .run_if(in_state(ClientMode::Explorer)),
+                    .run_if(in_state(ClientMode::Explorer))
+                    .in_set(UiInit),
             );
     }
 }

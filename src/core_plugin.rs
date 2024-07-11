@@ -28,11 +28,7 @@ impl Plugin for CorePlugin {
             FixedUpdate,
             LoadedSet.run_if(in_state(LoadingState::Loaded)),
         )
-        .configure_sets(OnEnter(LoadingState::Loading), SystemInitSet)
-        .add_systems(
-            OnEnter(LoadingState::Loading),
-            build_system.in_set(SystemInitSet),
-        )
+        .add_systems(OnEnter(LoadingState::Loading), build_system)
         .add_systems(OnEnter(LoadingState::Unloading), clear_system)
         .add_systems(Update, handle_core_events);
     }
@@ -40,12 +36,6 @@ impl Plugin for CorePlugin {
 
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct LoadedSet;
-
-#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
-pub struct SystemInitSet;
-
-#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
-pub struct UiInitSet;
 
 /// This state represents whether or not a planetary system is loaded in game.
 /// For server, is is automatically the case, but for a client a system is loaded only if one is connected to a server,
