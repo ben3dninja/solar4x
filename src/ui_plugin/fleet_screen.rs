@@ -13,7 +13,7 @@ use ratatui::{
 use crate::{
     keyboard::FleetScreenKeymap,
     main_game::{GameStage, InGame, ShipEvent},
-    spaceship::{ShipID, ShipInfo},
+    spaceship::{ShipID, ShipInfo, ShipsMapping},
     utils::{
         ecs::exit_on_error_if_app,
         list::{ClampedList, OptionsList},
@@ -32,8 +32,12 @@ impl Plugin for FleetScreenPlugin {
             .add_systems(
                 PostUpdate,
                 update_fleet_context
+                    .run_if(in_state(InGame))
                     .in_set(ContextUpdate)
-                    .run_if(state_changed::<GameStage>.or_else(on_event::<ShipEvent>())),
+                    .run_if(
+                        state_changed::<GameStage>
+                            .or_else(resource_exists_and_changed::<ShipsMapping>),
+                    ),
             )
             .add_systems(OnEnter(InGame), change_screen_to_fleet);
     }

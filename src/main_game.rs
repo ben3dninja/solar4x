@@ -38,7 +38,6 @@ impl Plugin for GamePlugin {
         };
         app.add_computed_state::<InGame>()
             .add_sub_state::<GameStage>()
-            .insert_resource(ShipsMapping::default())
             .insert_resource(TrajectoriesDirectory(path))
             .add_event::<ShipEvent>()
             .add_event::<TrajectoryEvent>()
