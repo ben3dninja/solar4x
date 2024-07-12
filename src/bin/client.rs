@@ -26,7 +26,7 @@ fn main() {
                 ..Default::default()
             },
             SpaceMapPlugin,
-            // rust_space_trading::ui_plugin::gui_plugin::GuiPlugin,
+            rust_space_trading::ui_plugin::gui_plugin::GuiPlugin,
         ))
         .run();
 }
