@@ -1,7 +1,8 @@
 use bevy::{
     a11y::AccessibilityPlugin,
-    color::palettes::css::{BLACK, DARK_GRAY, GOLD, TEAL},
+    color::palettes::css::{BLACK, DARK_GRAY, GOLD, TEAL, WHITE},
     core_pipeline::CorePipelinePlugin,
+    gizmos::GizmoPlugin,
     input::InputPlugin,
     math::DVec3,
     prelude::*,
@@ -14,7 +15,7 @@ use bevy::{
 
 use crate::{
     bodies::body_data::BodyType,
-    core_plugin::{BodyInfo, LoadingState},
+    core_plugin::{BodiesMapping, BodyInfo, LoadedSet, LoadingState},
     engine_plugin::Position,
     utils::algebra::project_onto_plane,
 };
@@ -22,7 +23,7 @@ use crate::{
 use super::{AppScreen, UiInit};
 
 const MAX_WIDTH: f32 = 1000.;
-const MIN_RADIUS: f32 = 0.01;
+const MIN_RADIUS: f32 = 1e-4;
 pub struct GuiPlugin;
 
 impl Plugin for GuiPlugin {
@@ -41,6 +42,7 @@ impl Plugin for GuiPlugin {
             SpritePlugin,
             TextPlugin,
             UiPlugin,
+            GizmoPlugin,
         ))
         .insert_resource(ClearColor(Color::Srgba(BLACK)))
         // .insert_resource(ShootingState::Idle)
@@ -54,7 +56,8 @@ impl Plugin for GuiPlugin {
         .add_systems(
             FixedPreUpdate,
             (update_transform, update_camera_pos).chain(),
-        );
+        )
+        .add_systems(Update, draw_gizmos.in_set(LoadedSet));
     }
 }
 
@@ -132,6 +135,33 @@ fn update_transform(screen: Res<AppScreen>, mut query: Query<(&mut Transform, &P
             transform.translation.x = x;
             transform.translation.y = y;
         }
+    }
+}
+
+fn draw_gizmos(
+    screen: Res<AppScreen>,
+    mut gizmos: Gizmos,
+    transform: Query<&Transform>,
+    info: Query<&BodyInfo>,
+    mapping: Res<BodiesMapping>,
+) {
+    if let AppScreen::Explorer(ctx) = screen.as_ref() {
+        let scale = MAX_WIDTH as f64 / ctx.space_map.system_size;
+        gizmos.circle_2d(
+            transform.get(ctx.focus_body).unwrap().translation.xy(),
+            (30. / ctx.space_map.zoom_level).max(
+                info.get(ctx.focus_body).unwrap().0.radius * scale + 30. / ctx.space_map.zoom_level,
+            ) as f32,
+            Color::srgba(1., 1., 1., 0.1),
+        );
+        let selected = mapping.0[&ctx.tree_state.selected_body_id()];
+        gizmos.circle_2d(
+            transform.get(selected).unwrap().translation.xy(),
+            (10. / ctx.space_map.zoom_level)
+                .max(info.get(selected).unwrap().0.radius * scale + 15. / ctx.space_map.zoom_level)
+                as f32,
+            Color::Srgba(WHITE),
+        );
     }
 }
 
