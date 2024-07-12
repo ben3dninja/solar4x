@@ -6,7 +6,7 @@ use crate::{
 };
 
 /// Gravitationnal constant in km3kg-1d-2
-const G: f64 = 6.6743e-11 * SECONDS_PER_DAY * SECONDS_PER_DAY * 1e-9;
+pub const G: f64 = 6.6743e-11 * SECONDS_PER_DAY * SECONDS_PER_DAY * 1e-9;
 
 pub struct GravityPlugin;
 

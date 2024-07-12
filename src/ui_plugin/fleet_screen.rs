@@ -11,10 +11,15 @@ use ratatui::{
 };
 
 use crate::{
+    bodies::body_id::BodyID,
+    core_plugin::BodiesMapping,
+    engine_plugin::{Position, Velocity},
+    gravity::Mass,
     keyboard::FleetScreenKeymap,
     main_game::{GameStage, InGame, ShipEvent},
     spaceship::{ShipID, ShipInfo, ShipsMapping},
     utils::{
+        algebra::circular_orbit_around_body,
         ecs::exit_on_error_if_app,
         list::{ClampedList, OptionsList},
         ui::{centered_rect, Direction2},
@@ -28,7 +33,12 @@ pub struct FleetScreenPlugin;
 impl Plugin for FleetScreenPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<FleetScreenEvent>()
-            .add_systems(Update, handle_fleet_events.pipe(exit_on_error_if_app))
+            .add_systems(
+                Update,
+                handle_fleet_events
+                    .pipe(exit_on_error_if_app)
+                    .run_if(in_state(InGame)),
+            )
             .add_systems(
                 PostUpdate,
                 update_fleet_context
@@ -43,10 +53,11 @@ impl Plugin for FleetScreenPlugin {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 #[derive(Event, Clone)]
 pub enum FleetScreenEvent {
     Select(Direction2),
-    TryNewShip(Result<ShipInfo, ShipCreationError>),
+    TryNewShip(CreateShipContext),
 }
 
 #[derive(Clone, Debug)]
@@ -115,9 +126,11 @@ impl ClampedList for FleetContext {
     }
 }
 
-#[derive(Default)]
-struct CreateShipContext {
+#[derive(Default, Clone)]
+pub struct CreateShipContext {
     id_text: String,
+    host_body: String,
+    altitude: String,
     pos_x: String,
     pos_y: String,
     pos_z: String,
@@ -127,14 +140,17 @@ struct CreateShipContext {
     selected: usize,
 }
 
-impl OptionsList<7> for CreateShipContext {
+impl OptionsList<9> for CreateShipContext {
     fn current_index(&mut self) -> &mut usize {
         &mut self.selected
     }
 
-    fn fields_list(&mut self) -> [(&mut String, String); 7] {
+    fn fields_list(&mut self) -> [(&mut String, String); 9] {
         [
             (&mut self.id_text, "Ship ID".into()),
+            // TODO: add search or tree widget instead of plain id
+            (&mut self.host_body, "Host body id".into()),
+            (&mut self.altitude, "Spawn Altitude".into()),
             (&mut self.pos_x, "Spawn x".into()),
             (&mut self.pos_y, "Spawn y".into()),
             (&mut self.pos_z, "Spawn z".into()),
@@ -149,9 +165,13 @@ impl CreateShipContext {
     fn to_info<'a>(
         &self,
         mut ships: impl Iterator<Item = &'a ShipInfo>,
+        bodies: &Query<(&Mass, &Position, &Velocity)>,
+        mapping: &BodiesMapping,
     ) -> Result<ShipInfo, ShipCreationError> {
         let CreateShipContext {
             id_text,
+            host_body,
+            altitude,
             pos_x,
             pos_y,
             pos_z,
@@ -160,8 +180,16 @@ impl CreateShipContext {
             speed_z,
             ..
         } = self;
-        let spawn_pos = (pos_x.parse()?, pos_y.parse()?, pos_z.parse()?).into();
-        let spawn_speed = (speed_x.parse()?, speed_y.parse()?, speed_z.parse()?).into();
+        let (spawn_pos, spawn_speed) =
+            if let Some(body) = BodyID::from(host_body).ok().and_then(|i| mapping.0.get(&i)) {
+                let (Mass(m), Position(p), Velocity(v)) = bodies.get(*body).unwrap();
+                circular_orbit_around_body(altitude.parse()?, *m, *p, *v)
+            } else {
+                (
+                    (pos_x.parse()?, pos_y.parse()?, pos_z.parse()?).into(),
+                    (speed_x.parse()?, speed_y.parse()?, speed_z.parse()?).into(),
+                )
+            };
         let id = ShipID::from(id_text).map_err(CapacityError::simplify)?;
         if ships.any(|s| s.id == id) {
             Err(ShipCreationError::ShipAlreadyExists(id))
@@ -182,8 +210,8 @@ impl FleetContext {
             ..Default::default()
         }
     }
-    fn selected_ship_id(&self) -> Option<ShipID> {
-        self.list_state.selected().map(|i| self.ships[i].id)
+    fn selected_ship(&self) -> Option<&ShipInfo> {
+        self.list_state.selected().map(|i| &self.ships[i])
     }
 }
 
@@ -214,7 +242,7 @@ impl ScreenContext for FleetContext {
                     internal_event.send(Select(Up));
                 }
                 e if keymap.edit_trajectory.matches(e) => {
-                    if let Some(id) = self.selected_ship_id() {
+                    if let Some(id) = self.selected_ship().map(|s| s.id) {
                         return Some(ChangeAppScreen::TrajectoryEditor(id));
                     }
                 }
@@ -228,7 +256,7 @@ impl ScreenContext for FleetContext {
                 e if keymap.cycle_create_options.matches(e) => ctx.select_next(),
                 e if keymap.back.matches(e) => self.popup_context = None,
                 e if keymap.validate_new_ship.matches(e) => {
-                    internal_event.send(TryNewShip(ctx.to_info(self.ships.iter())));
+                    internal_event.send(TryNewShip(ctx.clone()));
                 }
                 e if keymap.delete_char.matches(e) => {
                     ctx.selected_field().pop();
@@ -253,13 +281,15 @@ fn handle_fleet_events(
     mut screen: ResMut<AppScreen>,
     mut events: EventReader<FleetScreenEvent>,
     mut ship_events: EventWriter<ShipEvent>,
+    bodies: Query<(&Mass, &Position, &Velocity)>,
+    mapping: Res<BodiesMapping>,
 ) -> color_eyre::eyre::Result<()> {
     if let AppScreen::Fleet(context) = screen.as_mut() {
         for event in events.read() {
             match event {
                 FleetScreenEvent::Select(d) => context.select_adjacent(*d),
-                FleetScreenEvent::TryNewShip(info) => {
-                    let info = info.clone()?;
+                FleetScreenEvent::TryNewShip(ctx) => {
+                    let info = ctx.to_info(context.ships.iter(), &bodies, mapping.as_ref())?;
                     context.ships.push(info.clone());
                     ship_events.send(ShipEvent::Create(info.clone()));
                     context.popup_context = None;
@@ -296,29 +326,57 @@ impl StatefulWidget for FleetScreen {
         buf: &mut ratatui::prelude::Buffer,
         state: &mut Self::State,
     ) {
+        let chunks =
+            Layout::horizontal([Constraint::Percentage(50), Constraint::Fill(1)]).split(area);
+
+        // Ship list
         let entries = state.ships.iter().map(|s| s.id.to_string());
         let list = List::new(entries).highlight_symbol(">").block(
             Block::bordered()
                 .title_top("Ships")
                 .title_bottom(format!("Current stage: {}", state.stage)),
         );
-        <List as StatefulWidget>::render(list, area, buf, &mut state.list_state);
+        <List as StatefulWidget>::render(list, chunks[0], buf, &mut state.list_state);
+
+        // Ship info
+        if let Some(info) = state.selected_ship() {
+            Paragraph::new(format!(
+                "ID: {}\nSpawn position: {}\nSpawn velocity: {}",
+                info.id, info.spawn_pos, info.spawn_speed
+            ))
+            .block(Block::bordered().title_top("Ship info"))
+            .render(chunks[1], buf);
+        }
+
+        // Ship creation popup
         if let Some(ctx) = &mut state.popup_context {
             let popup = centered_rect(60, 60, area);
             Clear.render(popup, buf);
             let chunks =
                 Layout::vertical([Constraint::Length(3), Constraint::Fill(1)]).split(popup);
+
+            // Title
             Paragraph::new("Create ship".bold())
                 .alignment(Alignment::Center)
                 .render(chunks[0], buf);
+
             let body = Layout::horizontal([Constraint::Percentage(50), Constraint::Fill(1)])
                 .split(chunks[1]);
-            ctx.paragraph(0).render(body[0], buf);
+
+            // Left side of options
+            let mut constraints = [Constraint::Percentage(100 / 3)].repeat(3);
+            constraints.push(Constraint::Fill(1));
+            let left = Layout::vertical(constraints).split(body[0]);
+            for i in 0..3 {
+                ctx.paragraph(i).render(left[i], buf);
+            }
+
+            // Right side (spawn coordinates)
             let mut constraints = [Constraint::Percentage(100 / 6)].repeat(6);
             constraints.push(Constraint::Fill(1));
             let coords = Layout::vertical(constraints).split(body[1]);
-            for i in 1..7 {
-                ctx.paragraph(i).render(coords[i - 1], buf);
+            for i in 3..9 {
+                ctx.paragraph(i).render(coords[i - 3], buf);
             }
         }
     }
@@ -352,18 +410,13 @@ mod tests {
     fn test_create_ship() {
         let mut app = new_app();
         let popup = CreateShipContext {
-            id_text: "s".into(),
-            pos_x: "1000".into(),
-            pos_y: "0".into(),
-            pos_z: "0".into(),
-            speed_x: "0".into(),
-            speed_y: "1000".into(),
-            speed_z: "0".into(),
             selected: 0,
+            host_body: "terre".into(),
+            altitude: "1e4".into(),
+            ..Default::default()
         };
-        app.world_mut().send_event(FleetScreenEvent::TryNewShip(
-            popup.to_info(Vec::new().iter()),
-        ));
+        app.world_mut()
+            .send_event(FleetScreenEvent::TryNewShip(popup));
         app.update();
         app.update();
         assert_eq!(app.world().resource::<ShipsMapping>().0.len(), 1)

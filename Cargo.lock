@@ -3113,6 +3113,7 @@ dependencies = [
  "color-eyre",
  "crossterm",
  "fuzzy-matcher",
+ "rand",
  "ratatui",
  "serde",
  "serde_json",

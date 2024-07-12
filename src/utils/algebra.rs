@@ -1,4 +1,9 @@
+use std::f64::consts::TAU;
+
 use bevy::math::{DVec2, DVec3};
+use rand::Rng;
+
+use crate::gravity::G;
 
 pub fn mod_180(x: f64) -> f64 {
     let x = x % 360.;
@@ -10,6 +15,7 @@ pub fn mod_180(x: f64) -> f64 {
 }
 
 #[allow(non_snake_case)]
+/// Rotates u with respect to angles in radians
 pub fn rotate(u: DVec2, o: f64, O: f64, I: f64) -> DVec3 {
     let (x, y) = u.into();
     let x_glob = (o.cos() * O.cos() - o.sin() * O.sin() * I.cos()) * x
@@ -38,4 +44,22 @@ pub fn convert_orbital_to_global(
     let v3 = v1.cross(v2);
 
     thrust.x * v1 + thrust.y * v2 + thrust.z * v3
+}
+
+/// Position and velocity for circular orbit at given altitude around body
+/// For now : in the eccliptic plane, rotating trigonometrically  (TODO: random inclination and direction too)
+pub fn circular_orbit_around_body(
+    altitude: f64,
+    body_mass: f64,
+    body_pos: DVec3,
+    body_speed: DVec3,
+) -> (DVec3, DVec3) {
+    let angle = rand::thread_rng().gen_range(0. ..TAU);
+    let unit_pos = DVec2::from_angle(angle);
+    let unit_speed = unit_pos.perp();
+    let ((x, y), (vx, vy)) = (unit_pos.into(), unit_speed.into());
+    (
+        altitude * DVec3::new(x, y, 0.) + body_pos,
+        (G * body_mass / altitude).sqrt() * DVec3::new(vx, vy, 0.) + body_speed,
+    )
 }
