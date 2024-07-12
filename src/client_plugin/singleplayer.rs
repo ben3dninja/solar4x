@@ -5,7 +5,7 @@ use crate::{
     core_plugin::LoadingState,
     main_game::{
         trajectory::{dispatch_trajectories, handle_trajectory_event},
-        GameStage,
+        GameStage, InGame,
     },
     spaceship::ShipsMapping,
     utils::ecs::exit_on_error_if_app,
@@ -30,7 +30,10 @@ impl Plugin for SingleplayerPlugin {
                 OnEnter(LoadingState::Loading),
                 create_ships.run_if(in_state(ClientMode::Singleplayer)),
             )
-            .add_systems(OnEnter(LoadingState::Unloading), delete_ships)
+            .add_systems(
+                OnEnter(LoadingState::Unloading),
+                delete_ships.run_if(state_changed::<InGame>),
+            )
             .add_systems(
                 Update,
                 handle_trajectory_event
