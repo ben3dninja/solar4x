@@ -27,7 +27,7 @@ use crate::{
     },
 };
 
-use super::AppScreen;
+use super::{explorer_screen::ExplorerContext, AppScreen};
 
 const OFFSET_STEP: f64 = 1e8;
 const ZOOM_STEP: f64 = 1.5;
@@ -37,8 +37,9 @@ impl Plugin for SpaceMapPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             Update,
-            // No need to ask it to run only in explorer screen as the check is done inside the function to acquire the context
-            update_space_map.run_if(resource_equals(ToggleTime(true))),
+            update_space_map
+                .run_if(in_state(AppScreen::Explorer))
+                .run_if(resource_equals(ToggleTime(true))),
         );
     }
 }
@@ -84,30 +85,28 @@ impl WidgetRef for SpaceMap {
     }
 }
 
-fn update_space_map(query: Query<(&Position, &BodyInfo)>, mut screen: ResMut<AppScreen>) {
-    if let AppScreen::Explorer(ctx) = screen.as_mut() {
-        let mut circles = Vec::new();
-        let &Position(focus_pos) = query.get(ctx.focus_body).unwrap().0;
-        let selected = ctx.tree_state.selected_body_id();
-        for (&Position(pos), BodyInfo(data)) in query.iter() {
-            let proj = project_onto_plane(pos - focus_pos, (DVec3::X, DVec3::Y))
-                - ctx.space_map.offset_amount;
-            let color = match data.body_type {
-                _ if data.id == selected => Color::Red,
-                BodyType::Star => Color::Yellow,
-                BodyType::Planet => Color::Blue,
-                _ => Color::DarkGray,
-            };
-            let radius = data.radius;
-            circles.push(Circle {
-                x: proj.x,
-                y: proj.y,
-                radius,
-                color,
-            });
-        }
-        ctx.space_map.circles = circles;
+fn update_space_map(mut ctx: ResMut<ExplorerContext>, query: Query<(&Position, &BodyInfo)>) {
+    let mut circles = Vec::new();
+    let &Position(focus_pos) = query.get(ctx.focus_body).unwrap().0;
+    let selected = ctx.tree_state.selected_body_id();
+    for (&Position(pos), BodyInfo(data)) in query.iter() {
+        let proj =
+            project_onto_plane(pos - focus_pos, (DVec3::X, DVec3::Y)) - ctx.space_map.offset_amount;
+        let color = match data.body_type {
+            _ if data.id == selected => Color::Red,
+            BodyType::Star => Color::Yellow,
+            BodyType::Planet => Color::Blue,
+            _ => Color::DarkGray,
+        };
+        let radius = data.radius;
+        circles.push(Circle {
+            x: proj.x,
+            y: proj.y,
+            radius,
+            color,
+        });
     }
+    ctx.space_map.circles = circles;
 }
 
 impl SpaceMap {
@@ -191,9 +190,9 @@ mod tests {
         core_plugin::{BodyInfo, LoadedSet},
         engine_plugin::{update_global, update_local, update_time},
         ui_plugin::{
-            explorer_screen::ExplorerEvent,
+            explorer_screen::{ExplorerContext, ExplorerEvent},
             space_map_plugin::{update_space_map, SpaceMapEvent},
-            AppScreen, TuiPlugin,
+            TuiPlugin,
         },
     };
 
@@ -212,12 +211,11 @@ mod tests {
         );
         app.update();
         app.update();
-        if let AppScreen::Explorer(ctx) = app.world().resource::<AppScreen>() {
-            let map = &ctx.space_map;
-            assert_eq!(map.circles.len(), 9);
-            assert!(4459753056. < map.system_size);
-            assert!(map.system_size < 4537039826.);
-        }
+        let ctx = app.world().resource::<ExplorerContext>();
+        let map = &ctx.space_map;
+        assert_eq!(map.circles.len(), 9);
+        assert!(4459753056. < map.system_size);
+        assert!(map.system_size < 4537039826.);
     }
 
     #[test]
@@ -230,22 +228,22 @@ mod tests {
         app.update();
         app.update();
         let earth = id_from("terre");
-        if let AppScreen::Explorer(ctx) = app.world_mut().resource_mut::<AppScreen>().as_mut() {
-            ctx.tree_state.select_body(earth);
-        }
+        let mut ctx = app.world_mut().resource_mut::<ExplorerContext>();
+        ctx.tree_state.select_body(earth);
+
         app.update();
 
         app.world_mut()
             .send_event(ExplorerEvent::SpaceMap(SpaceMapEvent::FocusBody));
         app.update();
-        if let AppScreen::Explorer(ctx) = app.world_mut().resource_mut::<AppScreen>().as_mut() {
-            let focus = ctx.focus_body;
-            let world = &mut app.world_mut();
+        let ctx = app.world().resource::<ExplorerContext>();
+        let focus = ctx.focus_body;
 
-            assert_eq!(
-                world.query::<&BodyInfo>().get(world, focus).unwrap().0.id,
-                earth
-            );
-        }
+        let world = &mut app.world_mut();
+
+        assert_eq!(
+            world.query::<&BodyInfo>().get(world, focus).unwrap().0.id,
+            earth
+        );
     }
 }

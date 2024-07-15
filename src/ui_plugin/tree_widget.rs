@@ -315,7 +315,7 @@ mod tests {
     use crate::{
         bodies::{bodies_config::BodiesConfig, body_data::BodyType, body_id::id_from},
         client_plugin::{ClientMode, ClientPlugin},
-        ui_plugin::{AppScreen, TuiPlugin},
+        ui_plugin::{explorer_screen::ExplorerContext, TuiPlugin},
     };
 
     fn new_app(moons: bool) -> App {
@@ -334,45 +334,42 @@ mod tests {
     fn test_initialize_tree() {
         let app = new_app(false);
         let world = app.world();
-        if let AppScreen::Explorer(ctx) = world.resource::<AppScreen>() {
-            let tree = &ctx.tree_state;
-            assert_eq!(tree.system_tree.len(), 9);
-            assert!(tree.system_tree[0].is_last_child);
-            assert!(tree.system_tree[8].is_last_child);
-            for i in 1..8 {
-                assert!(!tree.system_tree[i].is_last_child);
-            }
+        let ctx = world.resource::<ExplorerContext>();
+        let tree = &ctx.tree_state;
+        assert_eq!(tree.system_tree.len(), 9);
+        assert!(tree.system_tree[0].is_last_child);
+        assert!(tree.system_tree[8].is_last_child);
+        for i in 1..8 {
+            assert!(!tree.system_tree[i].is_last_child);
         }
     }
     #[test]
     fn test_select_body() {
         let mut app = new_app(false);
         let world = app.world_mut();
-        if let AppScreen::Explorer(ctx) = world.resource_mut::<AppScreen>().as_mut() {
-            let tree = &mut ctx.tree_state;
-            let earth = id_from("terre");
-            tree.select_body(earth);
-            assert_eq!(tree.selected_body_id(), earth)
-        }
+        let mut ctx = world.resource_mut::<ExplorerContext>();
+        let tree = &mut ctx.tree_state;
+        let earth = id_from("terre");
+        tree.select_body(earth);
+        assert_eq!(tree.selected_body_id(), earth)
     }
 
     #[test]
     fn test_toggle_entry_expansion() {
         let mut app = new_app(false);
         let world = app.world_mut();
-        if let AppScreen::Explorer(ctx) = world.resource_mut::<AppScreen>().as_mut() {
-            let tree = &mut ctx.tree_state;
-            tree.toggle_selection_expansion();
-            assert_eq!(tree.visible_tree_entries.len(), 9);
-            assert!(tree.nth_visible_entry(0).unwrap().is_expanded);
-            for i in 1..9 {
-                tree.toggle_entry_expansion(i);
-            }
-            assert_eq!(tree.visible_tree_entries.len(), 9);
-            tree.toggle_selection_expansion();
-            assert_eq!(tree.visible_tree_entries.len(), 1);
-            assert!(!tree.nth_visible_entry(0).unwrap().is_expanded);
+        let mut ctx = world.resource_mut::<ExplorerContext>();
+        let tree = &mut ctx.tree_state;
+        tree.toggle_selection_expansion();
+        assert_eq!(tree.visible_tree_entries.len(), 9);
+        assert!(tree.nth_visible_entry(0).unwrap().is_expanded);
+        for i in 1..9 {
+            tree.toggle_entry_expansion(i);
         }
+        assert_eq!(tree.visible_tree_entries.len(), 9);
+        tree.toggle_selection_expansion();
+        assert_eq!(tree.visible_tree_entries.len(), 1);
+        assert!(!tree.nth_visible_entry(0).unwrap().is_expanded);
     }
 
     #[test]
@@ -381,33 +378,31 @@ mod tests {
         app.update();
         app.update();
         let world = app.world();
-        if let AppScreen::Explorer(ctx) = world.resource::<AppScreen>() {
-            let tree = &ctx.tree_state;
+        let ctx = world.resource::<ExplorerContext>();
+        let tree = &ctx.tree_state;
 
-            assert_eq!(
-                tree.compute_deepness_map(tree.index_of(id_from("lune")).unwrap()),
-                vec![true, false, true]
-            );
-        }
+        assert_eq!(
+            tree.compute_deepness_map(tree.index_of(id_from("lune")).unwrap()),
+            vec![true, false, true]
+        );
     }
 
     #[test]
     fn test_build_deepness_prefix() {
         let mut app = new_app(true);
         let world = app.world_mut();
-        if let AppScreen::Explorer(ctx) = world.resource_mut::<AppScreen>().as_mut() {
-            let tree_state = &mut ctx.tree_state;
-            assert_eq!(tree_state.build_deepness_prefix(0), "");
-            tree_state.toggle_selection_expansion();
-            assert_eq!(
-                tree_state.build_deepness_prefix(tree_state.index_of_nth_visible_entry(8).unwrap()),
-                "└─"
-            );
-            tree_state.toggle_entry_expansion(8);
-            assert_eq!(
-                tree_state.build_deepness_prefix(tree_state.index_of_nth_visible_entry(9).unwrap()),
-                "  ├─"
-            );
-        }
+        let mut ctx = world.resource_mut::<ExplorerContext>();
+        let tree_state = &mut ctx.tree_state;
+        assert_eq!(tree_state.build_deepness_prefix(0), "");
+        tree_state.toggle_selection_expansion();
+        assert_eq!(
+            tree_state.build_deepness_prefix(tree_state.index_of_nth_visible_entry(8).unwrap()),
+            "└─"
+        );
+        tree_state.toggle_entry_expansion(8);
+        assert_eq!(
+            tree_state.build_deepness_prefix(tree_state.index_of_nth_visible_entry(9).unwrap()),
+            "  ├─"
+        );
     }
 }

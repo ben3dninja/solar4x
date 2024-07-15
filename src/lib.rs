@@ -12,3 +12,8 @@ pub mod ui_plugin;
 pub mod utils;
 
 const MAX_ID_LENGTH: usize = 32;
+
+/// Game time that is added at each server update (multiplied by game speed)
+const GAMETIME_PER_UPDATE: f64 = 1.;
+
+const TPS: f64 = 1.;

@@ -1,22 +1,21 @@
 use bevy::prelude::*;
+use bevy_ratatui::event::KeyEvent;
 use crossterm::event::KeyEventKind;
 use ratatui::widgets::{List, ListState, StatefulWidget};
 
 use crate::{
+    client_plugin::ClientMode,
     core_plugin::CoreEvent,
-    keyboard::StartMenuKeymap,
-    utils::{
-        list::{select_next_clamp, select_previous_clamp},
-        ui::Direction2,
-    },
+    keyboard::Keymap,
+    utils::{list::ClampedList, ui::Direction2},
 };
 
-use super::{AppScreen, ChangeAppScreen, ScreenContext};
+use super::AppScreen;
 
-const SCREENS: [(ChangeAppScreen, &str); 3] = [
-    (ChangeAppScreen::Singleplayer, "Singleplayer"),
-    (ChangeAppScreen::Multiplayer, "Multiplayer"),
-    (ChangeAppScreen::Explorer, "Explore"),
+const SCREENS: [(ClientMode, &str); 3] = [
+    (ClientMode::Singleplayer, "Singleplayer"),
+    (ClientMode::Multiplayer, "Multiplayer"),
+    (ClientMode::Explorer, "Explore"),
 ];
 
 pub struct StartMenuPlugin;
@@ -25,8 +24,10 @@ pub struct StartMenuPlugin;
 pub enum StartMenuEvent {
     Quit,
     Select(Direction2),
+    Validate,
 }
 
+#[derive(Resource)]
 pub struct StartMenuContext {
     list_state: ListState,
 }
@@ -35,40 +36,47 @@ pub struct StartMenu;
 
 impl Plugin for StartMenuPlugin {
     fn build(&self, app: &mut App) {
-        app.add_event::<StartMenuEvent>()
-            .add_systems(Update, handle_start_menu_events);
+        app.insert_resource(StartMenuContext::default())
+            .add_event::<StartMenuEvent>()
+            .add_systems(
+                Update,
+                (read_input, handle_events)
+                    .chain()
+                    .run_if(in_state(AppScreen::StartMenu)),
+            )
+            .add_systems(OnEnter(ClientMode::None), create_screen);
     }
 }
 
-impl ScreenContext for StartMenuContext {
-    type ScreenEvent = StartMenuEvent;
+fn create_screen(mut next_screen: ResMut<NextState<AppScreen>>) {
+    next_screen.set(AppScreen::StartMenu);
+}
 
-    type ScreenKeymap = StartMenuKeymap;
-
-    fn read_input(
-        &mut self,
-        key_event: &bevy_ratatui::event::KeyEvent,
-        keymap: &Self::ScreenKeymap,
-        internal_event: &mut Events<Self::ScreenEvent>,
-    ) -> Option<ChangeAppScreen> {
-        if key_event.kind == KeyEventKind::Release {
-            return None;
+fn read_input(
+    mut key_event: EventReader<KeyEvent>,
+    keymap: Res<Keymap>,
+    mut internal_event: EventWriter<StartMenuEvent>,
+) {
+    for KeyEvent(event) in key_event.read() {
+        if event.kind == KeyEventKind::Release {
+            return;
         }
         use Direction2::*;
         use StartMenuEvent::*;
 
-        internal_event.send(match key_event {
+        let keymap = &keymap.start_menu;
+        internal_event.send(match event {
             e if keymap.select_next.matches(e) => Select(Down),
             e if keymap.select_previous.matches(e) => Select(Up),
             e if keymap.quit.matches(e) => Quit,
-            e if keymap.validate.matches(e) => return Some(self.get_next_screen()),
-            _ => return None,
+            e if keymap.validate.matches(e) => Validate,
+            _ => return,
         });
-        None
     }
 }
+
 impl StartMenuContext {
-    fn get_next_screen(&self) -> ChangeAppScreen {
+    fn get_next_mode(&self) -> ClientMode {
         match self.list_state.selected().unwrap() {
             i if i < SCREENS.len() => SCREENS[i].0,
             _ => unreachable!(),
@@ -84,24 +92,29 @@ impl Default for StartMenuContext {
     }
 }
 
-pub fn handle_start_menu_events(
-    mut screen: ResMut<AppScreen>,
+impl ClampedList for StartMenuContext {
+    fn list_state(&mut self) -> &mut ListState {
+        &mut self.list_state
+    }
+
+    fn len(&self) -> usize {
+        SCREENS.len()
+    }
+}
+
+pub fn handle_events(
+    mut next_mode: ResMut<NextState<ClientMode>>,
+    mut context: ResMut<StartMenuContext>,
     mut events: EventReader<StartMenuEvent>,
     mut core_events: EventWriter<CoreEvent>,
 ) {
-    if let AppScreen::StartMenu(context) = screen.as_mut() {
-        for event in events.read() {
-            match event {
-                StartMenuEvent::Quit => {
-                    core_events.send(CoreEvent::Quit);
-                }
-                StartMenuEvent::Select(d) => match d {
-                    Direction2::Down => {
-                        select_next_clamp(&mut context.list_state, SCREENS.len() - 1)
-                    }
-                    Direction2::Up => select_previous_clamp(&mut context.list_state, 0),
-                },
+    for event in events.read() {
+        match event {
+            StartMenuEvent::Quit => {
+                core_events.send(CoreEvent::Quit);
             }
+            StartMenuEvent::Select(d) => context.select_adjacent(*d),
+            StartMenuEvent::Validate => next_mode.set(context.get_next_mode()),
         }
     }
 }

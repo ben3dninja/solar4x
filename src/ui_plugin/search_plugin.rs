@@ -155,7 +155,9 @@ mod tests {
         bodies::{bodies_config::BodiesConfig, body_data::BodyType, body_id::id_from},
         client_plugin::{ClientMode, ClientPlugin},
         ui_plugin::{
-            explorer_screen::ExplorerEvent, search_plugin::SearchEvent, AppScreen, TuiPlugin,
+            explorer_screen::{ExplorerContext, ExplorerEvent},
+            search_plugin::SearchEvent,
+            TuiPlugin,
         },
     };
 
@@ -182,9 +184,8 @@ mod tests {
         app.world_mut()
             .send_event(ExplorerEvent::Search(SearchEvent::ValidateSearch));
         app.update();
-        if let AppScreen::Explorer(ctx) = app.world_mut().resource_mut::<AppScreen>().as_mut() {
-            let id = ctx.tree_state.selected_body_id();
-            assert_eq!(id, id_from("lune"))
-        }
+        let ctx = app.world_mut().resource_mut::<ExplorerContext>();
+        let id = ctx.tree_state.selected_body_id();
+        assert_eq!(id, id_from("lune"))
     }
 }
