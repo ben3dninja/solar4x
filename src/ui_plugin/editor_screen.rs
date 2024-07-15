@@ -7,7 +7,7 @@ use ratatui::{
 };
 
 use crate::{
-    core_plugin::{BodyInfo, PrimaryBody},
+    core_plugin::{BodiesMapping, BodyInfo, EventHandling, InputReading, PrimaryBody, SystemSize},
     engine_plugin::{Position, Velocity},
     gravity::Influenced,
     keyboard::Keymap,
@@ -17,7 +17,7 @@ use crate::{
     GAMETIME_PER_UPDATE,
 };
 
-use super::AppScreen;
+use super::{space_map_plugin::SpaceMap, AppScreen};
 pub struct EditorPlugin;
 
 #[derive(Event)]
@@ -55,8 +55,10 @@ impl Plugin for EditorPlugin {
             .add_computed_state::<InEditor>()
             .add_systems(
                 Update,
-                (read_input, handle_editor_events)
-                    .chain()
+                (
+                    read_input.in_set(InputReading),
+                    handle_editor_events.in_set(EventHandling),
+                )
                     .run_if(in_state(InEditor)),
             )
             .add_systems(OnEnter(InEditor), create_screen)
@@ -81,19 +83,32 @@ impl ComputedStates for InEditor {
 fn create_screen(
     mut commands: Commands,
     screen: Res<State<AppScreen>>,
-    coords: Query<(&Position, &Velocity)>,
-    mapping: Res<ShipsMapping>,
+    coords: Query<(&Position, &Velocity, &Influenced)>,
+    ships_mapping: Res<ShipsMapping>,
+    bodies_mapping: Res<BodiesMapping>,
+    bodies: Query<&BodyInfo>,
+    system_size: Res<SystemSize>,
 ) {
     if let AppScreen::Editor(id) = screen.get() {
-        if let Some(e) = mapping.0.get(id) {
-            let (pos, speed) = coords.get(*e).unwrap();
+        if let Some(e) = ships_mapping.0.get(id) {
+            let (
+                pos,
+                speed,
+                Influenced {
+                    main_influencer, ..
+                },
+            ) = coords.get(*e).unwrap();
             commands.insert_resource(EditorContext::new(*id, pos, speed));
+            let mut map = SpaceMap::new(system_size.0, *main_influencer, *main_influencer);
+            map.autoscale(&bodies_mapping.0, &bodies);
+            commands.insert_resource(map);
         }
     }
 }
 
 fn clear_screen(mut commands: Commands) {
     commands.remove_resource::<EditorContext>();
+    commands.remove_resource::<SpaceMap>();
 }
 
 fn read_input(

@@ -28,17 +28,24 @@ impl Plugin for CorePlugin {
             FixedUpdate,
             LoadedSet.run_if(in_state(LoadingState::Loaded)),
         )
+        .configure_sets(Update, (InputReading, EventHandling).chain())
         .add_systems(
             OnEnter(LoadingState::Loading),
             (build_system, insert_system_size.after(update_global)),
         )
         .add_systems(OnEnter(LoadingState::Unloading), clear_system)
-        .add_systems(Update, handle_core_events);
+        .add_systems(Update, handle_core_events.in_set(EventHandling));
     }
 }
 
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct LoadedSet;
+
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct InputReading;
+
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct EventHandling;
 
 /// This state represents whether or not a planetary system is loaded in game.
 /// For server, is is automatically the case, but for a client a system is loaded only if one is connected to a server,

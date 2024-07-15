@@ -5,7 +5,7 @@ use ratatui::widgets::{List, ListState, StatefulWidget};
 
 use crate::{
     client_plugin::ClientMode,
-    core_plugin::CoreEvent,
+    core_plugin::{CoreEvent, EventHandling, InputReading},
     keyboard::Keymap,
     utils::{list::ClampedList, ui::Direction2},
 };
@@ -40,8 +40,10 @@ impl Plugin for StartMenuPlugin {
             .add_event::<StartMenuEvent>()
             .add_systems(
                 Update,
-                (read_input, handle_events)
-                    .chain()
+                (
+                    read_input.in_set(InputReading),
+                    handle_events.in_set(EventHandling),
+                )
                     .run_if(in_state(AppScreen::StartMenu)),
             )
             .add_systems(OnEnter(ClientMode::None), create_screen);

@@ -4,7 +4,9 @@ use explorer_screen::ExplorerScreenPlugin;
 use start_menu::{StartMenu, StartMenuContext, StartMenuPlugin};
 
 use crate::{
-    core_plugin::LoadingState, keyboard::Keymap, spaceship::ShipID,
+    core_plugin::{InputReading, LoadingState},
+    keyboard::Keymap,
+    spaceship::ShipID,
     utils::ecs::exit_on_error_if_app,
 };
 
@@ -60,7 +62,12 @@ impl Plugin for TuiPlugin {
         .init_state::<AppScreen>()
         .configure_sets(PostUpdate, (ContextUpdate, UiUpdate).chain())
         .configure_sets(OnEnter(LoadingState::Loaded), UiInit)
-        .add_systems(PostUpdate, clear_key_events);
+        .add_systems(
+            Update,
+            clear_key_events
+                .before(InputReading)
+                .run_if(state_changed::<AppScreen>),
+        );
     }
 }
 

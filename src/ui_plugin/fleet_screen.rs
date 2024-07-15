@@ -13,7 +13,7 @@ use ratatui::{
 use crate::{
     bodies::body_id::BodyID,
     client_plugin::ClientMode,
-    core_plugin::BodiesMapping,
+    core_plugin::{BodiesMapping, EventHandling, InputReading},
     engine_plugin::{Position, Velocity},
     gravity::Mass,
     keyboard::Keymap,
@@ -36,8 +36,12 @@ impl Plugin for FleetScreenPlugin {
         app.add_event::<FleetScreenEvent>()
             .add_systems(
                 Update,
-                (read_input, handle_fleet_events.pipe(exit_on_error_if_app))
-                    .chain()
+                (
+                    read_input.in_set(InputReading),
+                    handle_fleet_events
+                        .pipe(exit_on_error_if_app)
+                        .in_set(EventHandling),
+                )
                     .run_if(in_state(AppScreen::Fleet)),
             )
             .add_systems(
@@ -269,7 +273,8 @@ fn read_input(
                 _ => {}
             },
             Some(ctx) => match event {
-                e if keymap.cycle_create_options.matches(e) => ctx.select_next(),
+                e if keymap.cycle_options.matches(e) => ctx.select_next(),
+                e if keymap.cycle_options_back.matches(e) => ctx.select_previous(),
                 e if keymap.back.matches(e) => context.popup_context = None,
                 e if keymap.validate_new_ship.matches(e) => {
                     internal_event.send(TryNewShip(ctx.clone()));

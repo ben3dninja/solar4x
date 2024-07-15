@@ -3,7 +3,7 @@ use trajectory::update_speed;
 
 use crate::{
     client_plugin::ClientMode,
-    core_plugin::{BodiesMapping, BodyInfo, LoadingState, PrimaryBody},
+    core_plugin::{BodiesMapping, BodyInfo, EventHandling, LoadingState, PrimaryBody},
     engine_plugin::{Position, ToggleTime, Velocity},
     gravity::{
         compute_influence, integrate_positions, Acceleration, GravityBound, GravityPlugin,
@@ -53,7 +53,12 @@ impl Plugin for GamePlugin {
                     .run_if(in_state(GameStage::Action))
                     .before(integrate_positions),
             )
-            .add_systems(Update, handle_ship_events.run_if(in_state(InGame)));
+            .add_systems(
+                Update,
+                handle_ship_events
+                    .in_set(EventHandling)
+                    .run_if(in_state(InGame)),
+            );
     }
 }
 

@@ -13,7 +13,7 @@ use serde::{
     Deserialize, Serialize,
 };
 
-#[derive(Resource, Default, Clone, Serialize, Deserialize)]
+#[derive(Resource, Default, Clone, Serialize, Deserialize, Debug)]
 pub struct Keymap {
     pub explorer: ExplorerKeymap,
     pub start_menu: StartMenuKeymap,
@@ -42,7 +42,8 @@ pub struct FleetScreenKeymap {
     pub back: Key,
     pub edit_trajectory: Key,
     pub new_ship: Key,
-    pub cycle_create_options: Key,
+    pub cycle_options: Key,
+    pub cycle_options_back: Key,
     pub validate_new_ship: Key,
     pub delete_char: Key,
 }
@@ -359,7 +360,8 @@ impl Default for FleetScreenKeymap {
             back: Key::from_str_unchecked("esc"),
             edit_trajectory: Key::from_str_unchecked("space"),
             new_ship: Key::from_str_unchecked("n"),
-            cycle_create_options: Key::from_str_unchecked("tab"),
+            cycle_options: Key::from_str_unchecked("tab"),
+            cycle_options_back: Key::from_str_unchecked("S tab"),
             validate_new_ship: Key::from_str_unchecked("enter"),
             delete_char: Key::from_str_unchecked("backspace"),
         }
@@ -379,10 +381,10 @@ impl Default for EditorKeymap {
 
 #[cfg(test)]
 mod tests {
-    use super::ExplorerKeymap;
+    use super::Keymap;
 
     #[test]
     fn test_default_keymap() {
-        ExplorerKeymap::default();
+        Keymap::default();
     }
 }
