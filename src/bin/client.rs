@@ -4,7 +4,7 @@ use bevy::app::App;
 use rust_space_trading::{
     bodies::{bodies_config::BodiesConfig, body_data::BodyType},
     client_plugin::ClientPlugin,
-    ui_plugin::{space_map_plugin::SpaceMapPlugin, TuiPlugin},
+    ui_plugin::TuiPlugin,
     utils::args::get_keymap,
 };
 
@@ -25,7 +25,6 @@ fn main() {
                 keymap: get_keymap(env::args()).unwrap(),
                 ..Default::default()
             },
-            SpaceMapPlugin,
             rust_space_trading::ui_plugin::gui_plugin::GuiPlugin,
         ))
         .run();
