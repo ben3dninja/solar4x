@@ -3,9 +3,12 @@ use trajectory::update_speed;
 
 use crate::{
     client_plugin::ClientMode,
-    core_plugin::LoadingState,
+    core_plugin::{BodiesMapping, BodyInfo, LoadingState, PrimaryBody},
     engine_plugin::{Position, ToggleTime, Velocity},
-    gravity::{integrate_positions, Acceleration, GravityBound},
+    gravity::{
+        compute_influence, integrate_positions, Acceleration, GravityBound, GravityPlugin,
+        HillRadius, Mass,
+    },
     spaceship::{ShipID, ShipInfo, ShipsMapping},
     utils::de::TempDirectory,
 };
@@ -36,7 +39,8 @@ impl Plugin for GamePlugin {
         } else {
             TRAJECTORIES_PATH.into()
         };
-        app.add_computed_state::<InGame>()
+        app.add_plugins(GravityPlugin)
+            .add_computed_state::<InGame>()
             .add_sub_state::<GameStage>()
             .insert_resource(TrajectoriesDirectory(path))
             .add_event::<ShipEvent>()
@@ -110,15 +114,25 @@ pub fn handle_ship_events(
     mut commands: Commands,
     mut reader: EventReader<ShipEvent>,
     mut ships: ResMut<ShipsMapping>,
+    bodies: Query<(&Position, &Mass, &HillRadius, &BodyInfo)>,
+    mapping: Res<BodiesMapping>,
+    main_body: Query<&BodyInfo, With<PrimaryBody>>,
 ) {
     for event in reader.read() {
         match event {
             ShipEvent::Create(info) => {
+                let pos = Position(info.spawn_pos);
                 ships.0.entry(info.id).or_insert(
                     commands
                         .spawn((
                             info.clone(),
-                            Position(info.spawn_pos),
+                            compute_influence(
+                                &pos,
+                                &bodies,
+                                mapping.as_ref(),
+                                main_body.single().0.id,
+                            ),
+                            pos,
                             Velocity(info.spawn_speed),
                             Acceleration(DVec3::ZERO),
                             GravityBound,

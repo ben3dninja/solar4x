@@ -18,6 +18,7 @@ pub struct Keymap {
     pub explorer: ExplorerKeymap,
     pub start_menu: StartMenuKeymap,
     pub fleet_screen: FleetScreenKeymap,
+    pub editor: EditorKeymap,
 }
 
 #[derive(Default, Debug, Serialize, Deserialize, Clone)]
@@ -44,6 +45,14 @@ pub struct FleetScreenKeymap {
     pub cycle_create_options: Key,
     pub validate_new_ship: Key,
     pub delete_char: Key,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct EditorKeymap {
+    pub select_next: Key,
+    pub select_previous: Key,
+    pub back: Key,
+    pub new_node: Key,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -271,7 +280,7 @@ pub struct TreeViewKeymap {
     pub enter_search: Key,
     pub focus: Key,
     pub autoscale: Key,
-    pub quit: Key,
+    pub back: Key,
     pub speed_up: Key,
     pub slow_down: Key,
     pub toggle_time: Key,
@@ -309,7 +318,7 @@ impl Default for TreeViewKeymap {
             enter_search: Key::from_str_unchecked("/"),
             focus: Key::from_str_unchecked("f"),
             autoscale: Key::from_str_unchecked("x"),
-            quit: Key::from_str_unchecked("esc"),
+            back: Key::from_str_unchecked("esc"),
             speed_up: Key::from_str_unchecked(">"),
             slow_down: Key::from_str_unchecked("<"),
             toggle_time: Key::from_str_unchecked("t"),
@@ -353,6 +362,17 @@ impl Default for FleetScreenKeymap {
             cycle_create_options: Key::from_str_unchecked("tab"),
             validate_new_ship: Key::from_str_unchecked("enter"),
             delete_char: Key::from_str_unchecked("backspace"),
+        }
+    }
+}
+
+impl Default for EditorKeymap {
+    fn default() -> Self {
+        Self {
+            select_next: Key::from_str_unchecked("down"),
+            select_previous: Key::from_str_unchecked("up"),
+            back: Key::from_str_unchecked("esc"),
+            new_node: Key::from_str_unchecked("n"),
         }
     }
 }

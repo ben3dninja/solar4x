@@ -12,10 +12,11 @@ use ratatui::{
 
 use crate::{
     bodies::body_id::BodyID,
+    client_plugin::ClientMode,
     core_plugin::BodiesMapping,
     engine_plugin::{Position, Velocity},
     gravity::Mass,
-    keyboard::FleetScreenKeymap,
+    keyboard::Keymap,
     main_game::{GameStage, InGame, ShipEvent},
     spaceship::{ShipID, ShipInfo, ShipsMapping},
     utils::{
@@ -27,7 +28,7 @@ use crate::{
     MAX_ID_LENGTH,
 };
 
-use super::{AppScreen, ChangeAppScreen, ContextUpdate, ScreenContext};
+use super::{AppScreen, ContextUpdate};
 pub struct FleetScreenPlugin;
 
 impl Plugin for FleetScreenPlugin {
@@ -35,22 +36,46 @@ impl Plugin for FleetScreenPlugin {
         app.add_event::<FleetScreenEvent>()
             .add_systems(
                 Update,
-                handle_fleet_events
-                    .pipe(exit_on_error_if_app)
-                    .run_if(in_state(InGame)),
+                (read_input, handle_fleet_events.pipe(exit_on_error_if_app))
+                    .chain()
+                    .run_if(in_state(AppScreen::Fleet)),
             )
             .add_systems(
                 PostUpdate,
                 update_fleet_context
-                    .run_if(in_state(InGame))
-                    .in_set(ContextUpdate)
                     .run_if(
                         state_changed::<GameStage>
                             .or_else(resource_exists_and_changed::<ShipsMapping>),
-                    ),
+                    )
+                    .in_set(ContextUpdate),
             )
-            .add_systems(OnEnter(InGame), change_screen_to_fleet);
+            .add_systems(OnEnter(InGame), create_screen)
+            .add_systems(
+                OnExit(InGame),
+                clear_screen.run_if(not(in_state(AppScreen::Fleet))),
+            );
     }
+}
+
+fn create_screen(
+    mut commands: Commands,
+    mut next_screen: ResMut<NextState<AppScreen>>,
+    ships: Query<&ShipInfo>,
+) {
+    commands.insert_resource(FleetContext::new(ships.iter().cloned()));
+    next_screen.set(AppScreen::Fleet);
+}
+
+fn clear_screen(mut commands: Commands) {
+    commands.remove_resource::<FleetContext>();
+}
+
+#[derive(Resource, Default)]
+pub struct FleetContext {
+    list_state: ListState,
+    ships: Vec<ShipInfo>,
+    popup_context: Option<CreateShipContext>,
+    stage: GameStage,
 }
 
 #[allow(clippy::large_enum_variant)]
@@ -58,6 +83,8 @@ impl Plugin for FleetScreenPlugin {
 pub enum FleetScreenEvent {
     Select(Direction2),
     TryNewShip(CreateShipContext),
+    EditTrajectory,
+    Back,
 }
 
 #[derive(Clone, Debug)]
@@ -106,14 +133,6 @@ impl std::fmt::Display for ShipCreationError {
             ),
         }
     }
-}
-
-#[derive(Default)]
-pub struct FleetContext {
-    list_state: ListState,
-    ships: Vec<ShipInfo>,
-    popup_context: Option<CreateShipContext>,
-    stage: GameStage,
 }
 
 impl ClampedList for FleetContext {
@@ -204,7 +223,7 @@ impl CreateShipContext {
 }
 
 impl FleetContext {
-    fn new(ships: impl Iterator<Item = ShipInfo>) -> Self {
+    pub fn new(ships: impl Iterator<Item = ShipInfo>) -> Self {
         Self {
             ships: ships.collect(),
             ..Default::default()
@@ -217,24 +236,21 @@ impl FleetContext {
 
 pub struct FleetScreen;
 
-impl ScreenContext for FleetContext {
-    type ScreenEvent = FleetScreenEvent;
-
-    type ScreenKeymap = FleetScreenKeymap;
-
-    fn read_input(
-        &mut self,
-        key_event: &bevy_ratatui::event::KeyEvent,
-        keymap: &Self::ScreenKeymap,
-        internal_event: &mut Events<Self::ScreenEvent>,
-    ) -> Option<ChangeAppScreen> {
-        if key_event.kind == KeyEventKind::Release {
-            return None;
+fn read_input(
+    mut context: ResMut<FleetContext>,
+    mut key_event: EventReader<KeyEvent>,
+    keymap: Res<Keymap>,
+    mut internal_event: EventWriter<FleetScreenEvent>,
+) {
+    use Direction2::*;
+    use FleetScreenEvent::*;
+    let keymap = &keymap.fleet_screen;
+    for KeyEvent(event) in key_event.read() {
+        if event.kind == KeyEventKind::Release {
+            return;
         }
-        use Direction2::*;
-        use FleetScreenEvent::*;
-        match &mut self.popup_context {
-            None => match key_event {
+        match &mut context.popup_context {
+            None => match event {
                 e if keymap.select_next.matches(e) => {
                     internal_event.send(Select(Down));
                 }
@@ -242,59 +258,60 @@ impl ScreenContext for FleetContext {
                     internal_event.send(Select(Up));
                 }
                 e if keymap.edit_trajectory.matches(e) => {
-                    if let Some(id) = self.selected_ship().map(|s| s.id) {
-                        return Some(ChangeAppScreen::TrajectoryEditor(id));
-                    }
+                    internal_event.send(EditTrajectory);
                 }
                 e if keymap.new_ship.matches(e) => {
-                    self.popup_context = Some(CreateShipContext::default())
+                    context.popup_context = Some(CreateShipContext::default())
                 }
-                e if keymap.back.matches(e) => return Some(ChangeAppScreen::StartMenu),
+                e if keymap.back.matches(e) => {
+                    internal_event.send(Back);
+                }
                 _ => {}
             },
-            Some(ctx) => match key_event {
+            Some(ctx) => match event {
                 e if keymap.cycle_create_options.matches(e) => ctx.select_next(),
-                e if keymap.back.matches(e) => self.popup_context = None,
+                e if keymap.back.matches(e) => context.popup_context = None,
                 e if keymap.validate_new_ship.matches(e) => {
                     internal_event.send(TryNewShip(ctx.clone()));
                 }
                 e if keymap.delete_char.matches(e) => {
                     ctx.selected_field().pop();
                 }
-                KeyEvent(crossterm::event::KeyEvent {
+                crossterm::event::KeyEvent {
                     code: KeyCode::Char(c),
                     ..
-                }) => ctx.selected_field().push(*c),
+                } => ctx.selected_field().push(*c),
 
                 _ => {}
             },
         }
-        None
     }
 }
 
-fn change_screen_to_fleet(mut screen: ResMut<AppScreen>, ships: Query<&ShipInfo>) {
-    *screen = AppScreen::Fleet(FleetContext::new(ships.iter().cloned()));
-}
-
 fn handle_fleet_events(
-    mut screen: ResMut<AppScreen>,
+    mut context: ResMut<FleetContext>,
+    mut screen: ResMut<NextState<AppScreen>>,
+    mut next_mode: ResMut<NextState<ClientMode>>,
     mut events: EventReader<FleetScreenEvent>,
     mut ship_events: EventWriter<ShipEvent>,
     bodies: Query<(&Mass, &Position, &Velocity)>,
     mapping: Res<BodiesMapping>,
 ) -> color_eyre::eyre::Result<()> {
-    if let AppScreen::Fleet(context) = screen.as_mut() {
-        for event in events.read() {
-            match event {
-                FleetScreenEvent::Select(d) => context.select_adjacent(*d),
-                FleetScreenEvent::TryNewShip(ctx) => {
-                    let info = ctx.to_info(context.ships.iter(), &bodies, mapping.as_ref())?;
-                    context.ships.push(info.clone());
-                    ship_events.send(ShipEvent::Create(info.clone()));
-                    context.popup_context = None;
+    for event in events.read() {
+        match event {
+            FleetScreenEvent::Select(d) => context.select_adjacent(*d),
+            FleetScreenEvent::TryNewShip(ctx) => {
+                let info = ctx.to_info(context.ships.iter(), &bodies, mapping.as_ref())?;
+                context.ships.push(info.clone());
+                ship_events.send(ShipEvent::Create(info.clone()));
+                context.popup_context = None;
+            }
+            FleetScreenEvent::EditTrajectory => {
+                if let Some(ship) = context.selected_ship() {
+                    screen.set(AppScreen::Editor(ship.id));
                 }
             }
+            FleetScreenEvent::Back => next_mode.set(ClientMode::None),
         }
     }
     Ok(())
@@ -303,18 +320,15 @@ fn handle_fleet_events(
 fn update_fleet_context(
     stage: Res<State<GameStage>>,
     ships: Query<&ShipInfo>,
-    mut screen: ResMut<AppScreen>,
+    mut ctx: ResMut<FleetContext>,
 ) {
-    if let AppScreen::Fleet(ctx) = screen.as_mut() {
-        ctx.stage = stage.get().clone();
-        ctx.ships.retain(|i| ships.iter().any(|j| i == j));
-        ctx.ships.extend(
-            ships
-                .iter()
-                .find(|i| !ctx.ships.iter().any(|j| *i == j))
-                .cloned(),
-        );
-    }
+    ctx.stage = stage.get().clone();
+    ctx.ships.retain(|i| ships.iter().any(|j| i == j));
+    let diff = ships
+        .iter()
+        .find(|i| !ctx.ships.iter().any(|j| *i == j))
+        .cloned();
+    ctx.ships.extend(diff);
 }
 
 impl StatefulWidget for FleetScreen {
@@ -391,10 +405,10 @@ mod tests {
         client_plugin::{ClientMode, ClientPlugin},
         main_game::{GameStage, ShipEvent},
         spaceship::{ShipInfo, ShipsMapping},
-        ui_plugin::{AppScreen, TuiPlugin},
+        ui_plugin::TuiPlugin,
     };
 
-    use super::{CreateShipContext, FleetScreenEvent};
+    use super::{CreateShipContext, FleetContext, FleetScreenEvent};
 
     fn new_app() -> App {
         let mut app = App::new();
@@ -402,6 +416,7 @@ mod tests {
             ClientPlugin::testing().in_mode(ClientMode::Singleplayer),
             TuiPlugin::testing(),
         ));
+        app.update();
         app.update();
         app
     }
@@ -425,12 +440,9 @@ mod tests {
     #[test]
     fn test_update_context() {
         let mut app = new_app();
-        if let AppScreen::Fleet(ctx) = app.world().resource::<AppScreen>() {
-            assert_eq!(ctx.ships.len(), 0);
-            assert_eq!(ctx.stage, GameStage::Preparation);
-        } else {
-            unreachable!()
-        }
+        let ctx = app.world().resource::<FleetContext>();
+        assert_eq!(ctx.ships.len(), 0);
+        assert_eq!(ctx.stage, GameStage::Preparation);
         app.world_mut().send_event(ShipEvent::Create(ShipInfo {
             id: id_from("s"),
             ..default()
@@ -438,12 +450,12 @@ mod tests {
         app.world_mut()
             .resource_mut::<NextState<GameStage>>()
             .set(GameStage::Action);
+        // One update to set the stage
         app.update();
-        if let AppScreen::Fleet(ctx) = app.world().resource::<AppScreen>() {
-            assert_eq!(ctx.ships.len(), 1);
-            assert_eq!(ctx.stage, GameStage::Action);
-        } else {
-            unreachable!()
-        }
+        // One update to update the context
+        app.update();
+        let ctx = app.world().resource::<FleetContext>();
+        assert_eq!(ctx.ships.len(), 1);
+        assert_eq!(ctx.stage, GameStage::Action);
     }
 }

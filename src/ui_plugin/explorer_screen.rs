@@ -11,7 +11,7 @@ use crate::{
     client_plugin::ClientMode,
     core_plugin::{BodiesMapping, BodyInfo, LoadedSet, LoadingState, PrimaryBody},
     engine_plugin::{EngineEvent, Position},
-    keyboard::ExplorerKeymap,
+    keyboard::Keymap,
     utils::{
         list::ClampedList,
         ui::{Direction2, Direction4},
@@ -23,7 +23,7 @@ use super::{
     search_plugin::{SearchEvent, SearchMatcher, SearchPlugin, SearchState, SearchWidget},
     space_map_plugin::{SpaceMap, SpaceMapEvent},
     tree_widget::{TreeEvent, TreeState, TreeWidget},
-    AppScreen, ChangeAppScreen, ScreenContext, UiInit,
+    AppScreen, UiInit,
 };
 
 pub struct ExplorerScreenPlugin;
@@ -32,14 +32,37 @@ impl Plugin for ExplorerScreenPlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<ExplorerEvent>()
             .add_plugins(SearchPlugin)
-            .add_systems(Update, handle_explorer_events.in_set(LoadedSet))
+            .add_systems(
+                Update,
+                (read_input, handle_explorer_events)
+                    .chain()
+                    .in_set(LoadedSet)
+                    .run_if(in_state(AppScreen::Explorer)),
+            )
             .add_systems(
                 OnEnter(LoadingState::Loaded),
-                change_screen_to_explorer
+                create_screen
                     .run_if(in_state(ClientMode::Explorer))
                     .in_set(UiInit),
+            )
+            .add_systems(
+                OnExit(ClientMode::Explorer),
+                clear_screen.run_if(not(in_state(AppScreen::Explorer))),
             );
     }
+}
+
+fn create_screen<'a>(
+    mut commands: Commands,
+    mut next_screen: ResMut<NextState<AppScreen>>,
+    primary: Query<Entity, With<PrimaryBody>>,
+    bodies: Query<(&'a BodyInfo, &'a Position)>,
+) {
+    commands.insert_resource(ExplorerContext::new(primary.single(), &bodies));
+    next_screen.set(AppScreen::Explorer);
+}
+fn clear_screen(mut commands: Commands) {
+    commands.remove_resource::<ExplorerContext>();
 }
 
 #[derive(Default, Debug, Clone, Copy)]
@@ -49,6 +72,7 @@ pub enum SidePaneMode {
     Search,
 }
 
+#[derive(Resource)]
 pub struct ExplorerContext {
     pub(super) side_pane_mode: SidePaneMode,
     pub(super) info_toggle: bool,
@@ -60,9 +84,9 @@ pub struct ExplorerContext {
 }
 
 impl ExplorerContext {
-    pub fn new<'b>(
+    pub fn new<'a>(
         primary: Entity,
-        bodies: &Query<(&'b BodyInfo, &'b Position)>,
+        bodies: &Query<(&'a BodyInfo, &'a Position)>,
     ) -> ExplorerContext {
         let primary_data = &bodies.get(primary).unwrap().0 .0;
         let (infos, positions): (Vec<_>, Vec<_>) = bodies.iter().map(|(i, p)| (&i.0, p)).unzip();
@@ -99,33 +123,30 @@ pub enum ExplorerEvent {
 pub enum ViewEvent {
     ChangeSidePaneMode(SidePaneMode),
     ToggleInfo,
+    Back,
 }
-
-impl ScreenContext for ExplorerContext {
-    type ScreenEvent = ExplorerEvent;
-
-    type ScreenKeymap = ExplorerKeymap;
-
-    fn read_input(
-        &mut self,
-        key_event: &KeyEvent,
-        keymap: &Self::ScreenKeymap,
-        internal_event: &mut Events<Self::ScreenEvent>,
-    ) -> Option<ChangeAppScreen> {
-        if key_event.kind == KeyEventKind::Release {
-            return None;
+fn read_input(
+    context: Res<ExplorerContext>,
+    mut key_event: EventReader<KeyEvent>,
+    keymap: Res<Keymap>,
+    mut internal_event: EventWriter<ExplorerEvent>,
+) {
+    use Direction2::*;
+    use ExplorerEvent::*;
+    use ViewEvent::*;
+    for KeyEvent(event) in key_event.read() {
+        if event.kind == KeyEventKind::Release {
+            return;
         }
-        use Direction2::*;
-        use ExplorerEvent::*;
-        use ViewEvent::*;
-        internal_event.send(match self.side_pane_mode {
+        let keymap = &keymap.explorer;
+        internal_event.send(match context.side_pane_mode {
             SidePaneMode::Tree => {
                 let codes = &keymap.tree;
                 use Direction4::*;
                 use EngineEvent::*;
                 use SpaceMapEvent::*;
                 use TreeEvent::*;
-                match &key_event {
+                match event {
                     e if codes.select_next.matches(e) => Tree(Select(Down)),
                     e if codes.select_previous.matches(e) => Tree(Select(Up)),
                     e if codes.toggle_expand.matches(e) => Tree(ToggleTreeExpansion),
@@ -142,17 +163,17 @@ impl ScreenContext for ExplorerContext {
                         View(ChangeSidePaneMode(SidePaneMode::Search))
                     }
                     e if codes.toggle_info.matches(e) => View(ToggleInfo),
-                    e if codes.quit.matches(e) => return Some(ChangeAppScreen::StartMenu),
+                    e if codes.back.matches(e) => View(ViewEvent::Back),
                     e if codes.speed_up.matches(e) => Engine(EngineSpeed(Up)),
                     e if codes.slow_down.matches(e) => Engine(EngineSpeed(Down)),
                     e if codes.toggle_time.matches(e) => Engine(ToggleTime),
-                    _ => return None,
+                    _ => return,
                 }
             }
             SidePaneMode::Search => {
                 use SearchEvent::*;
                 let codes = &keymap.search;
-                match &key_event {
+                match event {
                     e if codes.delete_char.matches(e) => Search(DeleteChar),
                     e if codes.validate_search.matches(e) => Search(ValidateSearch),
                     e if codes.select_next.matches(e) => Search(Select(Down)),
@@ -160,103 +181,93 @@ impl ScreenContext for ExplorerContext {
                     e if codes.leave_search.matches(e) => {
                         View(ChangeSidePaneMode(SidePaneMode::Tree))
                     }
-                    KeyEvent(CKeyEvent {
+                    CKeyEvent {
                         code: KeyCode::Char(char),
                         ..
-                    }) => Search(WriteChar(*char)),
-                    _ => return None,
+                    } => Search(WriteChar(*char)),
+                    _ => return,
                 }
             }
         });
-        None
     }
 }
 
 pub fn handle_explorer_events(
-    mut screen: ResMut<AppScreen>,
+    mut ctx: ResMut<ExplorerContext>,
+    mut next_mode: ResMut<NextState<ClientMode>>,
     mut events: EventReader<ExplorerEvent>,
     mapping: Res<BodiesMapping>,
     bodies: Query<&BodyInfo>,
     mut engine_events: Option<ResMut<Events<EngineEvent>>>,
     fuzzy_matcher: Res<SearchMatcher>,
 ) {
-    if let AppScreen::Explorer(ctx) = screen.as_mut() {
-        for event in events.read() {
-            match event {
-                ExplorerEvent::Tree(event) => {
-                    use TreeEvent::*;
-                    match event {
-                        Select(d) => {
-                            ctx.tree_state.select_adjacent(*d);
+    for event in events.read() {
+        match event {
+            ExplorerEvent::Tree(event) => {
+                use TreeEvent::*;
+                match event {
+                    Select(d) => {
+                        ctx.tree_state.select_adjacent(*d);
+                        ctx.update_info(&mapping.0, &bodies);
+                    }
+                    ToggleTreeExpansion => ctx.tree_state.toggle_selection_expansion(),
+                }
+            }
+            ExplorerEvent::Search(event) => {
+                use SearchEvent::*;
+                match event {
+                    DeleteChar => {
+                        ctx.search_state.delete_char();
+                        ctx.search_state
+                            .update_search_entries(bodies.iter(), &fuzzy_matcher.0);
+                    }
+                    Select(d) => ctx.search_state.select_adjacent(*d),
+                    ValidateSearch => {
+                        if let Some(id) = ctx.search_state.selected_body_id() {
+                            ctx.tree_state.select_body(id);
                             ctx.update_info(&mapping.0, &bodies);
                         }
-                        ToggleTreeExpansion => ctx.tree_state.toggle_selection_expansion(),
+                        ctx.side_pane_mode = SidePaneMode::Tree;
+                    }
+                    WriteChar(char) => {
+                        ctx.search_state.enter_char(*char);
+                        ctx.search_state
+                            .update_search_entries(bodies.iter(), &fuzzy_matcher.0);
                     }
                 }
-                ExplorerEvent::Search(event) => {
-                    use SearchEvent::*;
-                    match event {
-                        DeleteChar => {
-                            ctx.search_state.delete_char();
-                            ctx.search_state
-                                .update_search_entries(bodies.iter(), &fuzzy_matcher.0);
+            }
+            ExplorerEvent::SpaceMap(event) => {
+                use SpaceMapEvent::*;
+                match event {
+                    Zoom(d) => ctx.space_map.zoom(*d),
+                    MapOffset(d) => ctx.space_map.offset(*d),
+                    MapOffsetReset => ctx.space_map.reset_offset(),
+                    FocusBody => {
+                        if let Some(entity) = mapping.0.get(&ctx.tree_state.selected_body_id()) {
+                            ctx.focus_body = *entity;
+                            ctx.tree_state.focus_body = Some(bodies.get(*entity).unwrap().0.id)
                         }
-                        Select(d) => ctx.search_state.select_adjacent(*d),
-                        ValidateSearch => {
-                            if let Some(id) = ctx.search_state.selected_body_id() {
-                                ctx.tree_state.select_body(id);
-                                ctx.update_info(&mapping.0, &bodies);
-                            }
-                            ctx.side_pane_mode = SidePaneMode::Tree;
-                        }
-                        WriteChar(char) => {
-                            ctx.search_state.enter_char(*char);
-                            ctx.search_state
-                                .update_search_entries(bodies.iter(), &fuzzy_matcher.0);
-                        }
+                    }
+                    Autoscale => {
+                        let focus_data = &bodies.get(ctx.focus_body).unwrap().0;
+                        ctx.space_map.autoscale(focus_data, &mapping.0, &bodies);
                     }
                 }
-                ExplorerEvent::SpaceMap(event) => {
-                    use SpaceMapEvent::*;
-                    match event {
-                        Zoom(d) => ctx.space_map.zoom(*d),
-                        MapOffset(d) => ctx.space_map.offset(*d),
-                        MapOffsetReset => ctx.space_map.reset_offset(),
-                        FocusBody => {
-                            if let Some(entity) = mapping.0.get(&ctx.tree_state.selected_body_id())
-                            {
-                                ctx.focus_body = *entity;
-                                ctx.tree_state.focus_body = Some(bodies.get(*entity).unwrap().0.id)
-                            }
-                        }
-                        Autoscale => {
-                            let focus_data = &bodies.get(ctx.focus_body).unwrap().0;
-                            ctx.space_map.autoscale(focus_data, &mapping.0, &bodies);
-                        }
-                    }
+            }
+            ExplorerEvent::View(event) => match *event {
+                ViewEvent::ChangeSidePaneMode(new_focus) => {
+                    ctx.search_state.reset_search();
+                    ctx.side_pane_mode = new_focus
                 }
-                ExplorerEvent::View(event) => match *event {
-                    ViewEvent::ChangeSidePaneMode(new_focus) => {
-                        ctx.search_state.reset_search();
-                        ctx.side_pane_mode = new_focus
-                    }
 
-                    ViewEvent::ToggleInfo => ctx.info_toggle = !ctx.info_toggle,
-                },
-                ExplorerEvent::Engine(event) => {
-                    engine_events.as_mut().map(|e| e.send(*event));
-                }
+                ViewEvent::ToggleInfo => ctx.info_toggle = !ctx.info_toggle,
+                ViewEvent::Back => next_mode.set(ClientMode::None),
+            },
+            ExplorerEvent::Engine(event) => {
+                engine_events.as_mut().map(|e| e.send(*event));
             }
         }
     }
-}
-
-fn change_screen_to_explorer<'a>(
-    mut screen: ResMut<AppScreen>,
-    primary: Query<Entity, With<PrimaryBody>>,
-    bodies: Query<(&'a BodyInfo, &'a Position)>,
-) {
-    *screen = AppScreen::Explorer(ExplorerContext::new(primary.single(), &bodies));
 }
 
 pub struct ExplorerScreen;

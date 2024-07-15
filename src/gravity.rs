@@ -1,8 +1,13 @@
+use std::time::Duration;
+
 use bevy::{math::DVec3, prelude::*};
 
 use crate::{
+    bodies::body_id::BodyID,
     core_plugin::{build_system, BodiesMapping, BodyInfo, LoadingState, PrimaryBody},
     engine_plugin::{GameSpeed, Position, Velocity, SECONDS_PER_DAY},
+    main_game::GameStage,
+    TPS,
 };
 
 /// Gravitationnal constant in km3kg-1d-2
@@ -12,13 +17,25 @@ pub struct GravityPlugin;
 
 impl Plugin for GravityPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
-            OnEnter(LoadingState::Loaded),
+        app.insert_resource(TickTimer(Timer::new(
+            Duration::from_secs_f64(1. / TPS),
+            TimerMode::Repeating,
+        )))
+        .add_systems(
+            OnEnter(LoadingState::Loading),
             setup_hill_spheres.after(build_system),
         )
-        .add_systems(FixedUpdate, (apply_gravity_force, integrate_positions));
+        .add_systems(
+            FixedUpdate,
+            (update_influence, apply_gravity_force, integrate_positions)
+                .chain()
+                .run_if(in_state(GameStage::Action)),
+        );
     }
 }
+
+#[derive(Resource)]
+pub struct TickTimer(pub Timer);
 
 #[derive(Component)]
 pub struct Mass(pub f64);
@@ -29,9 +46,16 @@ pub struct GravityBound;
 #[derive(Component)]
 pub struct HillRadius(f64);
 
+/// Component storing the bodies that influence the object's trajectory
+#[derive(Component, Default, Debug)]
+pub struct Influenced {
+    pub main_influencer: Option<Entity>,
+    pub influencers: Vec<Entity>,
+}
+
 pub fn setup_hill_spheres(
     mut commands: Commands,
-    mut query: Query<&BodyInfo>,
+    query: Query<&BodyInfo>,
     primary: Query<(Entity, &BodyInfo), With<PrimaryBody>>,
     mapping: Res<BodiesMapping>,
 ) {
@@ -40,12 +64,11 @@ pub fn setup_hill_spheres(
     while i < queue.len() {
         let (id, parent_mass) = queue[i];
         if let Some(entity) = mapping.0.get(&id) {
-            if let Ok(BodyInfo(data)) = query.get_mut(*entity) {
-                let radius = data.semimajor_axis
+            if let Ok(BodyInfo(data)) = query.get(*entity) {
+                let radius = (data.semimajor_axis
                     * (1. - data.eccentricity)
-                    * (data.mass / (3. * (parent_mass + data.mass)))
-                        .powf(1. / 3.)
-                        .max(data.radius);
+                    * (data.mass / (3. * (parent_mass + data.mass))).powf(1. / 3.))
+                .max(data.radius);
                 commands.entity(*entity).insert(HillRadius(radius));
                 queue.extend(data.orbiting_bodies.iter().map(|c| (*c, data.mass)));
             }
@@ -57,26 +80,79 @@ pub fn setup_hill_spheres(
         .insert(HillRadius(f64::INFINITY));
 }
 
+pub fn update_influence(
+    mut influenced: Query<(&Position, &mut Influenced)>,
+    bodies: Query<(&Position, &Mass, &HillRadius, &BodyInfo)>,
+    mapping: Res<BodiesMapping>,
+    main_body: Query<&BodyInfo, With<PrimaryBody>>,
+    timer: Res<TickTimer>,
+) {
+    if timer.0.just_finished() {
+        let main_body = main_body.single().0.id;
+        influenced
+            .par_iter_mut()
+            .for_each(|(object_pos, mut influence)| {
+                *influence = compute_influence(object_pos, &bodies, mapping.as_ref(), main_body);
+            });
+    }
+}
+
+pub fn compute_influence(
+    Position(object_pos): &Position,
+    bodies: &Query<(&Position, &Mass, &HillRadius, &BodyInfo)>,
+    mapping: &BodiesMapping,
+    main_body: BodyID,
+) -> Influenced {
+    // if an object is not in a bodie's sphere of influence, it is not in its children's either
+    fn influencers_rec(
+        body: BodyID,
+        query: &Query<(&Position, &Mass, &HillRadius, &BodyInfo)>,
+        mapping: &BodiesMapping,
+        object_pos: &DVec3,
+        influences: &mut Vec<(Entity, f64)>,
+    ) {
+        if let Some(e) = mapping.0.get(&body) {
+            let (Position(body_pos), Mass(mass), HillRadius(hill_radius), BodyInfo(data)) =
+                query.get(*e).unwrap();
+            let r = *object_pos - *body_pos;
+            let dist = r.length();
+            if dist < *hill_radius {
+                influences.push((*e, *mass / (dist * dist)));
+                data.orbiting_bodies.iter().for_each(|child| {
+                    influencers_rec(*child, query, mapping, object_pos, influences);
+                })
+            }
+        }
+    }
+
+    let mut influences = Vec::new();
+    influencers_rec(main_body, bodies, mapping, object_pos, &mut influences);
+    Influenced {
+        main_influencer: influences
+            .iter()
+            .max_by(|a, b| a.1.total_cmp(&b.1))
+            .map(|a| a.0),
+        influencers: influences.into_iter().map(|a| a.0).collect(),
+    }
+}
+
 #[derive(Component, Debug, Default)]
 pub struct Acceleration(pub DVec3);
 
 pub fn apply_gravity_force(
-    mut gravity_bound: Query<(&Position, &mut Acceleration), With<GravityBound>>,
-    massive_objects: Query<(&Position, &Mass, &HillRadius)>,
+    mut gravity_bound: Query<(&Position, &mut Acceleration, &mut Influenced)>,
+    bodies: Query<(&Position, &Mass)>,
 ) {
     gravity_bound
         .par_iter_mut()
-        .for_each(|(object_pos, mut acceleration)| {
+        .for_each(|(object_pos, mut acceleration, influenced)| {
             let mut acc = DVec3::ZERO;
-            massive_objects
-                .iter()
-                .for_each(|(mass_pos, Mass(mass), HillRadius(radius))| {
-                    let r = object_pos.0 - mass_pos.0;
-                    let dist = r.length();
-                    if dist < *radius {
-                        acc -= r * G * *mass / (dist.powi(3));
-                    }
-                });
+            for influencer in &influenced.influencers {
+                let (mass_pos, Mass(mass)) = bodies.get(*influencer).unwrap();
+                let r = object_pos.0 - mass_pos.0;
+                let dist = r.length();
+                acc -= r * G * *mass / (dist.powi(3));
+            }
             acceleration.0 = acc;
         });
 }
@@ -92,4 +168,58 @@ pub fn integrate_positions(
         speed.0 += acc.0 * dt;
         pos.0 += speed.0 * dt;
     });
+}
+
+#[cfg(test)]
+mod tests {
+    use bevy::app::App;
+
+    use crate::{
+        bodies::{bodies_config::BodiesConfig, body_data::BodyType, body_id::id_from},
+        client_plugin::{ClientMode, ClientPlugin},
+        core_plugin::BodiesMapping,
+        engine_plugin::{Position, Velocity},
+        main_game::ShipEvent,
+        spaceship::ShipInfo,
+        utils::algebra::circular_orbit_around_body,
+    };
+
+    use super::{Influenced, Mass};
+
+    #[test]
+    fn test_influence() {
+        let mut app = App::new();
+        app.add_plugins(
+            ClientPlugin::testing()
+                .with_bodies(BodiesConfig::SmallestBodyType(BodyType::Moon))
+                .in_mode(ClientMode::Singleplayer),
+        );
+        app.update();
+        let world = app.world_mut();
+        let mapping = &world.resource::<BodiesMapping>().0;
+        let moon = mapping[&id_from("lune")];
+        let earth = mapping[&id_from("terre")];
+        let sun = mapping[&id_from("soleil")];
+        let (mass, pos, speed) = world
+            .query::<(&Mass, &Position, &Velocity)>()
+            .get(world, moon)
+            .unwrap();
+        let (spawn_pos, spawn_speed) = circular_orbit_around_body(100., mass.0, pos.0, speed.0);
+        dbg!(pos, speed);
+        dbg!(spawn_pos, spawn_speed);
+        world.send_event(ShipEvent::Create(ShipInfo {
+            id: id_from("s"),
+            spawn_pos,
+            spawn_speed,
+        }));
+        app.update();
+        let world = app.world_mut();
+        let influenced = world.query::<&Influenced>().single(world);
+
+        assert!(influenced.influencers.contains(&moon));
+        assert!(influenced.influencers.contains(&earth));
+        assert!(influenced.influencers.contains(&sun));
+        assert_eq!(influenced.main_influencer, Some(moon));
+        assert_eq!(influenced.influencers.len(), 3);
+    }
 }
