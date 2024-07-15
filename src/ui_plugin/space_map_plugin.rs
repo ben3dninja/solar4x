@@ -10,39 +10,22 @@ use ratatui::{
     widgets::{
         block::Title,
         canvas::{Canvas, Circle},
-        Block, WidgetRef,
+        Block, StatefulWidgetRef, WidgetRef,
     },
 };
 
 use crate::{
-    bodies::{
-        body_data::{BodyData, BodyType},
-        body_id::BodyID,
-    },
+    bodies::{body_data::BodyType, body_id::BodyID},
     core_plugin::BodyInfo,
-    engine_plugin::{Position, ToggleTime},
+    engine_plugin::Position,
     utils::{
         algebra::project_onto_plane,
         ui::{Direction2, Direction4},
     },
 };
 
-use super::{explorer_screen::ExplorerContext, AppScreen};
-
 const OFFSET_STEP: f64 = 1e8;
 const ZOOM_STEP: f64 = 1.5;
-pub struct SpaceMapPlugin;
-
-impl Plugin for SpaceMapPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_systems(
-            Update,
-            update_space_map
-                .run_if(in_state(AppScreen::Explorer))
-                .run_if(resource_equals(ToggleTime(true))),
-        );
-    }
-}
 
 #[derive(Debug)]
 pub enum SpaceMapEvent {
@@ -53,21 +36,27 @@ pub enum SpaceMapEvent {
     Autoscale,
 }
 
-#[derive(Default, Debug)]
+#[derive(Debug, Resource)]
 pub struct SpaceMap {
-    circles: Vec<Circle>,
     pub offset_amount: DVec2,
     pub zoom_level: f64,
     pub system_size: f64,
+    pub focus_body: Entity,
+    pub selected: Entity,
 }
 
-impl WidgetRef for SpaceMap {
-    fn render_ref(&self, area: Rect, buf: &mut Buffer)
+#[derive(Default)]
+pub struct SpaceMapWidget {
+    circles: Vec<Circle>,
+}
+
+impl StatefulWidgetRef for SpaceMapWidget {
+    fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State)
     where
         Self: Sized,
     {
         let (width, height) = (area.width as f64, area.height as f64);
-        let scale = self.system_size / (width.min(height) * self.zoom_level);
+        let scale = state.system_size / (width.min(height) * state.zoom_level);
         let (width, height) = (width * scale, height * scale);
         Canvas::default()
             .block(
@@ -83,43 +72,47 @@ impl WidgetRef for SpaceMap {
             })
             .render_ref(area, buf)
     }
+
+    type State = SpaceMap;
 }
 
-fn update_space_map(mut ctx: ResMut<ExplorerContext>, query: Query<(&Position, &BodyInfo)>) {
-    let mut circles = Vec::new();
-    let &Position(focus_pos) = query.get(ctx.focus_body).unwrap().0;
-    let selected = ctx.tree_state.selected_body_id();
-    for (&Position(pos), BodyInfo(data)) in query.iter() {
-        let proj =
-            project_onto_plane(pos - focus_pos, (DVec3::X, DVec3::Y)) - ctx.space_map.offset_amount;
-        let color = match data.body_type {
-            _ if data.id == selected => Color::Red,
-            BodyType::Star => Color::Yellow,
-            BodyType::Planet => Color::Blue,
-            _ => Color::DarkGray,
-        };
-        let radius = data.radius;
-        circles.push(Circle {
-            x: proj.x,
-            y: proj.y,
-            radius,
-            color,
-        });
+impl SpaceMapWidget {
+    pub fn update_map(
+        &mut self,
+        space_map: &SpaceMap,
+        query: &Query<(Entity, &Position, &BodyInfo)>,
+    ) {
+        let mut circles = Vec::new();
+        let &Position(focus_pos) = query.get(space_map.focus_body).unwrap().1;
+        for (entity, &Position(pos), BodyInfo(data)) in query.iter() {
+            let proj =
+                project_onto_plane(pos - focus_pos, (DVec3::X, DVec3::Y)) - space_map.offset_amount;
+            let color = match data.body_type {
+                _ if entity == space_map.selected => Color::Red,
+                BodyType::Star => Color::Yellow,
+                BodyType::Planet => Color::Blue,
+                _ => Color::DarkGray,
+            };
+            let radius = data.radius;
+            circles.push(Circle {
+                x: proj.x,
+                y: proj.y,
+                radius,
+                color,
+            });
+        }
+        self.circles = circles;
     }
-    ctx.space_map.circles = circles;
 }
 
 impl SpaceMap {
-    pub fn new<'a>(body_positions: impl Iterator<Item = &'a Position>) -> SpaceMap {
-        let system_size = body_positions
-            .map(|pos| pos.0.length())
-            .max_by(|a, b| a.total_cmp(b))
-            .unwrap();
+    pub fn new(system_size: f64, focus_body: Entity, selected: Entity) -> SpaceMap {
         SpaceMap {
-            circles: Vec::new(),
             offset_amount: DVec2::ZERO,
             zoom_level: 1.,
             system_size,
+            focus_body,
+            selected,
         }
     }
 
@@ -155,12 +148,8 @@ impl SpaceMap {
         self.offset_amount = DVec2::ZERO;
     }
 
-    pub fn autoscale(
-        &mut self,
-        focus_data: &BodyData,
-        id_mapping: &HashMap<BodyID, Entity>,
-        bodies: &Query<&BodyInfo>,
-    ) {
+    pub fn autoscale(&mut self, id_mapping: &HashMap<BodyID, Entity>, bodies: &Query<&BodyInfo>) {
+        let focus_data = &bodies.get(self.focus_body).unwrap().0;
         if let Some(max_dist) = focus_data
             .orbiting_bodies
             .iter()
@@ -179,19 +168,15 @@ impl SpaceMap {
 
 #[cfg(test)]
 mod tests {
-    use bevy::{
-        app::{App, Update},
-        ecs::schedule::IntoSystemConfigs,
-    };
+    use bevy::app::App;
 
     use crate::{
         bodies::body_id::id_from,
         client_plugin::{ClientMode, ClientPlugin},
-        core_plugin::{BodyInfo, LoadedSet},
-        engine_plugin::{update_global, update_local, update_time},
+        core_plugin::BodyInfo,
         ui_plugin::{
             explorer_screen::{ExplorerContext, ExplorerEvent},
-            space_map_plugin::{update_space_map, SpaceMapEvent},
+            space_map_plugin::{SpaceMap, SpaceMapEvent},
             TuiPlugin,
         },
     };
@@ -202,18 +187,13 @@ mod tests {
         app.add_plugins((
             ClientPlugin::testing().in_mode(ClientMode::Explorer),
             TuiPlugin::testing(),
-        ))
-        .add_systems(
-            Update,
-            (update_time, update_local, update_global, update_space_map)
-                .in_set(LoadedSet)
-                .chain(),
-        );
+        ));
         app.update();
         app.update();
         let ctx = app.world().resource::<ExplorerContext>();
-        let map = &ctx.space_map;
-        assert_eq!(map.circles.len(), 9);
+        let map_widget = &ctx.space_map;
+        let map = app.world().resource::<SpaceMap>();
+        assert_eq!(map_widget.circles.len(), 9);
         assert!(4459753056. < map.system_size);
         assert!(map.system_size < 4537039826.);
     }
@@ -236,8 +216,8 @@ mod tests {
         app.world_mut()
             .send_event(ExplorerEvent::SpaceMap(SpaceMapEvent::FocusBody));
         app.update();
-        let ctx = app.world().resource::<ExplorerContext>();
-        let focus = ctx.focus_body;
+        let map = app.world().resource::<SpaceMap>();
+        let focus = map.focus_body;
 
         let world = &mut app.world_mut();
 

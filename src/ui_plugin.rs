@@ -12,6 +12,7 @@ use self::{
     editor_screen::{EditorContext, EditorPlugin, EditorScreen},
     explorer_screen::{ExplorerContext, ExplorerScreen},
     fleet_screen::{FleetContext, FleetScreen, FleetScreenPlugin},
+    space_map_plugin::SpaceMap,
 };
 
 pub mod editor_screen;
@@ -104,14 +105,19 @@ fn render(
     explorer: Option<ResMut<ExplorerContext>>,
     fleet: Option<ResMut<FleetContext>>,
     editor: Option<ResMut<EditorContext>>,
+    space_map: Option<ResMut<SpaceMap>>,
 ) -> color_eyre::Result<()> {
     ctx.draw(|f| match screen.get() {
         AppScreen::StartMenu => {
             f.render_stateful_widget(StartMenu, f.size(), start_menu.unwrap().as_mut())
         }
-        AppScreen::Explorer => {
-            f.render_stateful_widget(ExplorerScreen, f.size(), explorer.unwrap().as_mut())
-        }
+        AppScreen::Explorer => f.render_stateful_widget(
+            ExplorerScreen {
+                map: space_map.unwrap().as_mut(),
+            },
+            f.size(),
+            explorer.unwrap().as_mut(),
+        ),
         AppScreen::Fleet => {
             f.render_stateful_widget(FleetScreen, f.size(), fleet.unwrap().as_mut())
         }

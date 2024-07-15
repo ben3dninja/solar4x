@@ -2,7 +2,7 @@ use bevy::{app::AppExit, prelude::*, state::app::StatesPlugin, time::TimePlugin,
 
 use crate::{
     bodies::{bodies_config::BodiesConfig, body_data::BodyData, body_id::BodyID},
-    engine_plugin::{EllipticalOrbit, Position, ToggleTime, Velocity},
+    engine_plugin::{update_global, EllipticalOrbit, Position, ToggleTime, Velocity},
     gravity::Mass,
     utils::de::read_main_bodies,
 };
@@ -28,7 +28,10 @@ impl Plugin for CorePlugin {
             FixedUpdate,
             LoadedSet.run_if(in_state(LoadingState::Loaded)),
         )
-        .add_systems(OnEnter(LoadingState::Loading), build_system)
+        .add_systems(
+            OnEnter(LoadingState::Loading),
+            (build_system, insert_system_size.after(update_global)),
+        )
         .add_systems(OnEnter(LoadingState::Unloading), clear_system)
         .add_systems(Update, handle_core_events);
     }
@@ -57,6 +60,9 @@ pub struct BodiesMapping(pub HashMap<BodyID, Entity>);
 
 #[derive(Component, Debug, Clone)]
 pub struct BodyInfo(pub BodyData);
+
+#[derive(Resource)]
+pub struct SystemSize(pub f64);
 
 pub fn build_system(
     mut commands: Commands,
@@ -90,6 +96,15 @@ pub fn build_system(
     }
     commands.insert_resource(BodiesMapping(id_mapping));
     loading_state.set(LoadingState::Loaded);
+}
+
+pub fn insert_system_size(mut commands: Commands, body_positions: Query<&Position>) {
+    let system_size = body_positions
+        .iter()
+        .map(|pos| pos.0.length())
+        .max_by(|a, b| a.total_cmp(b))
+        .unwrap();
+    commands.insert_resource(SystemSize(system_size));
 }
 
 fn clear_system(

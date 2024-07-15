@@ -1,6 +1,6 @@
 use bevy::{
     a11y::AccessibilityPlugin,
-    color::palettes::css::{BLACK, DARK_GRAY, GOLD, TEAL, WHITE},
+    color::palettes::css::{BLACK, DARK_GRAY, GOLD, TEAL},
     core_pipeline::CorePipelinePlugin,
     gizmos::GizmoPlugin,
     input::InputPlugin,
@@ -15,12 +15,12 @@ use bevy::{
 
 use crate::{
     bodies::body_data::BodyType,
-    core_plugin::{BodiesMapping, BodyInfo, LoadedSet},
+    core_plugin::{BodyInfo, LoadedSet, LoadingState, SystemSize},
     engine_plugin::Position,
     utils::algebra::project_onto_plane,
 };
 
-use super::{explorer_screen::ExplorerContext, AppScreen};
+use super::{space_map_plugin::SpaceMap, AppScreen};
 
 const MAX_WIDTH: f32 = 1000.;
 const MIN_RADIUS: f32 = 1e-4;
@@ -47,7 +47,7 @@ impl Plugin for GuiPlugin {
         .insert_resource(ClearColor(Color::Srgba(BLACK)))
         .add_systems(Startup, gui_setup)
         .add_systems(
-            OnEnter(AppScreen::Explorer),
+            OnEnter(LoadingState::Loaded),
             (insert_display_components, update_transform).chain(),
         )
         .add_systems(
@@ -89,12 +89,12 @@ pub struct Colors {
 
 fn insert_display_components(
     mut commands: Commands,
-    ctx: Res<ExplorerContext>,
     query: Query<(Entity, &BodyInfo)>,
     mut meshes: ResMut<Assets<Mesh>>,
     colors: Res<Colors>,
+    system_size: Res<SystemSize>,
 ) {
-    let scale = MAX_WIDTH as f64 / ctx.space_map.system_size;
+    let scale = MAX_WIDTH as f64 / system_size.0;
     query.iter().for_each(|(e, BodyInfo(data))| {
         let (material, z) = match data.body_type {
             BodyType::Star => (colors.stars.clone(), 0.),
@@ -113,14 +113,13 @@ fn insert_display_components(
 }
 
 fn update_camera_pos(
-    ctx: Res<ExplorerContext>,
+    space_map: Res<SpaceMap>,
     mut cam: Query<(&mut Transform, &mut OrthographicProjection)>,
     positions: Query<&Position>,
 ) {
-    let space_map = &ctx.space_map;
     let scale = MAX_WIDTH as f64 / space_map.system_size;
     let (mut cam_pos, mut proj) = cam.single_mut();
-    let focus_pos = positions.get(ctx.focus_body).unwrap().0;
+    let focus_pos = positions.get(space_map.focus_body).unwrap().0;
     cam_pos.translation = ((focus_pos
         + DVec3::new(space_map.offset_amount.x, space_map.offset_amount.y, 0.))
         * scale)
@@ -128,8 +127,8 @@ fn update_camera_pos(
     proj.scale = (1. / space_map.zoom_level) as f32;
 }
 
-fn update_transform(ctx: Res<ExplorerContext>, mut query: Query<(&mut Transform, &Position)>) {
-    let scale = MAX_WIDTH as f64 / ctx.space_map.system_size;
+fn update_transform(system_size: Res<SystemSize>, mut query: Query<(&mut Transform, &Position)>) {
+    let scale = MAX_WIDTH as f64 / system_size.0;
     for (mut transform, Position(pos)) in query.iter_mut() {
         let (x, y) = (project_onto_plane(*pos, (DVec3::X, DVec3::Y)) * scale)
             .as_vec2()
@@ -140,27 +139,22 @@ fn update_transform(ctx: Res<ExplorerContext>, mut query: Query<(&mut Transform,
 }
 
 fn draw_gizmos(
-    ctx: Res<ExplorerContext>,
+    space_map: Res<SpaceMap>,
     mut gizmos: Gizmos,
     transform: Query<&Transform>,
     info: Query<&BodyInfo>,
-    mapping: Res<BodiesMapping>,
 ) {
-    let scale = MAX_WIDTH as f64 / ctx.space_map.system_size;
+    let scale = MAX_WIDTH as f64 / space_map.system_size;
+    let SpaceMap {
+        zoom_level,
+        selected,
+        ..
+    } = space_map.as_ref();
     gizmos.circle_2d(
-        transform.get(ctx.focus_body).unwrap().translation.xy(),
-        (30. / ctx.space_map.zoom_level).max(
-            info.get(ctx.focus_body).unwrap().0.radius * scale + 30. / ctx.space_map.zoom_level,
-        ) as f32,
-        Color::srgba(1., 1., 1., 0.1),
-    );
-    let selected = mapping.0[&ctx.tree_state.selected_body_id()];
-    gizmos.circle_2d(
-        transform.get(selected).unwrap().translation.xy(),
-        (10. / ctx.space_map.zoom_level)
-            .max(info.get(selected).unwrap().0.radius * scale + 15. / ctx.space_map.zoom_level)
+        transform.get(*selected).unwrap().translation.xy(),
+        (10. / zoom_level).max(info.get(*selected).unwrap().0.radius * scale + 15. / zoom_level)
             as f32,
-        Color::Srgba(WHITE),
+        Color::srgba(1., 1., 1., 0.1),
     );
 }
 

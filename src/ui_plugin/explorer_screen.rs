@@ -3,14 +3,14 @@ use bevy_ratatui::event::KeyEvent;
 use crossterm::event::{KeyCode, KeyEvent as CKeyEvent, KeyEventKind};
 use ratatui::{
     layout::{Constraint, Layout},
-    widgets::{StatefulWidget, WidgetRef},
+    widgets::{StatefulWidget, StatefulWidgetRef, WidgetRef},
 };
 
 use crate::{
     bodies::body_id::BodyID,
     client_plugin::ClientMode,
-    core_plugin::{BodiesMapping, BodyInfo, LoadedSet, LoadingState, PrimaryBody},
-    engine_plugin::{EngineEvent, Position},
+    core_plugin::{BodiesMapping, BodyInfo, LoadedSet, LoadingState, PrimaryBody, SystemSize},
+    engine_plugin::{EngineEvent, Position, ToggleTime},
     keyboard::Keymap,
     utils::{
         list::ClampedList,
@@ -21,7 +21,7 @@ use crate::{
 use super::{
     info_widget::InfoWidget,
     search_plugin::{SearchEvent, SearchMatcher, SearchPlugin, SearchState, SearchWidget},
-    space_map_plugin::{SpaceMap, SpaceMapEvent},
+    space_map_plugin::{SpaceMap, SpaceMapEvent, SpaceMapWidget},
     tree_widget::{TreeEvent, TreeState, TreeWidget},
     AppScreen, UiInit,
 };
@@ -40,6 +40,12 @@ impl Plugin for ExplorerScreenPlugin {
                     .run_if(in_state(AppScreen::Explorer)),
             )
             .add_systems(
+                Update,
+                update_space_map
+                    .run_if(resource_exists::<SpaceMap>)
+                    .run_if(resource_equals(ToggleTime(true))),
+            )
+            .add_systems(
                 OnEnter(LoadingState::Loaded),
                 create_screen
                     .run_if(in_state(ClientMode::Explorer))
@@ -52,16 +58,20 @@ impl Plugin for ExplorerScreenPlugin {
     }
 }
 
-fn create_screen<'a>(
+fn create_screen(
     mut commands: Commands,
     mut next_screen: ResMut<NextState<AppScreen>>,
     primary: Query<Entity, With<PrimaryBody>>,
-    bodies: Query<(&'a BodyInfo, &'a Position)>,
+    bodies: Query<&BodyInfo>,
+    system_size: Res<SystemSize>,
 ) {
-    commands.insert_resource(ExplorerContext::new(primary.single(), &bodies));
+    let primary = primary.single();
+    commands.insert_resource(SpaceMap::new(system_size.0, primary, primary));
+    commands.insert_resource(ExplorerContext::new(primary, &bodies));
     next_screen.set(AppScreen::Explorer);
 }
 fn clear_screen(mut commands: Commands) {
+    commands.remove_resource::<SpaceMap>();
     commands.remove_resource::<ExplorerContext>();
 }
 
@@ -78,28 +88,23 @@ pub struct ExplorerContext {
     pub(super) info_toggle: bool,
     pub(super) tree_state: TreeState,
     pub(super) search_state: SearchState,
-    pub(super) space_map: SpaceMap,
     pub(super) info: InfoWidget,
-    pub(super) focus_body: Entity,
+    pub(super) space_map: SpaceMapWidget,
 }
 
 impl ExplorerContext {
-    pub fn new<'a>(
-        primary: Entity,
-        bodies: &Query<(&'a BodyInfo, &'a Position)>,
-    ) -> ExplorerContext {
-        let primary_data = &bodies.get(primary).unwrap().0 .0;
-        let (infos, positions): (Vec<_>, Vec<_>) = bodies.iter().map(|(i, p)| (&i.0, p)).unzip();
+    pub fn new(primary: Entity, bodies: &Query<&BodyInfo>) -> ExplorerContext {
+        let primary_data = &bodies.get(primary).unwrap().0;
+        let infos: Vec<_> = bodies.iter().map(|i| &i.0).collect();
         ExplorerContext {
             side_pane_mode: SidePaneMode::default(),
             info_toggle: false,
             tree_state: TreeState::new(primary_data, Some(primary_data), infos.clone().into_iter()),
             search_state: SearchState::new(infos.into_iter()),
-            space_map: SpaceMap::new(positions.iter()),
             info: InfoWidget {
                 body_info: primary_data.clone(),
             },
-            focus_body: primary,
+            space_map: SpaceMapWidget::default(),
         }
     }
     fn update_info(&mut self, mapping: &HashMap<BodyID, Entity>, bodies: &Query<&BodyInfo>) {
@@ -125,6 +130,7 @@ pub enum ViewEvent {
     ToggleInfo,
     Back,
 }
+
 fn read_input(
     context: Res<ExplorerContext>,
     mut key_event: EventReader<KeyEvent>,
@@ -192,8 +198,10 @@ fn read_input(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn handle_explorer_events(
     mut ctx: ResMut<ExplorerContext>,
+    mut space_map: ResMut<SpaceMap>,
     mut next_mode: ResMut<NextState<ClientMode>>,
     mut events: EventReader<ExplorerEvent>,
     mapping: Res<BodiesMapping>,
@@ -209,6 +217,7 @@ pub fn handle_explorer_events(
                     Select(d) => {
                         ctx.tree_state.select_adjacent(*d);
                         ctx.update_info(&mapping.0, &bodies);
+                        space_map.selected = mapping.0[&ctx.tree_state.selected_body_id()];
                     }
                     ToggleTreeExpansion => ctx.tree_state.toggle_selection_expansion(),
                 }
@@ -225,6 +234,7 @@ pub fn handle_explorer_events(
                     ValidateSearch => {
                         if let Some(id) = ctx.search_state.selected_body_id() {
                             ctx.tree_state.select_body(id);
+                            space_map.selected = mapping.0[&ctx.tree_state.selected_body_id()];
                             ctx.update_info(&mapping.0, &bodies);
                         }
                         ctx.side_pane_mode = SidePaneMode::Tree;
@@ -239,19 +249,16 @@ pub fn handle_explorer_events(
             ExplorerEvent::SpaceMap(event) => {
                 use SpaceMapEvent::*;
                 match event {
-                    Zoom(d) => ctx.space_map.zoom(*d),
-                    MapOffset(d) => ctx.space_map.offset(*d),
-                    MapOffsetReset => ctx.space_map.reset_offset(),
+                    Zoom(d) => space_map.zoom(*d),
+                    MapOffset(d) => space_map.offset(*d),
+                    MapOffsetReset => space_map.reset_offset(),
                     FocusBody => {
                         if let Some(entity) = mapping.0.get(&ctx.tree_state.selected_body_id()) {
-                            ctx.focus_body = *entity;
+                            space_map.focus_body = *entity;
                             ctx.tree_state.focus_body = Some(bodies.get(*entity).unwrap().0.id)
                         }
                     }
-                    Autoscale => {
-                        let focus_data = &bodies.get(ctx.focus_body).unwrap().0;
-                        ctx.space_map.autoscale(focus_data, &mapping.0, &bodies);
-                    }
+                    Autoscale => space_map.autoscale(&mapping.0, &bodies),
                 }
             }
             ExplorerEvent::View(event) => match *event {
@@ -270,9 +277,19 @@ pub fn handle_explorer_events(
     }
 }
 
-pub struct ExplorerScreen;
+fn update_space_map(
+    mut ctx: ResMut<ExplorerContext>,
+    space_map: Res<SpaceMap>,
+    query: Query<(Entity, &Position, &BodyInfo)>,
+) {
+    ctx.space_map.update_map(space_map.as_ref(), &query);
+}
 
-impl StatefulWidget for ExplorerScreen {
+pub struct ExplorerScreen<'a> {
+    pub map: &'a mut SpaceMap,
+}
+
+impl StatefulWidget for ExplorerScreen<'_> {
     type State = ExplorerContext;
 
     fn render(
@@ -293,7 +310,7 @@ impl StatefulWidget for ExplorerScreen {
                 SearchWidget.render(chunks[0], buf, &mut state.search_state);
             }
         }
-        state.space_map.render_ref(chunks[1], buf);
+        state.space_map.render_ref(chunks[1], buf, self.map);
         if state.info_toggle {
             state.info.render_ref(chunks[2], buf);
         }
