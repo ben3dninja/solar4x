@@ -24,8 +24,8 @@ use crate::{
     },
 };
 
-const OFFSET_STEP: f64 = 1e8;
-const ZOOM_STEP: f64 = 1.5;
+pub const OFFSET_STEP: f64 = 1e8;
+pub const ZOOM_STEP: f64 = 1.5;
 
 #[derive(Debug)]
 pub enum SpaceMapEvent {
@@ -41,8 +41,8 @@ pub struct SpaceMap {
     pub offset_amount: DVec2,
     pub zoom_level: f64,
     pub system_size: f64,
-    pub focus_body: Entity,
-    pub selected: Entity,
+    pub focus_body: Option<Entity>,
+    pub selected: Option<Entity>,
 }
 
 #[derive(Default)]
@@ -83,12 +83,14 @@ impl SpaceMapWidget {
         query: &Query<(Entity, &Position, &BodyInfo)>,
     ) {
         let mut circles = Vec::new();
-        let &Position(focus_pos) = query.get(space_map.focus_body).unwrap().1;
+        let &Position(focus_pos) = space_map
+            .focus_body
+            .map_or(&Position::default(), |f| query.get(f).unwrap().1);
         for (entity, &Position(pos), BodyInfo(data)) in query.iter() {
             let proj =
                 project_onto_plane(pos - focus_pos, (DVec3::X, DVec3::Y)) - space_map.offset_amount;
             let color = match data.body_type {
-                _ if entity == space_map.selected => Color::Red,
+                _ if Some(entity) == space_map.selected => Color::Red,
                 BodyType::Star => Color::Yellow,
                 BodyType::Planet => Color::Blue,
                 _ => Color::DarkGray,
@@ -106,7 +108,7 @@ impl SpaceMapWidget {
 }
 
 impl SpaceMap {
-    pub fn new(system_size: f64, focus_body: Entity, selected: Entity) -> SpaceMap {
+    pub fn new(system_size: f64, focus_body: Option<Entity>, selected: Option<Entity>) -> SpaceMap {
         SpaceMap {
             offset_amount: DVec2::ZERO,
             zoom_level: 1.,
@@ -149,19 +151,20 @@ impl SpaceMap {
     }
 
     pub fn autoscale(&mut self, id_mapping: &HashMap<BodyID, Entity>, bodies: &Query<&BodyInfo>) {
-        let focus_data = &bodies.get(self.focus_body).unwrap().0;
-        if let Some(max_dist) = focus_data
-            .orbiting_bodies
-            .iter()
-            .filter_map(|id| {
-                id_mapping
-                    .get(id)
-                    .and_then(|&e| bodies.get(e).ok())
-                    .map(|body| body.0.semimajor_axis)
-            })
-            .max_by(|a, b| a.total_cmp(b))
-        {
-            self.zoom_level = self.system_size / max_dist;
+        if let Some(focus_data) = self.focus_body.map(|f| &bodies.get(f).unwrap().0) {
+            if let Some(max_dist) = focus_data
+                .orbiting_bodies
+                .iter()
+                .filter_map(|id| {
+                    id_mapping
+                        .get(id)
+                        .and_then(|&e| bodies.get(e).ok())
+                        .map(|body| body.0.semimajor_axis)
+                })
+                .max_by(|a, b| a.total_cmp(b))
+            {
+                self.zoom_level = self.system_size / max_dist;
+            }
         }
     }
 }
@@ -217,7 +220,7 @@ mod tests {
             .send_event(ExplorerEvent::SpaceMap(SpaceMapEvent::FocusBody));
         app.update();
         let map = app.world().resource::<SpaceMap>();
-        let focus = map.focus_body;
+        let focus = map.focus_body.unwrap();
 
         let world = &mut app.world_mut();
 

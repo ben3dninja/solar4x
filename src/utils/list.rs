@@ -31,7 +31,9 @@ pub trait ClampedList {
 
     fn select_next(&mut self) {
         let len = self.len();
-        select_next_clamp(self.list_state(), len - 1);
+        if len > 0 {
+            select_next_clamp(self.list_state(), len - 1);
+        }
     }
 
     fn select_previous(&mut self) {

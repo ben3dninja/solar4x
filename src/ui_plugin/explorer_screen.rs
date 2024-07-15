@@ -9,7 +9,10 @@ use ratatui::{
 use crate::{
     bodies::body_id::BodyID,
     client_plugin::ClientMode,
-    core_plugin::{BodiesMapping, BodyInfo, LoadedSet, LoadingState, PrimaryBody, SystemSize},
+    core_plugin::{
+        BodiesMapping, BodyInfo, EventHandling, InputReading, LoadedSet, LoadingState, PrimaryBody,
+        SystemSize,
+    },
     engine_plugin::{EngineEvent, Position, ToggleTime},
     keyboard::Keymap,
     utils::{
@@ -34,8 +37,10 @@ impl Plugin for ExplorerScreenPlugin {
             .add_plugins(SearchPlugin)
             .add_systems(
                 Update,
-                (read_input, handle_explorer_events)
-                    .chain()
+                (
+                    read_input.in_set(InputReading),
+                    handle_explorer_events.in_set(EventHandling),
+                )
                     .in_set(LoadedSet)
                     .run_if(in_state(AppScreen::Explorer)),
             )
@@ -66,7 +71,7 @@ fn create_screen(
     system_size: Res<SystemSize>,
 ) {
     let primary = primary.single();
-    commands.insert_resource(SpaceMap::new(system_size.0, primary, primary));
+    commands.insert_resource(SpaceMap::new(system_size.0, Some(primary), Some(primary)));
     commands.insert_resource(ExplorerContext::new(primary, &bodies));
     next_screen.set(AppScreen::Explorer);
 }
@@ -217,7 +222,7 @@ pub fn handle_explorer_events(
                     Select(d) => {
                         ctx.tree_state.select_adjacent(*d);
                         ctx.update_info(&mapping.0, &bodies);
-                        space_map.selected = mapping.0[&ctx.tree_state.selected_body_id()];
+                        space_map.selected = Some(mapping.0[&ctx.tree_state.selected_body_id()]);
                     }
                     ToggleTreeExpansion => ctx.tree_state.toggle_selection_expansion(),
                 }
@@ -234,7 +239,8 @@ pub fn handle_explorer_events(
                     ValidateSearch => {
                         if let Some(id) = ctx.search_state.selected_body_id() {
                             ctx.tree_state.select_body(id);
-                            space_map.selected = mapping.0[&ctx.tree_state.selected_body_id()];
+                            space_map.selected =
+                                Some(mapping.0[&ctx.tree_state.selected_body_id()]);
                             ctx.update_info(&mapping.0, &bodies);
                         }
                         ctx.side_pane_mode = SidePaneMode::Tree;
@@ -254,7 +260,7 @@ pub fn handle_explorer_events(
                     MapOffsetReset => space_map.reset_offset(),
                     FocusBody => {
                         if let Some(entity) = mapping.0.get(&ctx.tree_state.selected_body_id()) {
-                            space_map.focus_body = *entity;
+                            space_map.focus_body = Some(*entity);
                             ctx.tree_state.focus_body = Some(bodies.get(*entity).unwrap().0.id)
                         }
                     }

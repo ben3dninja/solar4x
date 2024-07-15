@@ -1,9 +1,12 @@
 use bevy::{
     a11y::AccessibilityPlugin,
-    color::palettes::css::{BLACK, DARK_GRAY, GOLD, TEAL},
+    color::palettes::css::{BLACK, DARK_GRAY, GOLD, PURPLE, TEAL},
     core_pipeline::CorePipelinePlugin,
     gizmos::GizmoPlugin,
-    input::InputPlugin,
+    input::{
+        mouse::{MouseScrollUnit, MouseWheel},
+        InputPlugin,
+    },
     math::DVec3,
     prelude::*,
     render::{camera::ScalingMode, pipelined_rendering::PipelinedRenderingPlugin, RenderPlugin},
@@ -15,15 +18,18 @@ use bevy::{
 
 use crate::{
     bodies::body_data::BodyType,
-    core_plugin::{BodyInfo, LoadedSet, LoadingState, SystemSize},
+    core_plugin::{BodyInfo, LoadingState, SystemSize},
     engine_plugin::Position,
+    main_game::{handle_ship_events, InGame, ShipEvent},
+    spaceship::{ShipInfo, ShipsMapping},
     utils::algebra::project_onto_plane,
 };
 
-use super::{space_map_plugin::SpaceMap, AppScreen};
+use super::space_map_plugin::{SpaceMap, ZOOM_STEP};
 
 const MAX_WIDTH: f32 = 1000.;
 const MIN_RADIUS: f32 = 1e-4;
+const SCROLL_SENSITIVITY: f32 = 10.;
 pub struct GuiPlugin;
 
 impl Plugin for GuiPlugin {
@@ -54,19 +60,20 @@ impl Plugin for GuiPlugin {
             FixedPreUpdate,
             (update_transform, update_camera_pos)
                 .chain()
-                .run_if(in_state(AppScreen::Explorer)),
+                .run_if(resource_exists::<SpaceMap>),
         )
         .add_systems(
             Update,
-            draw_gizmos
-                .in_set(LoadedSet)
-                .run_if(in_state(AppScreen::Explorer)),
+            create_transform_for_ship
+                .after(handle_ship_events)
+                .run_if(in_state(InGame)),
+        )
+        .add_systems(
+            Update,
+            (zoom_with_scroll, draw_gizmos).run_if(resource_exists::<SpaceMap>),
         );
     }
 }
-
-#[derive(SystemSet, Clone, Hash, Debug, PartialEq, Eq)]
-pub struct GuiSet;
 
 fn gui_setup(mut commands: Commands, mut materials: ResMut<Assets<ColorMaterial>>) {
     let mut cam = Camera2dBundle::default();
@@ -89,13 +96,14 @@ pub struct Colors {
 
 fn insert_display_components(
     mut commands: Commands,
-    query: Query<(Entity, &BodyInfo)>,
+    bodies: Query<(Entity, &BodyInfo)>,
+    ships: Query<Entity, With<ShipInfo>>,
     mut meshes: ResMut<Assets<Mesh>>,
     colors: Res<Colors>,
     system_size: Res<SystemSize>,
 ) {
     let scale = MAX_WIDTH as f64 / system_size.0;
-    query.iter().for_each(|(e, BodyInfo(data))| {
+    bodies.iter().for_each(|(e, BodyInfo(data))| {
         let (material, z) = match data.body_type {
             BodyType::Star => (colors.stars.clone(), 0.),
             BodyType::Planet => (colors.planets.clone(), -1.),
@@ -110,6 +118,38 @@ fn insert_display_components(
             ..default()
         });
     });
+    for e in ships.iter() {
+        commands
+            .entity(e)
+            .insert(TransformBundle::from_transform(Transform::from_xyz(
+                0., 0., 1.,
+            )));
+    }
+}
+
+pub fn create_transform_for_ship(
+    mut commands: Commands,
+    mut events: EventReader<ShipEvent>,
+    mapping: Res<ShipsMapping>,
+) {
+    for event in events.read() {
+        if let ShipEvent::Create(info) = event {
+            commands
+                .entity(mapping.0[&info.id])
+                .insert(TransformBundle::from_transform(Transform::from_xyz(
+                    0., 0., 1.,
+                )));
+        }
+    }
+}
+
+fn zoom_with_scroll(mut events: EventReader<MouseWheel>, mut space_map: ResMut<SpaceMap>) {
+    for event in events.read() {
+        space_map.zoom_level *= ZOOM_STEP.powf(match event.unit {
+            MouseScrollUnit::Line => event.y,
+            MouseScrollUnit::Pixel => event.y * SCROLL_SENSITIVITY,
+        } as f64);
+    }
 }
 
 fn update_camera_pos(
@@ -119,7 +159,9 @@ fn update_camera_pos(
 ) {
     let scale = MAX_WIDTH as f64 / space_map.system_size;
     let (mut cam_pos, mut proj) = cam.single_mut();
-    let focus_pos = positions.get(space_map.focus_body).unwrap().0;
+    let focus_pos = space_map
+        .focus_body
+        .map_or(DVec3::default(), |f| positions.get(f).unwrap().0);
     cam_pos.translation = ((focus_pos
         + DVec3::new(space_map.offset_amount.x, space_map.offset_amount.y, 0.))
         * scale)
@@ -141,21 +183,31 @@ fn update_transform(system_size: Res<SystemSize>, mut query: Query<(&mut Transfo
 fn draw_gizmos(
     space_map: Res<SpaceMap>,
     mut gizmos: Gizmos,
-    transform: Query<&Transform>,
-    info: Query<&BodyInfo>,
+    bodies: Query<(&Transform, &BodyInfo)>,
+    ships: Query<&Transform, With<ShipInfo>>,
 ) {
     let scale = MAX_WIDTH as f64 / space_map.system_size;
-    let SpaceMap {
+    if let SpaceMap {
         zoom_level,
-        selected,
+        selected: Some(s),
         ..
-    } = space_map.as_ref();
-    gizmos.circle_2d(
-        transform.get(*selected).unwrap().translation.xy(),
-        (10. / zoom_level).max(info.get(*selected).unwrap().0.radius * scale + 15. / zoom_level)
-            as f32,
-        Color::srgba(1., 1., 1., 0.1),
-    );
+    } = space_map.as_ref()
+    {
+        let (pos, info) = bodies.get(*s).unwrap();
+        gizmos.circle_2d(
+            pos.translation.xy(),
+            (10. / zoom_level).max(info.0.radius * scale + 15. / zoom_level) as f32,
+            Color::srgba(1., 1., 1., 0.1),
+        );
+        for e in ships.iter() {
+            gizmos.rect_2d(
+                e.translation.xy(),
+                0.,
+                (10. / zoom_level) as f32 * Vec2::ONE,
+                Color::Srgba(PURPLE),
+            )
+        }
+    }
 }
 
 // #[derive(Resource)]
