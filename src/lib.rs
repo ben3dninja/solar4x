@@ -13,7 +13,13 @@ pub mod utils;
 
 const MAX_ID_LENGTH: usize = 32;
 
-/// Game time that is added at each server update (multiplied by game speed)
-const GAMETIME_PER_UPDATE: f64 = 1.;
-
+/// Number of server updates (ticks) per real time second
 const TPS: f64 = 1.;
+
+/// Number of simulation updates (simticks) per real time second
+const STPS: f64 = 64.;
+
+/// Game time that is added at each client update (in days, later multiplied by game speed)
+const GAMETIME_PER_SIMTICK: f64 = 1e-3;
+
+const SECONDS_PER_DAY: f64 = 86400.;

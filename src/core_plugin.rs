@@ -5,6 +5,7 @@ use crate::{
     engine_plugin::{update_global, EllipticalOrbit, Position, ToggleTime, Velocity},
     gravity::Mass,
     utils::de::read_main_bodies,
+    STPS,
 };
 /// This plugin's role is to handle body system creation
 pub struct CorePlugin;
@@ -20,6 +21,7 @@ impl Plugin for CorePlugin {
             StatesPlugin,
         ))
         .init_state::<LoadingState>()
+        .insert_resource(Time::<Fixed>::from_hz(STPS))
         .add_event::<CoreEvent>()
         .configure_sets(Update, LoadedSet.run_if(in_state(LoadingState::Loaded)))
         .configure_sets(PreUpdate, LoadedSet.run_if(in_state(LoadingState::Loaded)))

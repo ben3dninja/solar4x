@@ -20,12 +20,14 @@ use crate::{
     bodies::body_data::BodyType,
     core_plugin::{BodyInfo, LoadingState, SystemSize},
     engine_plugin::Position,
-    main_game::{handle_ship_events, InGame, ShipEvent},
-    spaceship::{ShipInfo, ShipsMapping},
+    spaceship::ShipInfo,
     utils::algebra::project_onto_plane,
 };
 
-use super::space_map_plugin::{SpaceMap, ZOOM_STEP};
+use super::{
+    editor_gui::Prediction,
+    space_map_plugin::{SpaceMap, ZOOM_STEP},
+};
 
 const MAX_WIDTH: f32 = 1000.;
 const MIN_RADIUS: f32 = 1e-4;
@@ -60,13 +62,8 @@ impl Plugin for GuiPlugin {
             FixedPreUpdate,
             (update_transform, update_camera_pos)
                 .chain()
-                .run_if(resource_exists::<SpaceMap>),
-        )
-        .add_systems(
-            Update,
-            create_transform_for_ship
-                .after(handle_ship_events)
-                .run_if(in_state(InGame)),
+                .run_if(resource_exists::<SpaceMap>)
+                .run_if(in_state(LoadingState::Loaded)),
         )
         .add_systems(
             Update,
@@ -127,22 +124,6 @@ fn insert_display_components(
     }
 }
 
-pub fn create_transform_for_ship(
-    mut commands: Commands,
-    mut events: EventReader<ShipEvent>,
-    mapping: Res<ShipsMapping>,
-) {
-    for event in events.read() {
-        if let ShipEvent::Create(info) = event {
-            commands
-                .entity(mapping.0[&info.id])
-                .insert(TransformBundle::from_transform(Transform::from_xyz(
-                    0., 0., 1.,
-                )));
-        }
-    }
-}
-
 fn zoom_with_scroll(mut events: EventReader<MouseWheel>, mut space_map: ResMut<SpaceMap>) {
     for event in events.read() {
         space_map.zoom_level *= ZOOM_STEP.powf(match event.unit {
@@ -185,6 +166,7 @@ fn draw_gizmos(
     mut gizmos: Gizmos,
     bodies: Query<(&Transform, &BodyInfo)>,
     ships: Query<&Transform, With<ShipInfo>>,
+    predictions: Query<&Transform, With<Prediction>>,
 ) {
     let scale = MAX_WIDTH as f64 / space_map.system_size;
     if let SpaceMap {
@@ -205,6 +187,14 @@ fn draw_gizmos(
                 0.,
                 (10. / zoom_level) as f32 * Vec2::ONE,
                 Color::Srgba(PURPLE),
+            )
+        }
+        for e in predictions.iter() {
+            gizmos.rect_2d(
+                e.translation.xy(),
+                0.,
+                (10. / zoom_level) as f32 * Vec2::ONE,
+                Color::srgba(1., 1., 1., 0.1),
             )
         }
     }
@@ -274,7 +264,6 @@ fn draw_gizmos(
 //                                     .insert(Velocity(speed))
 //                                     .insert(Position(pos))
 //                                     .insert(Acceleration(DVec3::ZERO))
-//                                     .insert(GravityBound);
 //                             }
 //                         }
 //                         *shooting_state = ShootingState::Idle;

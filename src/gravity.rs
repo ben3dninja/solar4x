@@ -5,9 +5,9 @@ use bevy::{math::DVec3, prelude::*};
 use crate::{
     bodies::body_id::BodyID,
     core_plugin::{build_system, BodiesMapping, BodyInfo, LoadingState, PrimaryBody},
-    engine_plugin::{GameSpeed, Position, Velocity, SECONDS_PER_DAY},
+    engine_plugin::{Position, Velocity},
     main_game::GameStage,
-    TPS,
+    GAMETIME_PER_SIMTICK, SECONDS_PER_DAY, TPS,
 };
 
 /// Gravitationnal constant in km3kg-1d-2
@@ -39,9 +39,6 @@ pub struct TickTimer(pub Timer);
 
 #[derive(Component)]
 pub struct Mass(pub f64);
-
-#[derive(Component)]
-pub struct GravityBound;
 
 #[derive(Component)]
 pub struct HillRadius(f64);
@@ -140,34 +137,50 @@ pub fn compute_influence(
 pub struct Acceleration(pub DVec3);
 
 pub fn apply_gravity_force(
-    mut gravity_bound: Query<(&Position, &mut Acceleration, &mut Influenced)>,
+    mut gravity_bound: Query<(&Position, &mut Acceleration, &Influenced)>,
     bodies: Query<(&Position, &Mass)>,
 ) {
     gravity_bound
         .par_iter_mut()
         .for_each(|(object_pos, mut acceleration, influenced)| {
-            let mut acc = DVec3::ZERO;
-            for influencer in &influenced.influencers {
-                let (mass_pos, Mass(mass)) = bodies.get(*influencer).unwrap();
-                let r = object_pos.0 - mass_pos.0;
-                let dist = r.length();
-                acc -= r * G * *mass / (dist.powi(3));
-            }
-            acceleration.0 = acc;
+            acceleration.0 = compute_acceleration(
+                object_pos.0,
+                bodies
+                    .iter_many(&influenced.influencers)
+                    .map(|(p, m)| (p.0, m.0)),
+            );
         });
 }
 
-pub fn integrate_positions(
-    mut query: Query<(&mut Position, &mut Velocity, &Acceleration), With<GravityBound>>,
-    time: Res<Time>,
-    game_speed: Res<GameSpeed>,
-) {
-    // Gametime-days since last update
-    let dt = time.delta_seconds_f64() * game_speed.0;
+/// Computes the acceleration from the object's position, and an iterator of the influencers' positions and masses
+pub fn compute_acceleration(
+    object_pos: DVec3,
+    influencers: impl Iterator<Item = (DVec3, f64)>,
+) -> DVec3 {
+    let mut acc = DVec3::ZERO;
+    for (body_pos, mass) in influencers {
+        let r = object_pos - body_pos;
+        let dist = r.length();
+        acc -= r * G * mass / (dist.powi(3));
+    }
+    acc
+}
+
+pub fn integrate_positions(mut query: Query<(&mut Position, &mut Velocity, &Acceleration)>) {
+    // Gametime days since last update
+    let dt = GAMETIME_PER_SIMTICK;
     query.par_iter_mut().for_each(|(mut pos, mut speed, acc)| {
-        speed.0 += acc.0 * dt;
-        pos.0 += speed.0 * dt;
+        let (dr, dv) = compute_deltas(speed.0, acc.0, dt);
+        pos.0 += dr;
+        speed.0 += dv;
     });
+}
+
+/// Returns delta v and delta r for the following integration step
+pub fn compute_deltas(speed: DVec3, acc: DVec3, dt: f64) -> (DVec3, DVec3) {
+    let dv = acc * dt;
+    let dr = (speed + dv) * dt;
+    (dv, dr)
 }
 
 #[cfg(test)]

@@ -12,11 +12,8 @@ use crate::{
         algebra::{mod_180, rotate},
         ui::Direction2,
     },
+    GAMETIME_PER_SIMTICK,
 };
-
-// Speed in days per second
-const DEFAULT_SPEED: f64 = 10.;
-pub const SECONDS_PER_DAY: f64 = 86400.;
 
 pub struct EnginePlugin;
 
@@ -24,7 +21,6 @@ impl Plugin for EnginePlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<EngineEvent>()
             .insert_resource(GameTime::default())
-            .insert_resource(GameSpeed::default())
             .insert_resource(ToggleTime(false))
             .add_systems(
                 OnEnter(LoadingState::Loading),
@@ -44,15 +40,15 @@ impl Plugin for EnginePlugin {
 #[derive(Resource, PartialEq)]
 pub struct ToggleTime(pub bool);
 
+/// The elapsed time in game (stores simulation ticks)
 #[derive(Resource, Default)]
-pub struct GameTime(pub f64);
+pub struct GameTime {
+    pub simtick: u64,
+}
 
-#[derive(Resource)]
-pub struct GameSpeed(pub f64);
-
-impl Default for GameSpeed {
-    fn default() -> Self {
-        GameSpeed(DEFAULT_SPEED)
+impl GameTime {
+    pub fn time(&self) -> f64 {
+        self.simtick as f64 * GAMETIME_PER_SIMTICK
     }
 }
 
@@ -65,26 +61,31 @@ pub enum EngineEvent {
 fn handle_engine_events(
     mut reader: EventReader<EngineEvent>,
     mut toggle_time: ResMut<ToggleTime>,
-    mut speed: ResMut<GameSpeed>,
+    mut time: ResMut<Time<Virtual>>,
 ) {
     use EngineEvent::*;
     for event in reader.read() {
         match event {
-            EngineSpeed(d) => match d {
-                Direction2::Up => speed.0 *= 1.5,
-                Direction2::Down => speed.0 /= 1.5,
-            },
+            EngineSpeed(d) => {
+                let speed = time.relative_speed_f64();
+                time.set_relative_speed_f64(match d {
+                    Direction2::Up => speed * 2.,
+                    Direction2::Down => speed / 2.,
+                })
+            }
             ToggleTime => toggle_time.0 = !toggle_time.0,
         }
     }
 }
 
-pub fn update_time(mut game_time: ResMut<GameTime>, speed: Res<GameSpeed>, app_time: Res<Time>) {
-    game_time.0 += speed.0 * app_time.delta_seconds_f64();
+pub fn update_time(mut game_time: ResMut<GameTime>) {
+    game_time.simtick += 1;
 }
 
 pub fn update_local(mut orbits: Query<&mut EllipticalOrbit>, time: Res<GameTime>) {
-    orbits.par_iter_mut().for_each(|mut o| o.update_pos(time.0));
+    orbits
+        .par_iter_mut()
+        .for_each(|mut o| o.update_pos(time.time()));
 }
 
 pub fn update_global(

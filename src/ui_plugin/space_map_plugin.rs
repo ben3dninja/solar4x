@@ -45,37 +45,6 @@ pub struct SpaceMap {
     pub selected: Option<Entity>,
 }
 
-#[derive(Default)]
-pub struct SpaceMapWidget {
-    circles: Vec<Circle>,
-}
-
-impl StatefulWidgetRef for SpaceMapWidget {
-    fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State)
-    where
-        Self: Sized,
-    {
-        let (width, height) = (area.width as f64, area.height as f64);
-        let scale = state.system_size / (width.min(height) * state.zoom_level);
-        let (width, height) = (width * scale, height * scale);
-        Canvas::default()
-            .block(
-                Block::bordered()
-                    .title(Title::from("Space map".bold()).alignment(Alignment::Center)),
-            )
-            .x_bounds([-width / 2., width / 2.])
-            .y_bounds([-height, height])
-            .paint(|ctx| {
-                for circle in &self.circles {
-                    ctx.draw(circle);
-                }
-            })
-            .render_ref(area, buf)
-    }
-
-    type State = SpaceMap;
-}
-
 impl SpaceMapWidget {
     pub fn update_map(
         &mut self,
@@ -167,6 +136,37 @@ impl SpaceMap {
             }
         }
     }
+}
+
+#[derive(Default)]
+pub struct SpaceMapWidget {
+    circles: Vec<Circle>,
+}
+
+impl StatefulWidgetRef for SpaceMapWidget {
+    fn render_ref(&self, area: Rect, buf: &mut Buffer, state: &mut Self::State)
+    where
+        Self: Sized,
+    {
+        let (width, height) = (area.width as f64, area.height as f64);
+        let scale = state.system_size / (width.min(height) * state.zoom_level);
+        let (width, height) = (width * scale, height * scale);
+        Canvas::default()
+            .block(
+                Block::bordered()
+                    .title(Title::from("Space map".bold()).alignment(Alignment::Center)),
+            )
+            .x_bounds([-width / 2., width / 2.])
+            .y_bounds([-height, height])
+            .paint(|ctx| {
+                for circle in &self.circles {
+                    ctx.draw(circle);
+                }
+            })
+            .render_ref(area, buf)
+    }
+
+    type State = SpaceMap;
 }
 
 #[cfg(test)]

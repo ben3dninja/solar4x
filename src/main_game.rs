@@ -6,8 +6,7 @@ use crate::{
     core_plugin::{BodiesMapping, BodyInfo, EventHandling, LoadingState, PrimaryBody},
     engine_plugin::{Position, ToggleTime, Velocity},
     gravity::{
-        compute_influence, integrate_positions, Acceleration, GravityBound, GravityPlugin,
-        HillRadius, Mass,
+        compute_influence, integrate_positions, Acceleration, GravityPlugin, HillRadius, Mass,
     },
     spaceship::{ShipID, ShipInfo, ShipsMapping},
     utils::de::TempDirectory,
@@ -140,7 +139,7 @@ pub fn handle_ship_events(
                             pos,
                             Velocity(info.spawn_speed),
                             Acceleration(DVec3::ZERO),
-                            GravityBound,
+                            TransformBundle::from_transform(Transform::from_xyz(0., 0., 1.)),
                         ))
                         .id(),
                 );

@@ -56,10 +56,7 @@ impl Plugin for ExplorerScreenPlugin {
                     .run_if(in_state(ClientMode::Explorer))
                     .in_set(UiInit),
             )
-            .add_systems(
-                OnExit(ClientMode::Explorer),
-                clear_screen.run_if(not(in_state(AppScreen::Explorer))),
-            );
+            .add_systems(OnExit(AppScreen::Explorer), clear_screen);
     }
 }
 
@@ -76,8 +73,8 @@ fn create_screen(
     next_screen.set(AppScreen::Explorer);
 }
 fn clear_screen(mut commands: Commands) {
-    commands.remove_resource::<SpaceMap>();
     commands.remove_resource::<ExplorerContext>();
+    commands.remove_resource::<SpaceMap>();
 }
 
 #[derive(Default, Debug, Clone, Copy)]
