@@ -136,7 +136,7 @@ fn handle_server_messages(
                 commands.insert_resource(bodies);
                 next_state.set(LoadingState::Loaded);
             }
-            ServerMessage::UpdateTime { game_time } => time.0 = game_time,
+            ServerMessage::UpdateTime(simtick) => time.simtick = simtick,
         }
     }
 }

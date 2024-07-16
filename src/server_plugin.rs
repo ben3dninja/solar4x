@@ -134,9 +134,7 @@ fn send_periodic_updates(
     if timer.0.finished() {
         server.endpoint_mut().try_broadcast_message_on(
             ServerChannel::PeriodicUpdates,
-            ServerMessage::UpdateTime {
-                game_time: game_time.0,
-            },
+            ServerMessage::UpdateTime(game_time.simtick),
         );
     }
 }

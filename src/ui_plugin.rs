@@ -17,6 +17,7 @@ use self::{
     space_map_plugin::SpaceMap,
 };
 
+pub mod editor_gui;
 pub mod editor_screen;
 pub mod explorer_screen;
 pub mod fleet_screen;
@@ -79,6 +80,9 @@ pub struct UiUpdate;
 
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct UiInit;
+
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct CreateScreen;
 
 /// A resource storing the current screen and its associated context, with only one context valid at a time
 /// In systems, checking the screen is done at the same time as acquiring the context so no run conditions are needed

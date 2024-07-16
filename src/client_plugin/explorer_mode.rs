@@ -20,14 +20,14 @@ impl Plugin for ExplorerPlugin {
 
 fn start_explorer(
     mut app_state: ResMut<NextState<LoadingState>>,
-    mut time: Option<ResMut<GameTime>>,
-    mut toggle_time: Option<ResMut<ToggleTime>>,
+    time: Option<ResMut<GameTime>>,
+    toggle_time: Option<ResMut<ToggleTime>>,
 ) {
     app_state.set(LoadingState::Loading);
-    if let Some(t) = time.as_mut() {
-        t.0 = 0.
+    if let Some(mut t) = time {
+        *t = GameTime::default()
     }
-    if let Some(t) = toggle_time.as_mut() {
+    if let Some(mut t) = toggle_time {
         t.0 = true
     }
 }

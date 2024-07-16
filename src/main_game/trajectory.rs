@@ -118,7 +118,7 @@ pub fn follow_trajectory(
     let events = Arc::new(Mutex::new(Vec::new()));
     trajectories.par_iter_mut().for_each(|(e, mut t, info)| {
         if let Some(n) = t.current() {
-            if n.time >= time.0 {
+            if n.time >= time.time() {
                 if let Some(origin) = mapping.0.get(&n.origin) {
                     let (&Position(o_pos), &Velocity(o_speed)) = coords.get(*origin).unwrap();
                     let (&Position(pos), &Velocity(speed)) = coords.get(e).unwrap();

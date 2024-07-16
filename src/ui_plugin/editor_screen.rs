@@ -12,12 +12,12 @@ use crate::{
     gravity::Influenced,
     keyboard::Keymap,
     main_game::trajectory::ManeuverNode,
-    spaceship::{ShipID, ShipsMapping},
+    spaceship::ShipsMapping,
     utils::{list::ClampedList, ui::Direction2},
-    GAMETIME_PER_UPDATE,
+    GAMETIME_PER_SIMTICK,
 };
 
-use super::{space_map_plugin::SpaceMap, AppScreen};
+use super::{editor_gui::EditorGuiPlugin, space_map_plugin::SpaceMap, AppScreen, CreateScreen};
 pub struct EditorPlugin;
 
 #[derive(Event)]
@@ -27,22 +27,23 @@ pub enum EditorEvent {
     Back,
 }
 
-#[derive(Resource, Default)]
+#[derive(Resource)]
 pub struct EditorContext {
-    ship: ShipID,
-    pos: DVec3,
-    speed: DVec3,
+    pub ship: Entity,
+    pub pos: DVec3,
+    pub speed: DVec3,
     list_state: ListState,
     nodes: Vec<ManeuverNode>,
 }
 
 impl EditorContext {
-    pub fn new(ship: ShipID, &Position(pos): &Position, &Velocity(speed): &Velocity) -> Self {
+    pub fn new(ship: Entity, &Position(pos): &Position, &Velocity(speed): &Velocity) -> Self {
         Self {
             ship,
             pos,
             speed,
-            ..Default::default()
+            list_state: ListState::default(),
+            nodes: Vec::new(),
         }
     }
 }
@@ -51,7 +52,8 @@ pub struct EditorScreen;
 
 impl Plugin for EditorPlugin {
     fn build(&self, app: &mut App) {
-        app.add_event::<EditorEvent>()
+        app.add_plugins(EditorGuiPlugin)
+            .add_event::<EditorEvent>()
             .add_computed_state::<InEditor>()
             .add_systems(
                 Update,
@@ -61,7 +63,8 @@ impl Plugin for EditorPlugin {
                 )
                     .run_if(in_state(InEditor)),
             )
-            .add_systems(OnEnter(InEditor), create_screen)
+            .configure_sets(OnEnter(InEditor), CreateScreen)
+            .add_systems(OnEnter(InEditor), create_screen.in_set(CreateScreen))
             .add_systems(OnExit(InEditor), clear_screen);
     }
 }
@@ -98,7 +101,7 @@ fn create_screen(
                     main_influencer, ..
                 },
             ) = coords.get(*e).unwrap();
-            commands.insert_resource(EditorContext::new(*id, pos, speed));
+            commands.insert_resource(EditorContext::new(*e, pos, speed));
             let mut map = SpaceMap::new(system_size.0, *main_influencer, *main_influencer);
             map.autoscale(&bodies_mapping.0, &bodies);
             commands.insert_resource(map);
@@ -150,14 +153,13 @@ pub fn handle_editor_events(
     influencer: Query<&Influenced>,
     bodies: Query<&BodyInfo>,
     primary: Query<&BodyInfo, With<PrimaryBody>>,
-    mapping: Res<ShipsMapping>,
 ) {
     for event in events.read() {
         match event {
             EditorEvent::Select(d) => context.select_adjacent(*d),
             EditorEvent::NewNode => {
                 let origin = influencer
-                    .get(mapping.0[&context.ship])
+                    .get(context.ship)
                     .unwrap()
                     .main_influencer
                     .map(|e| bodies.get(e).unwrap().0.id)
@@ -165,7 +167,7 @@ pub fn handle_editor_events(
                 let time = context
                     .nodes
                     .last()
-                    .map(|n| n.time + GAMETIME_PER_UPDATE)
+                    .map(|n| n.time + GAMETIME_PER_SIMTICK)
                     .unwrap_or_default();
                 context.nodes.push(ManeuverNode {
                     name: "Node".into(),
