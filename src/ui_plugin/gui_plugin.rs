@@ -20,6 +20,7 @@ use crate::{
     bodies::body_data::BodyType,
     core_plugin::{BodyInfo, LoadingState, SystemSize},
     engine_plugin::Position,
+    influence::HillRadius,
     spaceship::ShipInfo,
     utils::algebra::project_onto_plane,
 };
@@ -164,7 +165,7 @@ fn update_transform(system_size: Res<SystemSize>, mut query: Query<(&mut Transfo
 fn draw_gizmos(
     space_map: Res<SpaceMap>,
     mut gizmos: Gizmos,
-    bodies: Query<(&Transform, &BodyInfo)>,
+    bodies: Query<(&Transform, &BodyInfo, &HillRadius)>,
     ships: Query<&Transform, With<ShipInfo>>,
     predictions: Query<&Transform, With<Prediction>>,
 ) {
@@ -175,12 +176,19 @@ fn draw_gizmos(
         ..
     } = space_map.as_ref()
     {
-        let (pos, info) = bodies.get(*s).unwrap();
+        let (pos, info, ..) = bodies.get(*s).unwrap();
         gizmos.circle_2d(
             pos.translation.xy(),
             (10. / zoom_level).max(info.0.radius * scale + 15. / zoom_level) as f32,
             Color::srgba(1., 1., 1., 0.1),
         );
+        for (pos, _, radius) in bodies.iter() {
+            gizmos.circle_2d(
+                pos.translation.xy(),
+                (radius.0 * scale) as f32,
+                Color::srgba(1., 0.1, 0.1, 0.1),
+            );
+        }
         for e in ships.iter() {
             gizmos.rect_2d(
                 e.translation.xy(),

@@ -61,8 +61,13 @@ impl Plugin for TuiPlugin {
         ))
         .insert_resource(self.keymap.clone())
         .init_state::<AppScreen>()
+        .init_resource::<PreviousScreen>()
         .configure_sets(PostUpdate, (ContextUpdate, UiUpdate).chain())
         .configure_sets(OnEnter(LoadingState::Loaded), UiInit)
+        .add_systems(
+            PreUpdate,
+            update_previous_screen.run_if(resource_changed::<NextState<AppScreen>>),
+        )
         .add_systems(
             Update,
             clear_key_events
@@ -84,10 +89,10 @@ pub struct UiInit;
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct CreateScreen;
 
-/// A resource storing the current screen and its associated context, with only one context valid at a time
-/// In systems, checking the screen is done at the same time as acquiring the context so no run conditions are needed
-#[allow(clippy::large_enum_variant)]
-#[derive(States, Debug, PartialEq, Eq, Clone, Hash, Default)]
+/// A resource storing the current screen
+/// Set this to change screen, the appropriate context is automatically generated when the app is ready
+/// (for example when the bodies have been imported)
+#[derive(States, Debug, PartialEq, Eq, Clone, Copy, Hash, Default)]
 pub enum AppScreen {
     #[default]
     StartMenu,
@@ -96,17 +101,21 @@ pub enum AppScreen {
     Editor(ShipID),
 }
 
-#[derive(Event, Clone, Copy)]
-pub enum ChangeAppScreen {
-    StartMenu,
-    FleetScreen,
-    Multiplayer,
-    Explorer,
-    TrajectoryEditor(ShipID),
-}
+#[derive(Resource, Default, Debug)]
+pub struct PreviousScreen(pub AppScreen);
 
 fn clear_key_events(mut events: ResMut<Events<KeyEvent>>) {
     events.clear();
+}
+
+fn update_previous_screen(
+    next: Res<NextState<AppScreen>>,
+    current: Res<State<AppScreen>>,
+    mut previous: ResMut<PreviousScreen>,
+) {
+    if let NextState::Pending(_) = next.as_ref() {
+        previous.0 = *current.get();
+    }
 }
 
 fn render(
@@ -122,13 +131,17 @@ fn render(
         AppScreen::StartMenu => {
             f.render_stateful_widget(StartMenu, f.size(), start_menu.unwrap().as_mut())
         }
-        AppScreen::Explorer => f.render_stateful_widget(
-            ExplorerScreen {
-                map: space_map.unwrap().as_mut(),
-            },
-            f.size(),
-            explorer.unwrap().as_mut(),
-        ),
+        AppScreen::Explorer => {
+            if let Some(mut explorer) = explorer {
+                f.render_stateful_widget(
+                    ExplorerScreen {
+                        map: space_map.unwrap().as_mut(),
+                    },
+                    f.size(),
+                    explorer.as_mut(),
+                )
+            }
+        }
         AppScreen::Fleet => {
             f.render_stateful_widget(FleetScreen, f.size(), fleet.unwrap().as_mut())
         }

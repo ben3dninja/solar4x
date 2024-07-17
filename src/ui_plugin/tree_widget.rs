@@ -325,7 +325,11 @@ mod tests {
             client = client.with_bodies(BodiesConfig::SmallestBodyType(BodyType::Moon));
         }
         app.add_plugins((client, TuiPlugin::testing()));
+        // One update to set client mode
         app.update();
+        // One update to build system
+        app.update();
+        // One update to build context
         app.update();
         app
     }

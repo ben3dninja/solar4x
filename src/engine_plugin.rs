@@ -20,8 +20,9 @@ pub struct EnginePlugin;
 impl Plugin for EnginePlugin {
     fn build(&self, app: &mut App) {
         app.add_event::<EngineEvent>()
-            .insert_resource(GameTime::default())
-            .insert_resource(ToggleTime(false))
+            .init_resource::<GameTime>()
+            .init_resource::<ToggleTime>()
+            .init_resource::<SimStepSize>()
             .add_systems(
                 OnEnter(LoadingState::Loading),
                 (update_local, update_global).chain().after(build_system),
@@ -37,13 +38,23 @@ impl Plugin for EnginePlugin {
     }
 }
 
-#[derive(Resource, PartialEq)]
+#[derive(Resource, PartialEq, Default)]
 pub struct ToggleTime(pub bool);
 
 /// The elapsed time in game (stores simulation ticks)
 #[derive(Resource, Default)]
 pub struct GameTime {
     pub simtick: u64,
+}
+
+/// The number of simticks that are added at each update
+#[derive(Resource)]
+pub struct SimStepSize(pub u64);
+
+impl Default for SimStepSize {
+    fn default() -> Self {
+        Self(1)
+    }
 }
 
 impl GameTime {
@@ -54,7 +65,8 @@ impl GameTime {
 
 #[derive(Event, Clone, Copy)]
 pub enum EngineEvent {
-    EngineSpeed(Direction2),
+    ChangeStepSize(Direction2),
+    ChangeUpdateRate(Direction2),
     ToggleTime,
 }
 
@@ -62,24 +74,29 @@ fn handle_engine_events(
     mut reader: EventReader<EngineEvent>,
     mut toggle_time: ResMut<ToggleTime>,
     mut time: ResMut<Time<Virtual>>,
+    mut step_size: ResMut<SimStepSize>,
 ) {
     use EngineEvent::*;
     for event in reader.read() {
         match event {
-            EngineSpeed(d) => {
+            ChangeUpdateRate(d) => {
                 let speed = time.relative_speed_f64();
                 time.set_relative_speed_f64(match d {
                     Direction2::Up => speed * 2.,
                     Direction2::Down => speed / 2.,
                 })
             }
+            ChangeStepSize(d) => match d {
+                Direction2::Up => step_size.0 *= 2,
+                Direction2::Down => step_size.0 /= 2,
+            },
             ToggleTime => toggle_time.0 = !toggle_time.0,
         }
     }
 }
 
-pub fn update_time(mut game_time: ResMut<GameTime>) {
-    game_time.simtick += 1;
+pub fn update_time(mut game_time: ResMut<GameTime>, step: Res<SimStepSize>) {
+    game_time.simtick += step.0;
 }
 
 pub fn update_local(mut orbits: Query<&mut EllipticalOrbit>, time: Res<GameTime>) {

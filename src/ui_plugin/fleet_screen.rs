@@ -15,7 +15,7 @@ use crate::{
     client_plugin::ClientMode,
     core_plugin::{BodiesMapping, EventHandling, InputReading},
     engine_plugin::{Position, Velocity},
-    gravity::Mass,
+    influence::Mass,
     keyboard::Keymap,
     main_game::{GameStage, InGame, ShipEvent},
     spaceship::{ShipID, ShipInfo, ShipsMapping},
@@ -47,6 +47,7 @@ impl Plugin for FleetScreenPlugin {
             .add_systems(
                 PostUpdate,
                 update_fleet_context
+                    .run_if(state_exists::<GameStage>)
                     .run_if(
                         state_changed::<GameStage>
                             .or_else(resource_exists_and_changed::<ShipsMapping>),
@@ -88,6 +89,7 @@ pub enum FleetScreenEvent {
     Select(Direction2),
     TryNewShip(CreateShipContext),
     EditTrajectory,
+    EnterExplorer,
     Back,
 }
 
@@ -270,6 +272,9 @@ fn read_input(
                 e if keymap.back.matches(e) => {
                     internal_event.send(Back);
                 }
+                e if keymap.enter_explorer.matches(e) => {
+                    internal_event.send(EnterExplorer);
+                }
                 _ => {}
             },
             Some(ctx) => match event {
@@ -286,7 +291,6 @@ fn read_input(
                     code: KeyCode::Char(c),
                     ..
                 } => ctx.selected_field().push(*c),
-
                 _ => {}
             },
         }
@@ -295,7 +299,7 @@ fn read_input(
 
 fn handle_fleet_events(
     mut context: ResMut<FleetContext>,
-    mut screen: ResMut<NextState<AppScreen>>,
+    mut next_screen: ResMut<NextState<AppScreen>>,
     mut next_mode: ResMut<NextState<ClientMode>>,
     mut events: EventReader<FleetScreenEvent>,
     mut ship_events: EventWriter<ShipEvent>,
@@ -313,10 +317,11 @@ fn handle_fleet_events(
             }
             FleetScreenEvent::EditTrajectory => {
                 if let Some(ship) = context.selected_ship() {
-                    screen.set(AppScreen::Editor(ship.id));
+                    next_screen.set(AppScreen::Editor(ship.id));
                 }
             }
             FleetScreenEvent::Back => next_mode.set(ClientMode::None),
+            FleetScreenEvent::EnterExplorer => next_screen.set(AppScreen::Explorer),
         }
     }
     Ok(())

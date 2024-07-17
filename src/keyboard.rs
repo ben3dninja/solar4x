@@ -46,6 +46,7 @@ pub struct FleetScreenKeymap {
     pub cycle_options_back: Key,
     pub validate_new_ship: Key,
     pub delete_char: Key,
+    pub enter_explorer: Key,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -301,9 +302,6 @@ pub struct SearchViewKeymap {
 
 impl Default for TreeViewKeymap {
     fn default() -> Self {
-        let (w, a) = ("w", "a");
-        #[cfg(feature = "azerty")]
-        let (w, a) = ("z", "q");
         Self {
             select_next: Key::from_str_unchecked("down"),
             select_previous: Key::from_str_unchecked("up"),
@@ -311,9 +309,9 @@ impl Default for TreeViewKeymap {
             zoom_out: Key::from_str_unchecked("-"),
             toggle_info: Key::from_str_unchecked("i"),
             toggle_expand: Key::from_str_unchecked("space"),
-            map_offset_up: Key::from_str_unchecked(w),
+            map_offset_up: Key::from_str_unchecked("w"),
             map_offset_down: Key::from_str_unchecked("s"),
-            map_offset_left: Key::from_str_unchecked(a),
+            map_offset_left: Key::from_str_unchecked("a"),
             map_offset_right: Key::from_str_unchecked("d"),
             map_offset_reset: Key::from_str_unchecked("0"),
             enter_search: Key::from_str_unchecked("/"),
@@ -364,6 +362,7 @@ impl Default for FleetScreenKeymap {
             cycle_options_back: Key::from_str_unchecked("S tab"),
             validate_new_ship: Key::from_str_unchecked("enter"),
             delete_char: Key::from_str_unchecked("backspace"),
+            enter_explorer: Key::from_str_unchecked("e"),
         }
     }
 }

@@ -2,8 +2,9 @@ pub mod bodies;
 pub mod client_plugin;
 pub mod core_plugin;
 pub mod engine_plugin;
-pub mod gravity;
+pub mod influence;
 pub mod keyboard;
+pub mod leapfrog;
 pub mod main_game;
 pub mod network;
 pub mod server_plugin;
@@ -19,7 +20,7 @@ const TPS: f64 = 1.;
 /// Number of simulation updates (simticks) per real time second
 const STPS: f64 = 64.;
 
-/// Game time that is added at each client update (in days, later multiplied by game speed)
-const GAMETIME_PER_SIMTICK: f64 = 1e-3;
+/// Game time that is added at each client update (in days, multiplied by simstepsize)
+const GAMETIME_PER_SIMTICK: f64 = 1e-2;
 
 const SECONDS_PER_DAY: f64 = 86400.;

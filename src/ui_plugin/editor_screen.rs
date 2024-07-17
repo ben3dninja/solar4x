@@ -9,7 +9,7 @@ use ratatui::{
 use crate::{
     core_plugin::{BodiesMapping, BodyInfo, EventHandling, InputReading, PrimaryBody, SystemSize},
     engine_plugin::{Position, Velocity},
-    gravity::Influenced,
+    influence::Influenced,
     keyboard::Keymap,
     main_game::trajectory::ManeuverNode,
     spaceship::ShipsMapping,

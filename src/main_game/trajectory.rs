@@ -135,7 +135,7 @@ pub fn follow_trajectory(
     velocity_events.send_batch(Arc::try_unwrap(events).unwrap().into_inner().unwrap());
 }
 
-pub fn update_speed(
+pub fn handle_thrusts(
     mut velocity_events: EventReader<VelocityUpdate>,
     mut speeds: Query<&mut Velocity>,
     mapping: Res<ShipsMapping>,
