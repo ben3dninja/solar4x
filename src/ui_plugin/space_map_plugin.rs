@@ -184,8 +184,7 @@ mod tests {
         },
     };
 
-    #[test]
-    fn test_update_space_map() {
+    fn new_app() -> App {
         let mut app = App::new();
         app.add_plugins((
             ClientPlugin::testing().in_mode(ClientMode::Explorer),
@@ -193,6 +192,13 @@ mod tests {
         ));
         app.update();
         app.update();
+        app.update();
+        app
+    }
+
+    #[test]
+    fn test_update_space_map() {
+        let app = new_app();
         let ctx = app.world().resource::<ExplorerContext>();
         let map_widget = &ctx.space_map;
         let map = app.world().resource::<SpaceMap>();
@@ -203,13 +209,7 @@ mod tests {
 
     #[test]
     fn test_change_focus_body() {
-        let mut app = App::new();
-        app.add_plugins((
-            ClientPlugin::testing().in_mode(ClientMode::Explorer),
-            TuiPlugin::testing(),
-        ));
-        app.update();
-        app.update();
+        let mut app = new_app();
         let earth = id_from("terre");
         let mut ctx = app.world_mut().resource_mut::<ExplorerContext>();
         ctx.tree_state.select_body(earth);

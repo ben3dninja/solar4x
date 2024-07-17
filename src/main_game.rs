@@ -1,18 +1,20 @@
-use bevy::{math::DVec3, prelude::*};
-use trajectory::update_speed;
+use std::time::Duration;
+
+use bevy::prelude::*;
+use trajectory::handle_thrusts;
 
 use crate::{
     client_plugin::ClientMode,
     core_plugin::{BodiesMapping, BodyInfo, EventHandling, LoadingState, PrimaryBody},
     engine_plugin::{Position, ToggleTime, Velocity},
-    gravity::{
-        compute_influence, integrate_positions, Acceleration, GravityPlugin, HillRadius, Mass,
-    },
+    influence::{compute_influence, HillRadius, InfluencePlugin},
+    leapfrog::{get_acceleration, Acceleration, LeapfrogPlugin, LeapfrogSystems},
     spaceship::{ShipID, ShipInfo, ShipsMapping},
     utils::de::TempDirectory,
+    TPS,
 };
 
-use self::trajectory::{TrajectoriesDirectory, TrajectoryEvent, TRAJECTORIES_PATH};
+use self::trajectory::{TrajectoriesDirectory, TrajectoryEvent, VelocityUpdate, TRAJECTORIES_PATH};
 
 pub mod trajectory;
 
@@ -38,25 +40,30 @@ impl Plugin for GamePlugin {
         } else {
             TRAJECTORIES_PATH.into()
         };
-        app.add_plugins(GravityPlugin)
+        app.add_plugins(InfluencePlugin)
+            .add_plugins(LeapfrogPlugin)
             .add_computed_state::<InGame>()
             .add_sub_state::<GameStage>()
             .insert_resource(TrajectoriesDirectory(path))
+            .insert_resource(TickTimer(Timer::new(
+                Duration::from_secs_f64(1. / TPS),
+                TimerMode::Repeating,
+            )))
+            .add_event::<TickEvent>()
             .add_event::<ShipEvent>()
             .add_event::<TrajectoryEvent>()
+            .add_event::<VelocityUpdate>()
             .add_systems(OnEnter(GameStage::Action), enable_time)
             .add_systems(OnEnter(GameStage::Preparation), disable_time)
             .add_systems(
                 FixedUpdate,
-                update_speed
+                handle_thrusts
                     .run_if(in_state(GameStage::Action))
-                    .before(integrate_positions),
+                    .before(LeapfrogSystems),
             )
             .add_systems(
                 Update,
-                handle_ship_events
-                    .in_set(EventHandling)
-                    .run_if(in_state(InGame)),
+                (handle_ship_events.in_set(EventHandling), run_tick_timer).run_if(in_state(InGame)),
             );
     }
 }
@@ -69,7 +76,7 @@ impl ComputedStates for InGame {
     type SourceStates = (Option<ClientMode>, LoadingState);
 
     fn compute(sources: Self::SourceStates) -> Option<Self> {
-        if matches!(sources.1, LoadingState::NotLoaded) {
+        if !matches!(sources.1, LoadingState::Loaded) {
             None
         } else {
             match sources.0 {
@@ -101,6 +108,23 @@ impl std::fmt::Display for GameStage {
     }
 }
 
+#[derive(Resource)]
+pub struct TickTimer(pub Timer);
+
+#[derive(Event, Default)]
+pub struct TickEvent;
+
+fn run_tick_timer(
+    mut timer: ResMut<TickTimer>,
+    time: Res<Time>,
+    mut writer: EventWriter<TickEvent>,
+) {
+    timer.0.tick(time.delta());
+    if timer.0.just_finished() {
+        writer.send_default();
+    }
+}
+
 pub fn enable_time(mut toggle: ResMut<ToggleTime>) {
     toggle.0 = true;
 }
@@ -118,7 +142,7 @@ pub fn handle_ship_events(
     mut commands: Commands,
     mut reader: EventReader<ShipEvent>,
     mut ships: ResMut<ShipsMapping>,
-    bodies: Query<(&Position, &Mass, &HillRadius, &BodyInfo)>,
+    bodies: Query<(&Position, &HillRadius, &BodyInfo)>,
     mapping: Res<BodiesMapping>,
     main_body: Query<&BodyInfo, With<PrimaryBody>>,
 ) {
@@ -126,23 +150,25 @@ pub fn handle_ship_events(
         match event {
             ShipEvent::Create(info) => {
                 let pos = Position(info.spawn_pos);
-                ships.0.entry(info.id).or_insert(
+                ships.0.entry(info.id).or_insert({
+                    let influence =
+                        compute_influence(&pos, &bodies, mapping.as_ref(), main_body.single().0.id);
                     commands
                         .spawn((
                             info.clone(),
-                            compute_influence(
-                                &pos,
-                                &bodies,
-                                mapping.as_ref(),
-                                main_body.single().0.id,
-                            ),
+                            Acceleration::new(get_acceleration(
+                                info.spawn_pos,
+                                bodies
+                                    .iter_many(&influence.influencers)
+                                    .map(|(p, _, i)| (p.0, i.0.mass)),
+                            )),
+                            influence,
                             pos,
                             Velocity(info.spawn_speed),
-                            Acceleration(DVec3::ZERO),
                             TransformBundle::from_transform(Transform::from_xyz(0., 0., 1.)),
                         ))
-                        .id(),
-                );
+                        .id()
+                });
             }
             ShipEvent::Remove(id) => {
                 if let Some(e) = ships.0.remove(id) {
@@ -166,6 +192,7 @@ mod tests {
     fn new_app() -> App {
         let mut app = App::new();
         app.add_plugins(ClientPlugin::testing().in_mode(ClientMode::Singleplayer));
+        app.update();
         app.update();
         app
     }

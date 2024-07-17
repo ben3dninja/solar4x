@@ -3,7 +3,7 @@ use std::f64::consts::TAU;
 use bevy::math::{DVec2, DVec3};
 use rand::Rng;
 
-use crate::gravity::G;
+use crate::leapfrog::G;
 
 pub fn mod_180(x: f64) -> f64 {
     let x = x % 360.;

@@ -3,7 +3,7 @@ use bevy::{app::AppExit, prelude::*, state::app::StatesPlugin, time::TimePlugin,
 use crate::{
     bodies::{bodies_config::BodiesConfig, body_data::BodyData, body_id::BodyID},
     engine_plugin::{update_global, EllipticalOrbit, Position, ToggleTime, Velocity},
-    gravity::Mass,
+    influence::Mass,
     utils::de::read_main_bodies,
     STPS,
 };

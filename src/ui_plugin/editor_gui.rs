@@ -4,7 +4,8 @@ use crate::{
     bodies::body_id::BodyID,
     core_plugin::{BodiesMapping, BodyInfo},
     engine_plugin::{EllipticalOrbit, GameTime, Position},
-    gravity::{compute_acceleration, compute_deltas, Influenced},
+    influence::Influenced,
+    leapfrog::{get_acceleration, get_dv, get_dx, Acceleration},
     GAMETIME_PER_SIMTICK,
 };
 
@@ -15,13 +16,14 @@ use super::{
 
 /// Number of client updates between two predictions
 const PREDICTIONS_STEP: usize = 3;
-const PREDICTIONS_NUMBER: usize = 100;
+const PREDICTIONS_NUMBER: usize = 120;
 
 pub struct EditorGuiPlugin;
 
 impl Plugin for EditorGuiPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(OnEnter(InEditor), create_predictions.after(CreateScreen));
+        app.add_systems(OnEnter(InEditor), create_predictions.after(CreateScreen))
+            .add_systems(OnExit(InEditor), destroy_predictions);
     }
 }
 
@@ -35,23 +37,31 @@ pub struct Prediction {
 fn create_predictions(
     mut commands: Commands,
     ctx: Res<EditorContext>,
-    influence: Query<&Influenced>,
+    query: Query<(&Acceleration, &Influenced)>,
     bodies: Query<(&EllipticalOrbit, &BodyInfo)>,
     bodies_mapping: Res<BodiesMapping>,
     time: Res<GameTime>,
 ) {
+    let (
+        &Acceleration { current: acc, .. },
+        Influenced {
+            main_influencer,
+            influencers,
+        },
+    ) = query.get(ctx.ship).unwrap();
     let start = SpaceTimePoint {
         pos: ctx.pos,
         speed: ctx.speed,
         time: time.time(),
+        acc,
     };
     let predictions = start.compute_predictions(
         PREDICTIONS_NUMBER,
-        influence.get(ctx.ship).unwrap().influencers.iter().cloned(),
+        influencers.iter().cloned(),
+        *main_influencer,
         &bodies,
         &bodies_mapping.0,
     );
-    eprintln!("{start:?}, {predictions:?}");
     predictions.into_iter().enumerate().for_each(|(i, p)| {
         commands.spawn((
             Prediction {
@@ -68,36 +78,45 @@ fn create_predictions(
 struct SpaceTimePoint {
     pos: DVec3,
     speed: DVec3,
+    acc: DVec3,
     time: f64,
 }
 
 impl SpaceTimePoint {
+    /// Compute the future positions of this point with respect to a given referential and considering some influencer's gravitationnal pull on it
     fn compute_predictions(
         &self,
         number: usize,
         influencers: impl Iterator<Item = Entity> + Clone,
+        reference: Option<Entity>,
         bodies: &Query<(&EllipticalOrbit, &BodyInfo)>,
         mapping: &HashMap<BodyID, Entity>,
     ) -> Vec<DVec3> {
+        let dt = GAMETIME_PER_SIMTICK * PREDICTIONS_STEP as f64;
         let mut pos = self.pos;
         let mut speed = self.speed;
         let mut predictions = Vec::new();
+        let ref_index = reference.and_then(|r| influencers.clone().position(|e| e == r));
         let masses = influencers
             .clone()
             .map(|e| bodies.get(e).unwrap().1 .0.mass);
-        for i in 0..number {
+        let initial_positions = get_bodies_pos(influencers.clone(), bodies, mapping, self.time);
+        let initial_ref_pos = ref_index.map_or(DVec3::ZERO, |i| initial_positions[i]);
+        let mut acc = self.acc;
+        let mut previous_acc;
+        for i in 1..number + 1 {
+            pos += get_dx(speed, acc, dt);
             let positions = get_bodies_pos(
                 influencers.clone(),
                 bodies,
                 mapping,
                 self.time + (i * PREDICTIONS_STEP) as f64 * GAMETIME_PER_SIMTICK,
             );
-            let acc = compute_acceleration(pos, positions.into_iter().zip(masses.clone()));
-            let (dv, dr) =
-                compute_deltas(speed, acc, GAMETIME_PER_SIMTICK * PREDICTIONS_STEP as f64);
-            speed += dv;
-            pos += dr;
-            predictions.push(pos);
+            let ref_pos = ref_index.map_or(DVec3::ZERO, |i| positions[i]);
+            previous_acc = acc;
+            acc = get_acceleration(pos, positions.into_iter().zip(masses.clone()));
+            speed += get_dv(previous_acc, acc, dt);
+            predictions.push(pos - ref_pos + initial_ref_pos);
         }
         predictions
     }
@@ -137,6 +156,12 @@ fn get_bodies_pos(
         .collect()
 }
 
+fn destroy_predictions(mut commands: Commands, predictions: Query<Entity, With<Prediction>>) {
+    predictions
+        .iter()
+        .for_each(|p| commands.entity(p).despawn())
+}
+
 #[cfg(test)]
 mod tests {
     use bevy::{
@@ -149,7 +174,8 @@ mod tests {
         client_plugin::{ClientMode, ClientPlugin},
         core_plugin::{BodiesMapping, BodyInfo},
         engine_plugin::{EllipticalOrbit, Position, Velocity},
-        gravity::Mass,
+        influence::Mass,
+        leapfrog::get_acceleration,
         utils::algebra::circular_orbit_around_body,
         GAMETIME_PER_SIMTICK,
     };
@@ -165,26 +191,34 @@ mod tests {
         let mapping = &world.resource::<BodiesMapping>().0;
         let earth = *mapping.get(&id_from("terre")).unwrap();
         let sun = *mapping.get(&id_from("soleil")).unwrap();
-        let (mass, earth_pos, earth_speed) = world
+        let (&mass, &earth_pos, &earth_speed) = world
             .query::<(&Mass, &Position, &Velocity)>()
             .get(world, earth)
             .unwrap();
-        let (pos, speed) = circular_orbit_around_body(1e4, mass.0, earth_pos.0, earth_speed.0);
+        let (pos, speed) = circular_orbit_around_body(1e5, mass.0, earth_pos.0, earth_speed.0);
         let influencers = vec![sun, earth];
         #[allow(clippy::type_complexity)]
         let mut system_state: SystemState<(
             Res<BodiesMapping>,
             Query<(&EllipticalOrbit, &BodyInfo)>,
+            Query<(&Position, &Mass)>,
         )> = SystemState::new(world);
-        let (mapping, bodies) = system_state.get(world);
+        let (mapping, bodies, query) = system_state.get(world);
         let predictions = SpaceTimePoint {
             pos,
             speed,
             time: 0.,
+            acc: get_acceleration(pos, query.iter_many(&influencers).map(|(p, m)| (p.0, m.0))),
         }
-        .compute_predictions(3, influencers.into_iter(), &bodies, &mapping.0);
+        .compute_predictions(3, influencers.into_iter(), Some(earth), &bodies, &mapping.0);
         for (i, p) in predictions.into_iter().enumerate() {
-            assert!((p - (pos + (i + 1) as f64 * speed * GAMETIME_PER_SIMTICK)).length() <= 1e5);
+            // dbg!(p);
+            // dbg!(pos + (i + 1) as f64 * (speed - earth_speed.0) * GAMETIME_PER_SIMTICK);
+            assert!(
+                (p - (pos + (i + 1) as f64 * (speed - earth_speed.0) * GAMETIME_PER_SIMTICK))
+                    .length()
+                    <= 5e4
+            );
         }
     }
 }

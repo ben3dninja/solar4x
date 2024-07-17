@@ -9,16 +9,11 @@ use ratatui::{
 use crate::{
     bodies::body_id::BodyID,
     client_plugin::ClientMode,
-    core_plugin::{
-        BodiesMapping, BodyInfo, EventHandling, InputReading, LoadedSet, LoadingState, PrimaryBody,
-        SystemSize,
-    },
-    engine_plugin::{EngineEvent, Position, ToggleTime},
+    core_plugin::{BodiesMapping, BodyInfo, EventHandling, InputReading, PrimaryBody, SystemSize},
+    engine_plugin::{EngineEvent, Position},
     keyboard::Keymap,
-    utils::{
-        list::ClampedList,
-        ui::{Direction2, Direction4},
-    },
+    main_game::GameStage,
+    utils::list::ClampedList,
 };
 
 use super::{
@@ -26,7 +21,7 @@ use super::{
     search_plugin::{SearchEvent, SearchMatcher, SearchPlugin, SearchState, SearchWidget},
     space_map_plugin::{SpaceMap, SpaceMapEvent, SpaceMapWidget},
     tree_widget::{TreeEvent, TreeState, TreeWidget},
-    AppScreen, UiInit,
+    AppScreen, PreviousScreen, UiInit,
 };
 
 pub struct ExplorerScreenPlugin;
@@ -41,20 +36,17 @@ impl Plugin for ExplorerScreenPlugin {
                     read_input.in_set(InputReading),
                     handle_explorer_events.in_set(EventHandling),
                 )
-                    .in_set(LoadedSet)
-                    .run_if(in_state(AppScreen::Explorer)),
+                    .run_if(resource_exists::<ExplorerContext>),
             )
             .add_systems(
                 Update,
                 update_space_map
-                    .run_if(resource_exists::<SpaceMap>)
-                    .run_if(resource_equals(ToggleTime(true))),
+                    .run_if(resource_exists::<ExplorerContext>)
+                    .run_if(resource_exists::<SpaceMap>),
             )
             .add_systems(
-                OnEnter(LoadingState::Loaded),
-                create_screen
-                    .run_if(in_state(ClientMode::Explorer))
-                    .in_set(UiInit),
+                OnEnter(AppScreen::Explorer),
+                (create_screen, update_space_map).chain().in_set(UiInit),
             )
             .add_systems(OnExit(AppScreen::Explorer), clear_screen);
     }
@@ -62,7 +54,6 @@ impl Plugin for ExplorerScreenPlugin {
 
 fn create_screen(
     mut commands: Commands,
-    mut next_screen: ResMut<NextState<AppScreen>>,
     primary: Query<Entity, With<PrimaryBody>>,
     bodies: Query<&BodyInfo>,
     system_size: Res<SystemSize>,
@@ -70,8 +61,8 @@ fn create_screen(
     let primary = primary.single();
     commands.insert_resource(SpaceMap::new(system_size.0, Some(primary), Some(primary)));
     commands.insert_resource(ExplorerContext::new(primary, &bodies));
-    next_screen.set(AppScreen::Explorer);
 }
+
 fn clear_screen(mut commands: Commands) {
     commands.remove_resource::<ExplorerContext>();
     commands.remove_resource::<SpaceMap>();
@@ -139,7 +130,7 @@ fn read_input(
     keymap: Res<Keymap>,
     mut internal_event: EventWriter<ExplorerEvent>,
 ) {
-    use Direction2::*;
+    use crate::utils::ui::Direction2::*;
     use ExplorerEvent::*;
     use ViewEvent::*;
     for KeyEvent(event) in key_event.read() {
@@ -150,7 +141,7 @@ fn read_input(
         internal_event.send(match context.side_pane_mode {
             SidePaneMode::Tree => {
                 let codes = &keymap.tree;
-                use Direction4::*;
+                use crate::utils::ui::Direction4::*;
                 use EngineEvent::*;
                 use SpaceMapEvent::*;
                 use TreeEvent::*;
@@ -172,8 +163,8 @@ fn read_input(
                     }
                     e if codes.toggle_info.matches(e) => View(ToggleInfo),
                     e if codes.back.matches(e) => View(ViewEvent::Back),
-                    e if codes.speed_up.matches(e) => Engine(EngineSpeed(Up)),
-                    e if codes.slow_down.matches(e) => Engine(EngineSpeed(Down)),
+                    e if codes.speed_up.matches(e) => Engine(ChangeStepSize(Up)),
+                    e if codes.slow_down.matches(e) => Engine(ChangeStepSize(Down)),
                     e if codes.toggle_time.matches(e) => Engine(ToggleTime),
                     _ => return,
                 }
@@ -204,11 +195,20 @@ fn read_input(
 pub fn handle_explorer_events(
     mut ctx: ResMut<ExplorerContext>,
     mut space_map: ResMut<SpaceMap>,
+
+    client_mode: Res<State<ClientMode>>,
     mut next_mode: ResMut<NextState<ClientMode>>,
+
+    previous_screen: Res<PreviousScreen>,
+    mut next_screen: ResMut<NextState<AppScreen>>,
+
+    game_stage: Option<Res<State<GameStage>>>,
+    mut next_game_stage: Option<ResMut<NextState<GameStage>>>,
+
     mut events: EventReader<ExplorerEvent>,
     mapping: Res<BodiesMapping>,
     bodies: Query<&BodyInfo>,
-    mut engine_events: Option<ResMut<Events<EngineEvent>>>,
+    mut engine_events: ResMut<Events<EngineEvent>>,
     fuzzy_matcher: Res<SearchMatcher>,
 ) {
     for event in events.read() {
@@ -271,10 +271,30 @@ pub fn handle_explorer_events(
                 }
 
                 ViewEvent::ToggleInfo => ctx.info_toggle = !ctx.info_toggle,
-                ViewEvent::Back => next_mode.set(ClientMode::None),
+                ViewEvent::Back => match client_mode.get() {
+                    ClientMode::Explorer => next_mode.set(ClientMode::None),
+                    _ => {
+                        next_screen.set(previous_screen.0);
+                    }
+                },
             },
             ExplorerEvent::Engine(event) => {
-                engine_events.as_mut().map(|e| e.send(*event));
+                if let (Some(game_stage), Some(next_game_stage)) =
+                    (game_stage.as_ref(), next_game_stage.as_mut())
+                {
+                    match event {
+                        EngineEvent::ChangeStepSize(d) => {
+                            engine_events.send(EngineEvent::ChangeUpdateRate(*d));
+                        }
+                        EngineEvent::ToggleTime => next_game_stage.set(match game_stage.get() {
+                            GameStage::Preparation => GameStage::Action,
+                            GameStage::Action => GameStage::Preparation,
+                        }),
+                        _ => {}
+                    }
+                } else {
+                    engine_events.send(*event);
+                }
             }
         }
     }
