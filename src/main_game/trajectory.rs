@@ -151,21 +151,22 @@ pub fn dispatch_trajectories(
     mut commands: Commands,
     dir: Res<TrajectoriesDirectory>,
     mapping: Res<ShipsMapping>,
-) -> color_eyre::Result<()> {
-    for entry in read_dir(&dir.0)?.flatten() {
-        let path = entry.path();
-        if let Ok(traj) = read_trajectory(&path) {
-            if let Some(e) = path
-                .file_name()
-                .and_then(|s| s.to_str())
-                .and_then(|s| ShipID::from(s).ok())
-                .and_then(|id| mapping.0.get(&id))
-            {
-                commands.entity(*e).insert(CurrentTrajectory::new(traj));
+) {
+    if let Ok(dir) = read_dir(&dir.0) {
+        for entry in dir.flatten() {
+            let path = entry.path();
+            if let Ok(traj) = read_trajectory(&path) {
+                if let Some(e) = path
+                    .file_name()
+                    .and_then(|s| s.to_str())
+                    .and_then(|s| ShipID::from(s).ok())
+                    .and_then(|id| mapping.0.get(&id))
+                {
+                    commands.entity(*e).insert(CurrentTrajectory::new(traj));
+                }
             }
         }
     }
-    Ok(())
 }
 
 #[derive(Event, Debug, Clone)]

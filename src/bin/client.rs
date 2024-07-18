@@ -19,12 +19,11 @@ fn main() {
                 singleplayer_bodies_config,
                 ..Default::default()
             },
-            bevy::app::ScheduleRunnerPlugin::default(),
-            // GravityPlugin,
             TuiPlugin {
                 keymap: get_keymap(env::args()).unwrap(),
                 ..Default::default()
             },
+            // bevy::app::ScheduleRunnerPlugin::default(),
             rust_space_trading::ui_plugin::gui_plugin::GuiPlugin,
         ))
         .run();
