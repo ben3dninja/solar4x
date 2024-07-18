@@ -22,9 +22,7 @@ impl Plugin for SingleplayerPlugin {
         app.insert_resource(self.0.clone())
             .add_systems(
                 OnEnter(GameStage::Action),
-                dispatch_trajectories
-                    .pipe(exit_on_error_if_app)
-                    .run_if(in_state(ClientMode::Singleplayer)),
+                dispatch_trajectories.run_if(in_state(ClientMode::Singleplayer)),
             )
             .add_systems(
                 OnEnter(LoadingState::Loading),
