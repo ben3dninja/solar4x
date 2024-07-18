@@ -10,7 +10,7 @@ use tempfile::{tempdir, TempDir};
 
 use crate::{
     bodies::body_data::{BodyData, MainBodyData},
-    main_game::trajectory::Trajectory,
+    game::trajectory::Trajectory,
 };
 
 const MAIN_OBJECT_FILE_PATH: &str = "main_objects.json";

@@ -3,8 +3,8 @@ use std::env;
 use bevy::app::App;
 use rust_space_trading::{
     bodies::{bodies_config::BodiesConfig, body_data::BodyType},
-    client_plugin::ClientPlugin,
-    ui_plugin::TuiPlugin,
+    client::ClientPlugin,
+    ui::TuiPlugin,
     utils::args::get_keymap,
 };
 
@@ -24,7 +24,7 @@ fn main() {
                 ..Default::default()
             },
             // bevy::app::ScheduleRunnerPlugin::default(),
-            rust_space_trading::ui_plugin::gui_plugin::GuiPlugin,
+            rust_space_trading::ui::gui::GuiPlugin,
         ))
         .run();
 }
