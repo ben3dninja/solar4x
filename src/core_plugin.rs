@@ -2,7 +2,7 @@ use bevy::{app::AppExit, prelude::*, state::app::StatesPlugin, time::TimePlugin,
 
 use crate::{
     bodies::{bodies_config::BodiesConfig, body_data::BodyData, body_id::BodyID},
-    engine_plugin::{update_global, EllipticalOrbit, Position, ToggleTime, Velocity},
+    orbit::{update_global, EllipticalOrbit, Position, ToggleTime, Velocity},
     influence::Mass,
     utils::de::read_main_bodies,
     STPS,
@@ -61,51 +61,9 @@ pub enum LoadingState {
     Loaded,
 }
 
-#[derive(Component)]
-pub struct PrimaryBody;
-
-#[derive(Resource)]
-pub struct BodiesMapping(pub HashMap<BodyID, Entity>);
-
-#[derive(Component, Debug, Clone)]
-pub struct BodyInfo(pub BodyData);
 
 #[derive(Resource)]
 pub struct SystemSize(pub f64);
-
-pub fn build_system(
-    mut commands: Commands,
-    config: Res<BodiesConfig>,
-    mut loading_state: ResMut<NextState<LoadingState>>,
-) {
-    let bodies: Vec<_> = read_main_bodies()
-        .expect("Failed to read bodies")
-        .into_iter()
-        .filter(config.clone().into_filter())
-        .collect();
-    let primary_body = bodies
-        .iter()
-        .find(|data| data.host_body.is_none())
-        .expect("no primary body found")
-        .id;
-    let mut id_mapping = HashMap::new();
-    for data in bodies {
-        let id = data.id;
-        let mut entity = commands.spawn((
-            Position::default(),
-            EllipticalOrbit::from(&data),
-            Mass(data.mass),
-            BodyInfo(data),
-            Velocity::default(),
-        ));
-        if id == primary_body {
-            entity.insert(PrimaryBody);
-        }
-        id_mapping.insert(id, entity.id());
-    }
-    commands.insert_resource(BodiesMapping(id_mapping));
-    loading_state.set(LoadingState::Loaded);
-}
 
 pub fn insert_system_size(mut commands: Commands, body_positions: Query<&Position>) {
     let system_size = body_positions
@@ -147,43 +105,3 @@ fn handle_core_events(mut reader: EventReader<CoreEvent>, mut quit_writer: Event
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use bevy::{app::App, ecs::query::With};
-
-    use crate::{
-        bodies::body_id::id_from,
-        client_plugin::{ClientMode, ClientPlugin},
-        core_plugin::{BodiesMapping, PrimaryBody},
-        engine_plugin::EllipticalOrbit,
-    };
-
-    use super::BodyInfo;
-
-    #[test]
-    fn test_build_system() {
-        let mut app = App::new();
-        app.add_plugins(ClientPlugin::testing().in_mode(ClientMode::Explorer));
-        app.update();
-        app.update();
-
-        let world = app.world_mut();
-        assert_eq!(world.resource::<BodiesMapping>().0.len(), 9);
-        assert_eq!(world.query::<&BodyInfo>().iter(world).len(), 9);
-        let (orbit, BodyInfo(data)) = world
-            .query::<(&EllipticalOrbit, &BodyInfo)>()
-            .iter(world)
-            .find(|(_, BodyInfo(data))| data.id == id_from("terre"))
-            .unwrap();
-        assert_eq!(orbit.semimajor_axis, 149598023.);
-        assert_eq!(data.semimajor_axis, 149598023.);
-        assert_eq!(
-            world
-                .query_filtered::<&BodyInfo, With<PrimaryBody>>()
-                .single(world)
-                .0
-                .id,
-            id_from("soleil")
-        )
-    }
-}

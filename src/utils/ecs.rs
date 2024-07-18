@@ -8,7 +8,7 @@ use bevy::{
 use bevy_ratatui::error::exit_on_error;
 use color_eyre::eyre::Result;
 
-use crate::client_plugin::Testing;
+use crate::client::Testing;
 pub fn exit_on_error_if_app(
     input: In<Result<()>>,
     app_exit: EventWriter<AppExit>,
