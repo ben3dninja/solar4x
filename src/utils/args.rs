@@ -1,6 +1,6 @@
 use std::{env::Args, error::Error};
 
-use crate::keyboard::Keymap;
+use crate::input::prelude::Keymap;
 
 pub fn get_keymap(mut args: Args) -> Result<Keymap, Box<dyn Error>> {
     let mut keymap = Keymap::default();

@@ -7,16 +7,12 @@ use bevy_quinnet::client::{
 };
 
 use crate::{
-    game::{GamePlugin, LoadingState},
+    game::GamePlugin,
     network::{ClientChannel, ServerMessage},
     objects::prelude::BodiesConfig,
+    prelude::GameTime,
     utils::ecs::exit_on_error_if_app,
 };
-
-use self::{explorer_mode::ExplorerPlugin, singleplayer::SingleplayerPlugin};
-
-pub mod explorer_mode;
-pub mod singleplayer;
 
 pub mod prelude {
     pub use super::{ClientMode, ClientPlugin};
@@ -61,26 +57,23 @@ impl Plugin for ClientPlugin {
         if self.testing {
             app.insert_resource(Testing);
         }
-        app.add_plugins((CorePlugin, QuinnetClientPlugin::default(), OrbitPlugin))
-            .add_plugins(ExplorerPlugin(self.singleplayer_bodies_config.clone()))
-            .add_plugins(GamePlugin {
+        app.add_plugins((
+            GamePlugin {
                 testing: self.testing,
-            })
-            .add_plugins(SingleplayerPlugin(self.singleplayer_bodies_config.clone()))
-            .insert_resource(self.network_info.clone())
-            .insert_state(self.initial_mode)
-            .add_systems(
-                OnEnter(ClientMode::None),
-                unload.run_if(in_state(LoadingState::Loaded)),
-            )
-            .add_systems(
-                OnEnter(ClientMode::Multiplayer),
-                start_connection.pipe(exit_on_error_if_app),
-            )
-            .add_systems(
-                Update,
-                handle_server_messages.run_if(in_state(ClientMode::Multiplayer)),
-            );
+            },
+            QuinnetClientPlugin::default(),
+        ))
+        .insert_resource(self.network_info.clone())
+        .insert_resource(self.singleplayer_bodies_config.clone())
+        .insert_state(self.initial_mode)
+        .add_systems(
+            OnEnter(ClientMode::Multiplayer),
+            start_connection.pipe(exit_on_error_if_app),
+        )
+        .add_systems(
+            Update,
+            handle_server_messages.run_if(in_state(ClientMode::Multiplayer)),
+        );
     }
 }
 
@@ -91,10 +84,6 @@ pub enum ClientMode {
     Singleplayer,
     Multiplayer,
     Explorer,
-}
-
-fn unload(mut app_state: ResMut<NextState<LoadingState>>) {
-    app_state.set(LoadingState::Unloading);
 }
 
 #[derive(Clone, Resource)]
@@ -123,11 +112,18 @@ fn start_connection(
     Ok(())
 }
 
+#[derive(States, Debug, Default, Clone, PartialEq, Eq, Hash)]
+pub enum SyncStatus {
+    #[default]
+    NotSynced,
+    Synced,
+}
+
 fn handle_server_messages(
     mut client: ResMut<QuinnetClient>,
     mut commands: Commands,
     mut time: ResMut<GameTime>,
-    mut next_state: ResMut<NextState<LoadingState>>,
+    mut sync: ResMut<NextState<SyncStatus>>,
 ) {
     while let Some((_, message)) = client
         .connection_mut()
@@ -136,7 +132,7 @@ fn handle_server_messages(
         match message {
             ServerMessage::BodiesConfig(bodies) => {
                 commands.insert_resource(bodies);
-                next_state.set(LoadingState::Loaded);
+                sync.set(SyncStatus::Synced);
             }
             ServerMessage::UpdateTime(simtick) => time.simtick = simtick,
         }

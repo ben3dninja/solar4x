@@ -11,55 +11,38 @@ use ratatui::{
 };
 
 use crate::{
-    bodies::body_id::BodyID,
-    client::ClientMode,
-    core_plugin::{BodiesMapping, EventHandling, InputReading},
-    orbit::{Position, Velocity},
-    influence::Mass,
-    keyboard::Keymap,
-    game::{GameStage, InGame, ShipEvent},
-    spaceship::{ShipID, ShipInfo, ShipsMapping},
-    utils::{
-        algebra::circular_orbit_around_body,
-        ecs::exit_on_error_if_app,
-        list::{ClampedList, OptionsList},
-        ui::{centered_rect, Direction2},
-    },
-    MAX_ID_LENGTH,
+    objects::id::MAX_ID_LENGTH,
+    prelude::*,
+    ui::UiUpdate,
+    utils::{algebra::circular_orbit_around_body, list::OptionsList, ui::centered_rect},
 };
 
-use super::{AppScreen, ContextUpdate};
-pub struct FleetScreenPlugin;
-
-impl Plugin for FleetScreenPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_event::<FleetScreenEvent>()
-            .add_systems(
-                Update,
-                (
-                    read_input.in_set(InputReading),
-                    handle_fleet_events
-                        .pipe(exit_on_error_if_app)
-                        .in_set(EventHandling),
+pub fn plugin(app: &mut App) {
+    app.add_event::<FleetScreenEvent>()
+        .add_systems(
+            Update,
+            (
+                read_input.in_set(InputReading),
+                handle_fleet_events
+                    .pipe(exit_on_error_if_app)
+                    .in_set(EventHandling),
+            )
+                .run_if(in_state(AppScreen::Fleet)),
+        )
+        .add_systems(
+            PostUpdate,
+            update_fleet_context
+                .run_if(state_exists::<GameStage>)
+                .run_if(
+                    state_changed::<GameStage>.or_else(resource_exists_and_changed::<ShipsMapping>),
                 )
-                    .run_if(in_state(AppScreen::Fleet)),
-            )
-            .add_systems(
-                PostUpdate,
-                update_fleet_context
-                    .run_if(state_exists::<GameStage>)
-                    .run_if(
-                        state_changed::<GameStage>
-                            .or_else(resource_exists_and_changed::<ShipsMapping>),
-                    )
-                    .in_set(ContextUpdate),
-            )
-            .add_systems(OnEnter(InGame), create_screen)
-            .add_systems(
-                OnExit(InGame),
-                clear_screen.run_if(not(in_state(AppScreen::Fleet))),
-            );
-    }
+                .in_set(UiUpdate),
+        )
+        .add_systems(OnEnter(InGame), create_screen)
+        .add_systems(
+            OnExit(InGame),
+            clear_screen.run_if(not(in_state(AppScreen::Fleet))),
+        );
 }
 
 fn create_screen(
@@ -410,13 +393,7 @@ impl StatefulWidget for FleetScreen {
 mod tests {
     use bevy::{app::App, prelude::default, state::state::NextState};
 
-    use crate::{
-        bodies::body_id::id_from,
-        client::{ClientMode, ClientPlugin},
-        game::{GameStage, ShipEvent},
-        spaceship::{ShipInfo, ShipsMapping},
-        ui::TuiPlugin,
-    };
+    use crate::prelude::*;
 
     use super::{CreateShipContext, FleetContext, FleetScreenEvent};
 

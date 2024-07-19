@@ -4,10 +4,10 @@ use arrayvec::ArrayString;
 use bevy::{prelude::*, utils::HashMap};
 use bodies_config::BodiesConfig;
 use body_data::BodyData;
+use main_bodies::read_main_bodies;
 
-use crate::game::{ClearOnUnload, LoadingState};
+use crate::game::{ClearOnUnload, Loaded};
 use crate::physics::prelude::*;
-use crate::utils::de::read_main_bodies;
 
 use super::id::MAX_ID_LENGTH;
 use super::ObjectsUpdate;
@@ -44,21 +44,15 @@ pub struct BodyInfo(pub BodyData);
 #[derive(Resource)]
 pub struct BodiesMapping(pub HashMap<BodyID, Entity>);
 
-#[derive(Resource)]
-pub struct SystemSize(pub f64);
+pub struct BodiesPlugin;
 
-pub fn plugin(app: &mut App) {
-    app.add_systems(
-        OnEnter(LoadingState::Loading),
-        build_system.in_set(ObjectsUpdate),
-    );
+impl Plugin for BodiesPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_systems(OnEnter(Loaded), build_system.in_set(ObjectsUpdate));
+    }
 }
 
-pub fn build_system(
-    mut commands: Commands,
-    config: Res<BodiesConfig>,
-    mut loading_state: ResMut<NextState<LoadingState>>,
-) {
+pub fn build_system(mut commands: Commands, config: Res<BodiesConfig>) {
     let bodies: Vec<_> = read_main_bodies()
         .expect("Failed to read bodies")
         .into_iter()
@@ -86,16 +80,6 @@ pub fn build_system(
         id_mapping.insert(id, entity.id());
     }
     commands.insert_resource(BodiesMapping(id_mapping));
-    loading_state.set(LoadingState::Loaded);
-}
-
-pub fn insert_system_size(mut commands: Commands, body_positions: Query<&Position>) {
-    let system_size = body_positions
-        .iter()
-        .map(|pos| pos.0.length())
-        .max_by(|a, b| a.total_cmp(b))
-        .unwrap();
-    commands.insert_resource(SystemSize(system_size));
 }
 
 #[cfg(test)]

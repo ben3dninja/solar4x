@@ -9,11 +9,14 @@ use bevy_quinnet::{
     shared::ClientId,
 };
 
+pub mod prelude {
+    pub use super::{ServerNetworkInfo, ServerPlugin};
+}
+
 use crate::{
-    bodies::bodies_config::BodiesConfig,
-    core_plugin::{CorePlugin, LoadingState},
-    orbit::GameTime,
+    game::GamePlugin,
     network::{ServerChannel, ServerMessage},
+    prelude::{BodiesConfig, GameTime},
     utils::ecs::exit_on_error_if_app,
 };
 
@@ -24,7 +27,7 @@ pub struct ServerPlugin {
 
 impl Plugin for ServerPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins((CorePlugin, QuinnetServerPlugin::default()))
+        app.add_plugins((GamePlugin::default(), QuinnetServerPlugin::default()))
             .add_event::<ClientConnectionEvent>()
             .insert_resource(self.server_address.clone())
             .insert_resource(self.config.clone())
@@ -33,10 +36,7 @@ impl Plugin for ServerPlugin {
                 1.,
                 TimerMode::Repeating,
             )))
-            .add_systems(
-                Startup,
-                (start_endpoint.pipe(exit_on_error_if_app), start_game),
-            )
+            .add_systems(Startup, start_endpoint.pipe(exit_on_error_if_app))
             .add_systems(
                 Update,
                 (
@@ -46,10 +46,6 @@ impl Plugin for ServerPlugin {
                 ),
             );
     }
-}
-
-fn start_game(mut loading_state: ResMut<NextState<LoadingState>>) {
-    loading_state.set(LoadingState::Loading);
 }
 
 #[derive(Clone, Resource)]

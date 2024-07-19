@@ -1,9 +1,15 @@
 use bevy::prelude::*;
 use bevy_ratatui::{event::KeyEvent, RatatuiPlugins};
 
-pub mod gui_plugin;
+use crate::input::prelude::Keymap;
+
+pub mod gui;
 pub mod screen;
 pub mod widget;
+
+pub mod prelude {
+    pub use super::{screen::AppScreen, EventHandling, InputReading, TuiPlugin};
+}
 
 #[derive(Default)]
 pub struct TuiPlugin {
@@ -25,51 +31,31 @@ impl Plugin for TuiPlugin {
         if self.headless {
             app.add_event::<KeyEvent>();
         } else {
-            app.add_plugins(RatatuiPlugins::default()).add_systems(
-                PostUpdate,
-                render.pipe(exit_on_error_if_app).in_set(UiUpdate),
-            );
+            app.add_plugins(RatatuiPlugins::default());
         }
         app.insert_resource(self.keymap.clone())
-            .configure_sets(PostUpdate, (ContextUpdate, UiUpdate).chain())
-            .configure_sets(OnEnter(LoadingState::Loaded), UiInit)
-            .add_systems(
-                PreUpdate,
-                update_previous_screen.run_if(resource_changed::<NextState<AppScreen>>),
-            )
-            .add_systems(
-                Update,
-                clear_key_events
-                    .before(InputReading)
-                    .run_if(state_changed::<AppScreen>),
-            );
+            .configure_sets(PostUpdate, (UiUpdate, Render).chain())
+            .configure_sets(Update, (InputReading, EventHandling).chain());
     }
 }
 
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
-pub struct ContextUpdate;
+pub struct InputReading;
+
+#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
+pub struct EventHandling;
 
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
 pub struct UiUpdate;
 
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
-pub struct UiInit;
-
-#[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
-pub struct CreateScreen;
-
-fn clear_key_events(mut events: ResMut<Events<KeyEvent>>) {
-    events.clear();
-}
+pub struct Render;
 
 #[cfg(test)]
 mod tests {
     use bevy::{app::App, state::state::State};
 
-    use crate::{
-        client::{ClientMode, ClientPlugin},
-        ui::{AppScreen, TuiPlugin},
-    };
+    use crate::prelude::*;
 
     #[test]
     fn test_change_screen() {

@@ -14,15 +14,7 @@ use ratatui::{
     },
 };
 
-use crate::{
-    bodies::{body_data::BodyType, body_id::BodyID},
-    core_plugin::BodyInfo,
-    orbit::Position,
-    utils::{
-        algebra::project_onto_plane,
-        ui::{Direction2, Direction4},
-    },
-};
+use crate::{prelude::*, utils::algebra::project_onto_plane};
 
 pub const OFFSET_STEP: f64 = 1e8;
 pub const ZOOM_STEP: f64 = 1.5;
@@ -173,16 +165,8 @@ impl StatefulWidgetRef for SpaceMapWidget {
 mod tests {
     use bevy::app::App;
 
-    use crate::{
-        bodies::body_id::id_from,
-        client::{ClientMode, ClientPlugin},
-        core_plugin::BodyInfo,
-        ui::{
-            explorer_screen::{ExplorerContext, ExplorerEvent},
-            space_map_plugin::{SpaceMap, SpaceMapEvent},
-            TuiPlugin,
-        },
-    };
+    use super::*;
+    use crate::ui::screen::explorer::{ExplorerContext, ExplorerEvent};
 
     fn new_app() -> App {
         let mut app = App::new();

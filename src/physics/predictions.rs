@@ -9,16 +9,6 @@ use super::{
 
 /// Number of client updates between two predictions
 const PREDICTIONS_STEP: usize = 3;
-const PREDICTIONS_NUMBER: usize = 120;
-
-pub struct EditorGuiPlugin;
-
-impl Plugin for EditorGuiPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_systems(OnEnter(InEditor), create_predictions.after(CreateScreen))
-            .add_systems(OnExit(InEditor), destroy_predictions);
-    }
-}
 
 /// A component representing identifying a prediction of a ship at a selected time
 #[derive(Component)]
@@ -27,57 +17,17 @@ pub struct Prediction {
     pub index: usize,
 }
 
-fn create_predictions(
-    mut commands: Commands,
-    ctx: Res<EditorContext>,
-    query: Query<(&Acceleration, &Influenced)>,
-    bodies: Query<(&EllipticalOrbit, &BodyInfo)>,
-    bodies_mapping: Res<BodiesMapping>,
-    time: Res<GameTime>,
-) {
-    let (
-        &Acceleration { current: acc, .. },
-        Influenced {
-            main_influencer,
-            influencers,
-        },
-    ) = query.get(ctx.ship).unwrap();
-    let start = SpaceTimePoint {
-        pos: ctx.pos,
-        speed: ctx.speed,
-        time: time.time(),
-        acc,
-    };
-    let predictions = start.compute_predictions(
-        PREDICTIONS_NUMBER,
-        influencers.iter().cloned(),
-        *main_influencer,
-        &bodies,
-        &bodies_mapping.0,
-    );
-    predictions.into_iter().enumerate().for_each(|(i, p)| {
-        commands.spawn((
-            Prediction {
-                ship: ctx.ship,
-                index: i,
-            },
-            Position(p),
-            TransformBundle::from_transform(Transform::from_xyz(0., 0., -3.)),
-        ));
-    });
-}
-
 #[derive(Debug)]
-struct SpaceTimePoint {
-    pos: DVec3,
-    speed: DVec3,
-    acc: DVec3,
-    time: f64,
+pub struct PredictionStart {
+    pub pos: DVec3,
+    pub speed: DVec3,
+    pub acc: DVec3,
+    pub time: f64,
 }
 
-impl SpaceTimePoint {
+impl PredictionStart {
     /// Compute the future positions of this point with respect to a given referential and considering some influencer's gravitationnal pull on it
-    fn compute_predictions(
+    pub fn compute_predictions(
         &self,
         number: usize,
         influencers: impl Iterator<Item = Entity> + Clone,
@@ -149,12 +99,6 @@ fn get_bodies_pos(
         .collect()
 }
 
-fn destroy_predictions(mut commands: Commands, predictions: Query<Entity, With<Prediction>>) {
-    predictions
-        .iter()
-        .for_each(|p| commands.entity(p).despawn())
-}
-
 #[cfg(test)]
 mod tests {
     use bevy::{ecs::system::SystemState, prelude::*};
@@ -187,7 +131,7 @@ mod tests {
             Query<(&Position, &Mass)>,
         )> = SystemState::new(world);
         let (mapping, bodies, query) = system_state.get(world);
-        let predictions = SpaceTimePoint {
+        let predictions = PredictionStart {
             pos,
             speed,
             time: 0.,

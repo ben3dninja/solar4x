@@ -7,49 +7,58 @@ use ratatui::{
 };
 
 use crate::{
-    bodies::body_id::BodyID,
     client::ClientMode,
-    core_plugin::{BodiesMapping, BodyInfo, EventHandling, InputReading, PrimaryBody, SystemSize},
-    orbit::{EngineEvent, Position},
-    keyboard::Keymap,
     game::GameStage,
+    physics::{orbit::SystemSize, time::TimeEvent},
+    ui::{
+        widget::{
+            info::InfoWidget,
+            search::{SearchPlugin, SearchState, SearchWidget},
+            space_map::{SpaceMap, SpaceMapWidget},
+            tree::{TreeState, TreeWidget},
+        },
+        UiUpdate,
+    },
     utils::list::ClampedList,
 };
-
-use super::{
-    info_widget::InfoWidget,
-    search_plugin::{SearchEvent, SearchMatcher, SearchPlugin, SearchState, SearchWidget},
-    space_map_plugin::{SpaceMap, SpaceMapEvent, SpaceMapWidget},
-    tree_widget::{TreeEvent, TreeState, TreeWidget},
-    AppScreen, PreviousScreen, UiInit,
+use crate::{input::prelude::Keymap, objects::prelude::*};
+use crate::{
+    physics::Position,
+    ui::{
+        prelude::*,
+        widget::{
+            search::{SearchEvent, SearchMatcher},
+            space_map::SpaceMapEvent,
+            tree::TreeEvent,
+        },
+    },
 };
 
-pub struct ExplorerScreenPlugin;
+use super::PreviousScreen;
 
-impl Plugin for ExplorerScreenPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_event::<ExplorerEvent>()
-            .add_plugins(SearchPlugin)
-            .add_systems(
-                Update,
-                (
-                    read_input.in_set(InputReading),
-                    handle_explorer_events.in_set(EventHandling),
-                )
-                    .run_if(resource_exists::<ExplorerContext>),
+pub fn plugin(app: &mut App) {
+    app.add_event::<ExplorerEvent>()
+        .add_plugins(SearchPlugin)
+        .add_systems(
+            Update,
+            (
+                read_input.in_set(InputReading),
+                handle_explorer_events.in_set(EventHandling),
             )
-            .add_systems(
-                Update,
-                update_space_map
-                    .run_if(resource_exists::<ExplorerContext>)
-                    .run_if(resource_exists::<SpaceMap>),
-            )
-            .add_systems(
-                OnEnter(AppScreen::Explorer),
-                (create_screen, update_space_map).chain().in_set(UiInit),
-            )
-            .add_systems(OnExit(AppScreen::Explorer), clear_screen);
-    }
+                .run_if(resource_exists::<ExplorerContext>),
+        )
+        .add_systems(
+            Update,
+            update_space_map
+                .run_if(resource_exists::<ExplorerContext>)
+                .run_if(resource_exists::<SpaceMap>)
+                .in_set(UiUpdate),
+        )
+        .add_systems(
+            OnEnter(AppScreen::Explorer),
+            (create_screen, update_space_map).chain(),
+        )
+        .add_systems(OnExit(AppScreen::Explorer), clear_screen);
 }
 
 fn create_screen(
@@ -77,12 +86,12 @@ pub enum SidePaneMode {
 
 #[derive(Resource)]
 pub struct ExplorerContext {
-    pub(super) side_pane_mode: SidePaneMode,
-    pub(super) info_toggle: bool,
-    pub(super) tree_state: TreeState,
-    pub(super) search_state: SearchState,
-    pub(super) info: InfoWidget,
-    pub(super) space_map: SpaceMapWidget,
+    pub side_pane_mode: SidePaneMode,
+    pub info_toggle: bool,
+    pub tree_state: TreeState,
+    pub search_state: SearchState,
+    pub info: InfoWidget,
+    pub space_map: SpaceMapWidget,
 }
 
 impl ExplorerContext {
@@ -109,12 +118,12 @@ impl ExplorerContext {
 }
 
 #[derive(Event)]
-pub enum ExplorerEvent {
+pub(crate) enum ExplorerEvent {
     Tree(TreeEvent),
     Search(SearchEvent),
     SpaceMap(SpaceMapEvent),
     View(ViewEvent),
-    Engine(EngineEvent),
+    Time(TimeEvent),
 }
 
 #[derive(Debug, Event)]
@@ -130,7 +139,7 @@ fn read_input(
     keymap: Res<Keymap>,
     mut internal_event: EventWriter<ExplorerEvent>,
 ) {
-    use crate::utils::ui::Direction2::*;
+    use crate::prelude::Direction2::*;
     use ExplorerEvent::*;
     use ViewEvent::*;
     for KeyEvent(event) in key_event.read() {
@@ -141,9 +150,9 @@ fn read_input(
         internal_event.send(match context.side_pane_mode {
             SidePaneMode::Tree => {
                 let codes = &keymap.tree;
-                use crate::utils::ui::Direction4::*;
-                use EngineEvent::*;
+                use crate::prelude::Direction4::*;
                 use SpaceMapEvent::*;
+                use TimeEvent::*;
                 use TreeEvent::*;
                 match event {
                     e if codes.select_next.matches(e) => Tree(Select(Down)),
@@ -163,9 +172,9 @@ fn read_input(
                     }
                     e if codes.toggle_info.matches(e) => View(ToggleInfo),
                     e if codes.back.matches(e) => View(ViewEvent::Back),
-                    e if codes.speed_up.matches(e) => Engine(ChangeStepSize(Up)),
-                    e if codes.slow_down.matches(e) => Engine(ChangeStepSize(Down)),
-                    e if codes.toggle_time.matches(e) => Engine(ToggleTime),
+                    e if codes.speed_up.matches(e) => Time(ChangeStepSize(Up)),
+                    e if codes.slow_down.matches(e) => Time(ChangeStepSize(Down)),
+                    e if codes.toggle_time.matches(e) => Time(ToggleTime),
                     _ => return,
                 }
             }
@@ -192,7 +201,7 @@ fn read_input(
 }
 
 #[allow(clippy::too_many_arguments)]
-pub fn handle_explorer_events(
+fn handle_explorer_events(
     mut ctx: ResMut<ExplorerContext>,
     mut space_map: ResMut<SpaceMap>,
 
@@ -208,7 +217,7 @@ pub fn handle_explorer_events(
     mut events: EventReader<ExplorerEvent>,
     mapping: Res<BodiesMapping>,
     bodies: Query<&BodyInfo>,
-    mut engine_events: ResMut<Events<EngineEvent>>,
+    mut time_events: ResMut<Events<TimeEvent>>,
     fuzzy_matcher: Res<SearchMatcher>,
 ) {
     for event in events.read() {
@@ -278,22 +287,22 @@ pub fn handle_explorer_events(
                     }
                 },
             },
-            ExplorerEvent::Engine(event) => {
+            ExplorerEvent::Time(event) => {
                 if let (Some(game_stage), Some(next_game_stage)) =
                     (game_stage.as_ref(), next_game_stage.as_mut())
                 {
                     match event {
-                        EngineEvent::ChangeStepSize(d) => {
-                            engine_events.send(EngineEvent::ChangeUpdateRate(*d));
+                        TimeEvent::ChangeStepSize(d) => {
+                            time_events.send(TimeEvent::ChangeUpdateRate(*d));
                         }
-                        EngineEvent::ToggleTime => next_game_stage.set(match game_stage.get() {
+                        TimeEvent::ToggleTime => next_game_stage.set(match game_stage.get() {
                             GameStage::Preparation => GameStage::Action,
                             GameStage::Action => GameStage::Preparation,
                         }),
                         _ => {}
                     }
                 } else {
-                    engine_events.send(*event);
+                    time_events.send(*event);
                 }
             }
         }
