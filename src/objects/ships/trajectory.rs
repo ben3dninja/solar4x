@@ -9,17 +9,48 @@ use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 
 use crate::{
-    bodies::body_id::BodyID,
-    core_plugin::BodiesMapping,
-    orbit::{GameTime, Position, Velocity},
-    spaceship::{ShipID, ShipInfo, ShipsMapping},
+    objects::prelude::{BodiesMapping, BodyID},
+    physics::prelude::*,
     utils::{
         algebra::convert_orbital_to_global,
-        de::{read_trajectory, write_trajectory},
+        de::{read_trajectory, write_trajectory, TempDirectory},
     },
 };
 
+use super::{ShipID, ShipInfo, ShipsMapping};
+
 pub const TRAJECTORIES_PATH: &str = "trajectories";
+
+pub struct TrajectoryPlugin {
+    pub testing: bool,
+}
+impl Plugin for TrajectoryPlugin {
+    fn build(&self, app: &mut App) {
+        let path = if self.testing {
+            let dir = TempDirectory::default();
+            let path = dir.0.path().to_owned();
+            app.insert_resource(dir);
+            path
+        } else {
+            TRAJECTORIES_PATH.into()
+        };
+        app.insert_resource(TrajectoriesDirectory(path))
+            .add_event::<TrajectoryEvent>()
+            .add_event::<VelocityUpdate>()
+            .add_systems(FixedUpdate, handle_thrusts.in_set(TrajectoryUpdate));
+    }
+}
+
+#[derive(SystemSet, Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub struct TrajectoryUpdate;
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct ManeuverNode {
+    pub name: String,
+    pub time: f64,
+    pub thrust: DVec3,
+    pub origin: BodyID,
+}
 
 /// A succession of maneuver nodes sorted by order of time, with a single node per time
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
@@ -91,12 +122,18 @@ impl CurrentTrajectory {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub struct ManeuverNode {
-    pub name: String,
-    pub time: f64,
-    pub thrust: DVec3,
-    pub origin: BodyID,
+#[derive(Event, Debug, Clone)]
+pub enum TrajectoryEvent {
+    Create {
+        ship: ShipID,
+        trajectory: Trajectory,
+    },
+    Delete(ShipID),
+    AddNode {
+        ship: ShipID,
+        node: ManeuverNode,
+    },
+    PopNode(ShipID),
 }
 
 #[derive(Event, Debug)]
@@ -169,20 +206,6 @@ pub fn dispatch_trajectories(
     }
 }
 
-#[derive(Event, Debug, Clone)]
-pub enum TrajectoryEvent {
-    Create {
-        ship: ShipID,
-        trajectory: Trajectory,
-    },
-    Delete(ShipID),
-    AddNode {
-        ship: ShipID,
-        node: ManeuverNode,
-    },
-    PopNode(ShipID),
-}
-
 pub fn handle_trajectory_event(
     mut reader: EventReader<TrajectoryEvent>,
     dir: Res<TrajectoriesDirectory>,
@@ -229,18 +252,9 @@ mod tests {
 
     use bevy::{app::App, math::DVec3, state::state::NextState};
 
-    use crate::{
-        bodies::body_id::id_from,
-        client::{ClientMode, ClientPlugin},
-        game::{
-            trajectory::{CurrentTrajectory, TrajectoriesDirectory},
-            GameStage, ShipEvent,
-        },
-        spaceship::{ShipID, ShipInfo},
-        utils::de::read_trajectory,
-    };
+    use crate::{objects::ships::ShipEvent, prelude::*};
 
-    use super::{ManeuverNode, Trajectory, TrajectoryEvent};
+    use super::*;
 
     fn new_app() -> App {
         let mut app = App::new();

@@ -7,11 +7,9 @@ use bevy_quinnet::client::{
 };
 
 use crate::{
-    bodies::bodies_config::BodiesConfig,
-    core_plugin::{CorePlugin, LoadingState},
-    orbit::{OrbitPlugin, GameTime},
-    game::GamePlugin,
+    game::{GamePlugin, LoadingState},
     network::{ClientChannel, ServerMessage},
+    objects::prelude::BodiesConfig,
     utils::ecs::exit_on_error_if_app,
 };
 
@@ -19,6 +17,10 @@ use self::{explorer_mode::ExplorerPlugin, singleplayer::SingleplayerPlugin};
 
 pub mod explorer_mode;
 pub mod singleplayer;
+
+pub mod prelude {
+    pub use super::{ClientMode, ClientPlugin};
+}
 
 #[derive(Default)]
 pub struct ClientPlugin {

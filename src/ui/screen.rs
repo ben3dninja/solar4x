@@ -1,9 +1,18 @@
 use bevy::prelude::*;
+use bevy_ratatui::terminal::RatatuiContext;
+use editor::{EditorContext, EditorScreen};
+use explorer::{ExplorerContext, ExplorerScreen};
+use fleet::{FleetContext, FleetScreen};
+use start::{StartMenu, StartMenuContext};
 
-mod start;
-mod explorer;
+use crate::objects::ships::ShipID;
+
+use super::widget::space_map::SpaceMap;
+
 mod editor;
+mod explorer;
 mod fleet;
+mod start;
 
 /// A resource storing the current screen
 /// Set this to change screen, the appropriate context is automatically generated when the app is ready
@@ -19,6 +28,17 @@ pub enum AppScreen {
 
 #[derive(Resource, Default, Debug)]
 pub struct PreviousScreen(pub AppScreen);
+
+pub fn plugin(app: &mut App) {
+    app.add_plugins((
+        StartMenuPlugin,
+        ExplorerScreenPlugin,
+        FleetScreenPlugin,
+        EditorPlugin,
+    ))
+    .init_state::<AppScreen>()
+    .init_resource::<PreviousScreen>();
+}
 
 fn update_previous_screen(
     next: Res<NextState<AppScreen>>,

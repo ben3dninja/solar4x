@@ -19,14 +19,14 @@ use bevy::{
 use crate::{
     bodies::body_data::BodyType,
     core_plugin::{BodyInfo, LoadingState, SystemSize},
-    orbit::Position,
     influence::HillRadius,
+    orbit::Position,
     spaceship::ShipInfo,
     utils::algebra::project_onto_plane,
 };
 
 use super::{
-    editor_gui::Prediction,
+    predictions::Prediction,
     space_map_plugin::{SpaceMap, ZOOM_STEP},
 };
 
@@ -57,7 +57,9 @@ impl Plugin for GuiPlugin {
         .add_systems(Startup, gui_setup)
         .add_systems(
             OnEnter(LoadingState::Loaded),
-            (insert_display_components, update_transform).chain(),
+            (insert_display_components, update_transform)
+                .chain()
+                .in_set(GUIUpdate),
         )
         .add_systems(
             FixedPreUpdate,
@@ -72,6 +74,9 @@ impl Plugin for GuiPlugin {
         );
     }
 }
+
+#[derive(SystemSet, Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub struct GUIUpdate;
 
 fn gui_setup(mut commands: Commands, mut materials: ResMut<Assets<ColorMaterial>>) {
     let mut cam = Camera2dBundle::default();

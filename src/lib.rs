@@ -1,10 +1,11 @@
 pub mod client;
 pub mod core_plugin;
-pub mod physics;
 pub mod game;
+pub mod input;
 pub mod network;
+pub mod objects;
+pub mod physics;
+pub mod prelude;
 pub mod server;
 pub mod ui;
 pub mod utils;
-pub mod objects;
-pub mod input;

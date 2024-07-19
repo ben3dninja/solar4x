@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use super::{
     body_data::{BodyData, BodyType},
-    body_id::BodyID,
+    BodyID,
 };
 
 #[derive(Resource, Clone, Serialize, Deserialize)]

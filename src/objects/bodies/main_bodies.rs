@@ -1,3 +1,15 @@
+use serde::{de::Visitor, Deserialize, Deserializer};
+
+use crate::{
+    objects::id::{id_from, MAX_ID_LENGTH},
+    utils::de::deserialize_options,
+};
+
+use super::{
+    body_data::{BodyData, BodyType},
+    BodyID,
+};
+
 const ID_PREFIX: &str = "https://api.le-systeme-solaire.net/rest/bodies/";
 
 #[derive(PartialEq, Debug, Clone)]
@@ -224,7 +236,6 @@ mod tests {
             }
         );
     }
-
 
     #[test]
     fn test_id_single() {

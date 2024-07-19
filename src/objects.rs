@@ -1,24 +1,19 @@
-use arrayvec::ArrayString;
-use bevy::prelude::Component;
+use bevy::prelude::SystemSet;
 
-mod body;
-mod ship;
-mod id;
+pub mod bodies;
+pub mod id;
+pub mod ships;
 
-const MAX_OBJECT_NAME_LENGTH: usize = 32;
+pub(crate) mod prelude {
 
-pub enum ObjectType {
-    /// A "Body" is a celestial body whose position is entirely determined by the
-    /// current simtick, following orbital mechanics.
-    Body,
-    /// A "Ship" is an object whose movement is governed by the gravitationnal
-    /// attraction of the celestial bodies, along with custom trajectories
-    Ship
+    pub(crate) use super::bodies::{
+        bodies_config::BodiesConfig,
+        body_data::{BodyData, BodyType},
+        BodiesMapping, BodyID, BodyInfo, PrimaryBody,
+    };
+    pub(crate) use super::id::id_from;
+    pub(crate) use super::ships::{ShipEvent, ShipID, ShipInfo, ShipsMapping};
 }
 
-/// Each space object is given an IDentifier, which is unique in a specific game.
-#[derive(Component)]
-pub struct ID {
-    object_type: ObjectType,
-    name: ArrayString<MAX_OBJECT_NAME_LENGTH>,
-}
+#[derive(SystemSet, Debug, Clone, Copy, Hash, PartialEq, Eq)]
+pub struct ObjectsUpdate;

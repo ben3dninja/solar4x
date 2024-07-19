@@ -46,14 +46,3 @@ impl Plugin for SingleplayerPlugin {
 fn start_singleplayer(mut loading_state: ResMut<NextState<LoadingState>>) {
     loading_state.set(LoadingState::Loading);
 }
-
-fn create_ships(mut commands: Commands) {
-    commands.insert_resource(ShipsMapping::default());
-}
-
-fn delete_ships(mut commands: Commands, ships: Res<ShipsMapping>) {
-    for e in ships.0.values() {
-        commands.entity(*e).despawn();
-    }
-    commands.remove_resource::<ShipsMapping>();
-}

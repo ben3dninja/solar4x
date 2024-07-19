@@ -1,29 +1,22 @@
 use bevy::{math::DVec3, prelude::*};
 
-use crate::{
-    bodies::body_id::BodyID,
-    core_plugin::{build_system, BodiesMapping, BodyInfo, LoadingState, PrimaryBody},
-    game::GameStage,
-};
+use crate::game::LoadingState;
+use crate::objects::prelude::*;
+
+use crate::objects::bodies::BodyID;
 
 use super::Position;
 
-    pub fn plugin(app: &mut App) {
-        app.add_systems(
-            OnEnter(LoadingState::Loading),
-            setup_hill_spheres.after(build_system),
-        )
-        .add_systems(
-            FixedUpdate,
-            update_influence
-                .before(LeapfrogUpdate)
-                .run_if(in_state(GameStage::Action)),
-        );
-    }
+pub fn plugin(app: &mut App) {
+    app.add_systems(
+        OnEnter(LoadingState::Loaded),
+        setup_hill_spheres.in_set(InfluenceUpdate),
+    )
+    .add_systems(FixedUpdate, update_influence.in_set(InfluenceUpdate));
+}
 
-
-#[derive(Component, Clone, Copy)]
-pub struct Mass(pub f64);
+#[derive(SystemSet, Debug, PartialEq, Eq, Hash, Clone)]
+pub struct InfluenceUpdate;
 
 #[derive(Component, Clone, Copy)]
 pub struct HillRadius(pub f64);
@@ -36,47 +29,45 @@ pub struct Influenced {
 }
 
 impl Influenced {
-pub fn from_position_and_bodies(
-    Position(object_pos): &Position,
-    bodies: &Query<(&Position, &HillRadius, &BodyInfo)>,
-    mapping: &BodiesMapping,
-    main_body: BodyID,
-) -> Self {
-    // if an object is not in a bodie's sphere of influence, it is not in its children's either
-    fn influencers_rec(
-        body: BodyID,
-        query: &Query<(&Position, &HillRadius, &BodyInfo)>,
+    pub fn new(
+        Position(object_pos): &Position,
+        bodies: &Query<(&Position, &HillRadius, &BodyInfo)>,
         mapping: &BodiesMapping,
-        object_pos: &DVec3,
-        influences: &mut Vec<(Entity, f64)>,
-    ) {
-        if let Some(e) = mapping.0.get(&body) {
-            let (Position(body_pos), HillRadius(hill_radius), BodyInfo(data)) =
-                query.get(*e).unwrap();
-            let r = *object_pos - *body_pos;
-            let dist = r.length();
-            if dist < *hill_radius {
-                influences.push((*e, *hill_radius));
-                data.orbiting_bodies.iter().for_each(|child| {
-                    influencers_rec(*child, query, mapping, object_pos, influences);
-                })
+        main_body: BodyID,
+    ) -> Self {
+        // if an object is not in a bodie's sphere of influence, it is not in its children's either
+        fn influencers_rec(
+            body: BodyID,
+            query: &Query<(&Position, &HillRadius, &BodyInfo)>,
+            mapping: &BodiesMapping,
+            object_pos: &DVec3,
+            influences: &mut Vec<(Entity, f64)>,
+        ) {
+            if let Some(e) = mapping.0.get(&body) {
+                let (Position(body_pos), HillRadius(hill_radius), BodyInfo(data)) =
+                    query.get(*e).unwrap();
+                let r = *object_pos - *body_pos;
+                let dist = r.length();
+                if dist < *hill_radius {
+                    influences.push((*e, *hill_radius));
+                    data.orbiting_bodies.iter().for_each(|child| {
+                        influencers_rec(*child, query, mapping, object_pos, influences);
+                    })
+                }
             }
         }
-    }
 
-    let mut influences = Vec::new();
-    influencers_rec(main_body, bodies, mapping, object_pos, &mut influences);
-    Influenced {
-        main_influencer: influences
-            .iter()
-            .min_by(|a, b| a.1.total_cmp(&b.1))
-            .map(|a| a.0),
-        influencers: influences.into_iter().map(|a| a.0).collect(),
+        let mut influences = Vec::new();
+        influencers_rec(main_body, bodies, mapping, object_pos, &mut influences);
+        Influenced {
+            main_influencer: influences
+                .iter()
+                .min_by(|a, b| a.1.total_cmp(&b.1))
+                .map(|a| a.0),
+            influencers: influences.into_iter().map(|a| a.0).collect(),
+        }
     }
 }
-}
-
-
 
 fn setup_hill_spheres(
     mut commands: Commands,
@@ -115,7 +106,7 @@ fn update_influence(
     influenced
         .par_iter_mut()
         .for_each(|(object_pos, mut influence)| {
-            *influence = compute_influence(object_pos, &bodies, mapping.as_ref(), main_body);
+            *influence = Influenced::new(object_pos, &bodies, mapping.as_ref(), main_body);
         });
 }
 
@@ -123,17 +114,7 @@ fn update_influence(
 mod tests {
     use bevy::app::App;
 
-    use crate::{
-        bodies::{bodies_config::BodiesConfig, body_data::BodyType, body_id::id_from},
-        client::{ClientMode, ClientPlugin},
-        core_plugin::BodiesMapping,
-        game::ShipEvent,
-        spaceship::ShipInfo,
-        utils::algebra::circular_orbit_around_body,
-    };
-
-    use super::{Influenced, Mass};
-
+    use crate::{prelude::*, utils::algebra::circular_orbit_around_body};
     #[test]
     fn test_influence() {
         let mut app = App::new();
