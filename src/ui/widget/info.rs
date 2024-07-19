@@ -3,7 +3,7 @@ use ratatui::{
     widgets::{Block, Borders, Paragraph, WidgetRef},
 };
 
-use crate::bodies::body_data::BodyData;
+use crate::objects::prelude::BodyData;
 
 pub struct InfoWidget {
     pub body_info: BodyData,

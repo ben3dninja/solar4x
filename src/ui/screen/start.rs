@@ -3,12 +3,7 @@ use bevy_ratatui::event::KeyEvent;
 use crossterm::event::KeyEventKind;
 use ratatui::widgets::{List, ListState, StatefulWidget};
 
-use crate::{
-    client::ClientMode,
-    core_plugin::{CoreEvent, EventHandling, InputReading},
-    keyboard::Keymap,
-    utils::{list::ClampedList, ui::Direction2},
-};
+use crate::prelude::*;
 
 use super::AppScreen;
 
@@ -33,21 +28,18 @@ pub struct StartMenuContext {
 }
 
 pub struct StartMenu;
-
-impl Plugin for StartMenuPlugin {
-    fn build(&self, app: &mut App) {
-        app.insert_resource(StartMenuContext::default())
-            .add_event::<StartMenuEvent>()
-            .add_systems(
-                Update,
-                (
-                    read_input.in_set(InputReading),
-                    handle_events.in_set(EventHandling),
-                )
-                    .run_if(in_state(AppScreen::StartMenu)),
+pub fn plugin(app: &mut App) {
+    app.insert_resource(StartMenuContext::default())
+        .add_event::<StartMenuEvent>()
+        .add_systems(
+            Update,
+            (
+                read_input.in_set(InputReading),
+                handle_events.in_set(EventHandling),
             )
-            .add_systems(OnEnter(ClientMode::None), create_screen);
-    }
+                .run_if(in_state(AppScreen::StartMenu)),
+        )
+        .add_systems(OnEnter(ClientMode::None), create_screen);
 }
 
 fn create_screen(mut next_screen: ResMut<NextState<AppScreen>>) {
@@ -108,12 +100,12 @@ pub fn handle_events(
     mut next_mode: ResMut<NextState<ClientMode>>,
     mut context: ResMut<StartMenuContext>,
     mut events: EventReader<StartMenuEvent>,
-    mut core_events: EventWriter<CoreEvent>,
+    mut quit: EventWriter<AppExit>,
 ) {
     for event in events.read() {
         match event {
             StartMenuEvent::Quit => {
-                core_events.send(CoreEvent::Quit);
+                quit.send_default();
             }
             StartMenuEvent::Select(d) => context.select_adjacent(*d),
             StartMenuEvent::Validate => next_mode.set(context.get_next_mode()),

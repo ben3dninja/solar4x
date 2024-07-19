@@ -1,6 +1,7 @@
 use std::{
-    fs::{read_dir, remove_file},
-    path::PathBuf,
+    fs::{read_dir, remove_file, File},
+    io::{Read, Write},
+    path::Path,
     sync::Arc,
 };
 
@@ -9,36 +10,26 @@ use serde::{Deserialize, Serialize};
 use std::sync::Mutex;
 
 use crate::{
+    game::{Authoritative, GameFiles},
     objects::prelude::{BodiesMapping, BodyID},
     physics::prelude::*,
-    utils::{
-        algebra::convert_orbital_to_global,
-        de::{read_trajectory, write_trajectory, TempDirectory},
-    },
+    prelude::{exit_on_error_if_app, GameStage},
+    utils::algebra::convert_orbital_to_global,
 };
 
 use super::{ShipID, ShipInfo, ShipsMapping};
 
 pub const TRAJECTORIES_PATH: &str = "trajectories";
 
-pub struct TrajectoryPlugin {
-    pub testing: bool,
-}
-impl Plugin for TrajectoryPlugin {
-    fn build(&self, app: &mut App) {
-        let path = if self.testing {
-            let dir = TempDirectory::default();
-            let path = dir.0.path().to_owned();
-            app.insert_resource(dir);
-            path
-        } else {
-            TRAJECTORIES_PATH.into()
-        };
-        app.insert_resource(TrajectoriesDirectory(path))
-            .add_event::<TrajectoryEvent>()
-            .add_event::<VelocityUpdate>()
-            .add_systems(FixedUpdate, handle_thrusts.in_set(TrajectoryUpdate));
-    }
+pub fn plugin(app: &mut App) {
+    app.add_event::<TrajectoryEvent>()
+        .add_event::<VelocityUpdate>()
+        .add_systems(FixedUpdate, handle_thrusts.in_set(TrajectoryUpdate))
+        .add_systems(
+            OnEnter(GameStage::Action),
+            dispatch_trajectories.run_if(in_state(Authoritative)),
+        )
+        .add_systems(Update, handle_trajectory_event.pipe(exit_on_error_if_app));
 }
 
 #[derive(SystemSet, Debug, Clone, Copy, Hash, PartialEq, Eq)]
@@ -142,8 +133,19 @@ pub struct VelocityUpdate {
     pub thrust: DVec3,
 }
 
-#[derive(Resource, Debug)]
-pub struct TrajectoriesDirectory(pub PathBuf);
+pub fn read_trajectory(path: impl AsRef<Path>) -> color_eyre::Result<Trajectory> {
+    let mut file = File::open(&path)?;
+    let mut buf = String::new();
+    file.read_to_string(&mut buf)?;
+    toml::from_str(&buf).map_err(color_eyre::eyre::Error::from)
+}
+
+pub fn write_trajectory(path: impl AsRef<Path>, t: &Trajectory) -> color_eyre::Result<()> {
+    let s = toml::to_string_pretty(t)?;
+    File::create(path)?
+        .write_all(s.as_bytes())
+        .map_err(color_eyre::eyre::Error::from)
+}
 
 pub fn follow_trajectory(
     mut velocity_events: EventWriter<VelocityUpdate>,
@@ -186,10 +188,10 @@ pub fn handle_thrusts(
 
 pub fn dispatch_trajectories(
     mut commands: Commands,
-    dir: Res<TrajectoriesDirectory>,
+    dir: Res<GameFiles>,
     mapping: Res<ShipsMapping>,
 ) {
-    if let Ok(dir) = read_dir(&dir.0) {
+    if let Ok(dir) = read_dir(&dir.trajectories) {
         for entry in dir.flatten() {
             let path = entry.path();
             if let Ok(traj) = read_trajectory(&path) {
@@ -208,13 +210,11 @@ pub fn dispatch_trajectories(
 
 pub fn handle_trajectory_event(
     mut reader: EventReader<TrajectoryEvent>,
-    dir: Res<TrajectoriesDirectory>,
+    dir: Res<GameFiles>,
 ) -> color_eyre::Result<()> {
     use TrajectoryEvent::*;
     for event in reader.read() {
-        let mut path = dir.0.clone();
-
-        path.push(
+        let path = dir.trajectories.join(
             match event {
                 Create { ship, .. } => ship,
                 Delete(s) => s,
@@ -283,11 +283,7 @@ mod tests {
             trajectory: trajectory.clone(),
         });
         app.update();
-        let path = app
-            .world_mut()
-            .resource::<TrajectoriesDirectory>()
-            .0
-            .clone();
+        let path = app.world_mut().resource::<GameFiles>().trajectories.clone();
         let mut files = read_dir(path).unwrap();
         let file_path = files.next().unwrap()?.path();
         let mut buf = String::new();

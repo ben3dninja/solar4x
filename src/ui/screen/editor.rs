@@ -7,24 +7,50 @@ use ratatui::{
 };
 
 use crate::{
-    core_plugin::{BodiesMapping, BodyInfo, EventHandling, InputReading, PrimaryBody, SystemSize},
-    orbit::{Position, Velocity},
-    influence::Influenced,
-    keyboard::Keymap,
-    game::trajectory::ManeuverNode,
-    spaceship::ShipsMapping,
-    utils::{list::ClampedList, ui::Direction2},
-    GAMETIME_PER_SIMTICK,
+    input::prelude::Keymap,
+    objects::ships::trajectory::ManeuverNode,
+    physics::{
+        orbit::SystemSize,
+        predictions::{Prediction, PredictionStart},
+        time::GAMETIME_PER_SIMTICK,
+    },
+    ui::{widget::space_map::SpaceMap, EventHandling, InputReading},
+    utils::{list::ClampedList, Direction2},
 };
 
-use super::{editor_gui::EditorGuiPlugin, space_map_plugin::SpaceMap, AppScreen, CreateScreen};
-pub struct EditorPlugin;
+use super::AppScreen;
+use crate::objects::prelude::*;
+use crate::physics::prelude::*;
 
-#[derive(Event)]
-pub enum EditorEvent {
-    Select(Direction2),
-    NewNode,
-    Back,
+const PREDICTIONS_NUMBER: usize = 120;
+
+pub fn plugin(app: &mut App) {
+    app.add_computed_state::<InEditor>()
+        .add_event::<EditorEvent>()
+        .add_systems(
+            Update,
+            (
+                read_input.in_set(InputReading),
+                handle_editor_events.in_set(EventHandling),
+            )
+                .run_if(in_state(InEditor)),
+        )
+        .add_systems(OnEnter(InEditor), (create_screen, create_predictions))
+        .add_systems(OnExit(InEditor), clear_screen);
+}
+
+#[derive(Clone, PartialEq, Eq, Hash, Debug)]
+pub struct InEditor;
+
+impl ComputedStates for InEditor {
+    type SourceStates = AppScreen;
+
+    fn compute(sources: Self::SourceStates) -> Option<Self> {
+        match sources {
+            AppScreen::Editor(_) => Some(Self),
+            _ => None,
+        }
+    }
 }
 
 #[derive(Resource)]
@@ -47,41 +73,20 @@ impl EditorContext {
         }
     }
 }
+impl ClampedList for EditorContext {
+    fn list_state(&mut self) -> &mut ListState {
+        &mut self.list_state
+    }
+
+    fn len(&self) -> usize {
+        self.nodes.len()
+    }
+}
+
+#[derive(Component)]
+pub struct ClearOnEditorExit;
 
 pub struct EditorScreen;
-
-impl Plugin for EditorPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_plugins(EditorGuiPlugin)
-            .add_event::<EditorEvent>()
-            .add_computed_state::<InEditor>()
-            .add_systems(
-                Update,
-                (
-                    read_input.in_set(InputReading),
-                    handle_editor_events.in_set(EventHandling),
-                )
-                    .run_if(in_state(InEditor)),
-            )
-            .configure_sets(OnEnter(InEditor), CreateScreen)
-            .add_systems(OnEnter(InEditor), create_screen.in_set(CreateScreen))
-            .add_systems(OnExit(InEditor), clear_screen);
-    }
-}
-
-#[derive(Clone, PartialEq, Eq, Hash, Debug)]
-pub struct InEditor;
-
-impl ComputedStates for InEditor {
-    type SourceStates = AppScreen;
-
-    fn compute(sources: Self::SourceStates) -> Option<Self> {
-        match sources {
-            AppScreen::Editor(_) => Some(Self),
-            _ => None,
-        }
-    }
-}
 
 fn create_screen(
     mut commands: Commands,
@@ -109,9 +114,51 @@ fn create_screen(
     }
 }
 
-fn clear_screen(mut commands: Commands) {
+fn create_predictions(
+    mut commands: Commands,
+    ctx: Res<EditorContext>,
+    query: Query<(&Acceleration, &Influenced)>,
+    bodies: Query<(&EllipticalOrbit, &BodyInfo)>,
+    bodies_mapping: Res<BodiesMapping>,
+    time: Res<GameTime>,
+) {
+    let (
+        &Acceleration { current: acc, .. },
+        Influenced {
+            main_influencer,
+            influencers,
+        },
+    ) = query.get(ctx.ship).unwrap();
+    let start = PredictionStart {
+        pos: ctx.pos,
+        speed: ctx.speed,
+        time: time.time(),
+        acc,
+    };
+    let predictions = start.compute_predictions(
+        PREDICTIONS_NUMBER,
+        influencers.iter().cloned(),
+        *main_influencer,
+        &bodies,
+        &bodies_mapping.0,
+    );
+    predictions.into_iter().enumerate().for_each(|(i, p)| {
+        commands.spawn((
+            Prediction {
+                ship: ctx.ship,
+                index: i,
+            },
+            Position(p),
+            TransformBundle::from_transform(Transform::from_xyz(0., 0., -3.)),
+            ClearOnEditorExit,
+        ));
+    });
+}
+
+fn clear_screen(mut commands: Commands, query: Query<Entity, With<ClearOnEditorExit>>) {
     commands.remove_resource::<EditorContext>();
     commands.remove_resource::<SpaceMap>();
+    query.iter().for_each(|e| commands.entity(e).despawn());
 }
 
 fn read_input(
@@ -136,14 +183,11 @@ fn read_input(
     }
 }
 
-impl ClampedList for EditorContext {
-    fn list_state(&mut self) -> &mut ListState {
-        &mut self.list_state
-    }
-
-    fn len(&self) -> usize {
-        self.nodes.len()
-    }
+#[derive(Event)]
+pub enum EditorEvent {
+    Select(Direction2),
+    NewNode,
+    Back,
 }
 
 pub fn handle_editor_events(

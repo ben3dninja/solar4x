@@ -6,7 +6,8 @@ use bevy::{
 };
 
 use crate::{
-    objects::{bodies::build_system, prelude::*},
+    game::Loaded,
+    objects::prelude::*,
     physics::prelude::*,
     utils::algebra::{mod_180, rotate},
 };
@@ -15,8 +16,10 @@ use super::time::GameTime;
 
 pub fn plugin(app: &mut App) {
     app.add_systems(
-        OnEnter(LoadingState::Loading),
-        (update_local, update_global).chain().after(build_system),
+        OnEnter(Loaded),
+        (update_local, update_global, insert_system_size)
+            .chain()
+            .in_set(OrbitsUpdate),
     )
     .add_systems(
         FixedUpdate,
@@ -26,34 +29,6 @@ pub fn plugin(app: &mut App) {
 
 #[derive(SystemSet, Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct OrbitsUpdate;
-
-pub fn update_local(mut orbits: Query<&mut EllipticalOrbit>, time: Res<GameTime>) {
-    orbits
-        .par_iter_mut()
-        .for_each(|mut o| o.update_pos(time.time()));
-}
-
-pub fn update_global(
-    mut query: Query<(&mut Position, &mut Velocity, &EllipticalOrbit, &BodyInfo)>,
-    primary: Query<&BodyInfo, With<PrimaryBody>>,
-    mapping: Res<BodiesMapping>,
-) {
-    let mut queue = vec![(primary.single().0.id, (DVec3::ZERO, DVec3::ZERO))];
-    let mut i = 0;
-    while i < queue.len() {
-        let (id, (parent_pos, parent_velocity)) = queue[i];
-        if let Some(entity) = mapping.0.get(&id) {
-            if let Ok((mut world_pos, mut world_velocity, orbit, info)) = query.get_mut(*entity) {
-                let pos = parent_pos + orbit.local_pos;
-                let velocity = parent_velocity + orbit.local_velocity;
-                world_pos.0 = pos;
-                world_velocity.0 = velocity;
-                queue.extend(info.0.orbiting_bodies.iter().map(|c| (*c, (pos, velocity))));
-            }
-        }
-        i += 1;
-    }
-}
 
 #[derive(Component, Default, Clone, Debug)]
 pub struct EllipticalOrbit {
@@ -148,6 +123,46 @@ impl From<&BodyData> for EllipticalOrbit {
             ..Default::default()
         }
     }
+}
+
+pub fn update_local(mut orbits: Query<&mut EllipticalOrbit>, time: Res<GameTime>) {
+    orbits
+        .par_iter_mut()
+        .for_each(|mut o| o.update_pos(time.time()));
+}
+
+pub fn update_global(
+    mut query: Query<(&mut Position, &mut Velocity, &EllipticalOrbit, &BodyInfo)>,
+    primary: Query<&BodyInfo, With<PrimaryBody>>,
+    mapping: Res<BodiesMapping>,
+) {
+    let mut queue = vec![(primary.single().0.id, (DVec3::ZERO, DVec3::ZERO))];
+    let mut i = 0;
+    while i < queue.len() {
+        let (id, (parent_pos, parent_velocity)) = queue[i];
+        if let Some(entity) = mapping.0.get(&id) {
+            if let Ok((mut world_pos, mut world_velocity, orbit, info)) = query.get_mut(*entity) {
+                let pos = parent_pos + orbit.local_pos;
+                let velocity = parent_velocity + orbit.local_velocity;
+                world_pos.0 = pos;
+                world_velocity.0 = velocity;
+                queue.extend(info.0.orbiting_bodies.iter().map(|c| (*c, (pos, velocity))));
+            }
+        }
+        i += 1;
+    }
+}
+
+#[derive(Resource)]
+pub struct SystemSize(pub f64);
+
+pub fn insert_system_size(mut commands: Commands, body_positions: Query<&Position>) {
+    let system_size = body_positions
+        .iter()
+        .map(|pos| pos.0.length())
+        .max_by(|a, b| a.total_cmp(b))
+        .unwrap();
+    commands.insert_resource(SystemSize(system_size));
 }
 
 #[cfg(test)]

@@ -1,11 +1,12 @@
-
 use bevy::utils::HashMap;
 use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
-use serde::{de::{value::StrDeserializer, IntoDeserializer, Visitor}, Deserialize, Serialize};
-
+use serde::{
+    de::{value::StrDeserializer, IntoDeserializer, Visitor},
+    Deserialize, Serialize,
+};
 
 #[derive(Debug, Clone, Copy)]
-pub(super) struct Key {
+pub struct Key {
     pub code: KeyCode,
     pub modifiers: KeyModifiers,
 }

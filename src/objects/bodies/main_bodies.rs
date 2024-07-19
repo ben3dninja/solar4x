@@ -1,3 +1,5 @@
+use std::{fs::File, io::Read};
+
 use serde::{de::Visitor, Deserialize, Deserializer};
 
 use crate::{
@@ -11,6 +13,8 @@ use super::{
 };
 
 const ID_PREFIX: &str = "https://api.le-systeme-solaire.net/rest/bodies/";
+const MAIN_OBJECT_FILE_PATH: &str = "main_objects.json";
+const SUN_ID: &str = "soleil";
 
 #[derive(PartialEq, Debug, Clone)]
 pub struct MainBodyID(pub String);
@@ -158,6 +162,35 @@ impl From<Mass> for f64 {
     }
 }
 
+pub fn read_main_bodies() -> std::io::Result<Vec<BodyData>> {
+    let mut file = File::open(MAIN_OBJECT_FILE_PATH)?;
+    let mut buf = String::new();
+    file.read_to_string(&mut buf)?;
+    #[derive(Deserialize)]
+    struct Input {
+        bodies: Vec<MainBodyData>,
+    }
+    let input: Input = serde_json::from_str(&buf).map_err(std::io::Error::from)?;
+    fix_bodies(input.bodies).map(|b| b.into_iter().map(BodyData::from).collect())
+}
+
+fn fix_bodies(mut bodies: Vec<MainBodyData>) -> std::io::Result<Vec<MainBodyData>> {
+    bodies
+        .iter_mut()
+        .find(|data| data.id == SUN_ID.into())
+        .ok_or(std::io::Error::other("no sun"))?
+        .orbiting_bodies = bodies
+        .iter()
+        .filter(|data| data.host_body.is_none() && data.id != SUN_ID.into())
+        .map(|planet| planet.id.clone())
+        .collect();
+    bodies
+        .iter_mut()
+        .filter(|data| data.host_body.is_none() && data.id != SUN_ID.into())
+        .for_each(|body| body.host_body = Some(SUN_ID.into()));
+    Ok(bodies)
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -235,6 +268,28 @@ mod tests {
                 mass: 7.346e22
             }
         );
+    }
+
+    #[test]
+    fn test_read_main_bodies() {
+        let bodies = read_main_bodies().unwrap();
+        assert_eq!(bodies.len(), 366);
+    }
+
+    #[test]
+    fn test_fix_bodies() {
+        let bodies = read_main_bodies().unwrap();
+        let sun = bodies
+            .iter()
+            .find(|data| data.id == id_from(SUN_ID))
+            .unwrap();
+        assert!(sun.host_body.is_none());
+        for planet in bodies
+            .iter()
+            .filter(|data| matches!(data.body_type, BodyType::Planet))
+        {
+            assert!(planet.host_body.is_some_and(|id| id == id_from(SUN_ID)))
+        }
     }
 
     #[test]

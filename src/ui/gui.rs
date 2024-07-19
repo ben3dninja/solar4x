@@ -17,17 +17,14 @@ use bevy::{
 };
 
 use crate::{
-    bodies::body_data::BodyType,
-    core_plugin::{BodyInfo, LoadingState, SystemSize},
-    influence::HillRadius,
-    orbit::Position,
-    spaceship::ShipInfo,
+    physics::{influence::HillRadius, orbit::SystemSize, predictions::Prediction},
+    prelude::*,
     utils::algebra::project_onto_plane,
 };
 
 use super::{
-    predictions::Prediction,
-    space_map_plugin::{SpaceMap, ZOOM_STEP},
+    widget::space_map::{SpaceMap, ZOOM_STEP},
+    UiUpdate,
 };
 
 const MAX_WIDTH: f32 = 1000.;
@@ -56,17 +53,18 @@ impl Plugin for GuiPlugin {
         .insert_resource(ClearColor(Color::Srgba(BLACK)))
         .add_systems(Startup, gui_setup)
         .add_systems(
-            OnEnter(LoadingState::Loaded),
+            OnEnter(Loaded),
             (insert_display_components, update_transform)
                 .chain()
                 .in_set(GUIUpdate),
         )
         .add_systems(
-            FixedPreUpdate,
+            PostUpdate,
             (update_transform, update_camera_pos)
                 .chain()
                 .run_if(resource_exists::<SpaceMap>)
-                .run_if(in_state(LoadingState::Loaded)),
+                .run_if(in_state(Loaded))
+                .in_set(UiUpdate),
         )
         .add_systems(
             Update,
@@ -212,77 +210,3 @@ fn draw_gizmos(
         }
     }
 }
-
-// #[derive(Resource)]
-// enum ShootingState {
-//     Idle,
-//     Loading { launch_mouse_position: Vec2 },
-// }
-
-// fn shoot(
-//     mut commands: Commands,
-//     mut shooting_state: ResMut<ShootingState>,
-//     mut buttons: EventReader<MouseButtonInput>,
-//     window: Query<&Window, With<PrimaryWindow>>,
-//     mut meshes: ResMut<Assets<Mesh>>,
-//     colors: Res<Colors>,
-//     camera_query: Query<(&Camera, &GlobalTransform)>,
-//     space_map: Res<SpaceMap>,
-//     focus: Query<&Velocity, With<FocusBody>>,
-//     time: Res<Time>,
-//     game_speed: Res<GameSpeed>,
-// ) {
-//     if let Some(mouse_position) = window.single().cursor_position() {
-//         let &Velocity(focus_speed) = focus.single();
-//         let (camera, camera_transform) = camera_query.single();
-//         let scale = MAX_WIDTH as f64 / space_map.system_size;
-//         for event in buttons.read() {
-//             match event.state {
-//                 ButtonState::Pressed => {
-//                     *shooting_state = ShootingState::Loading {
-//                         launch_mouse_position: mouse_position,
-//                     }
-//                 }
-//                 ButtonState::Released => {
-//                     if let ShootingState::Loading {
-//                         launch_mouse_position,
-//                     } = *shooting_state
-//                     {
-//                         if let Some(shooting_transform) =
-//                             camera.viewport_to_world_2d(camera_transform, launch_mouse_position)
-//                         {
-//                             if let Some(release_transform) =
-//                                 camera.viewport_to_world_2d(camera_transform, mouse_position)
-//                             {
-//                                 let d = (shooting_transform - release_transform).as_dvec2();
-//                                 let speed = DVec3::new(d.x, d.y, 0.)
-//                                     / (scale * time.delta_seconds_f64() * game_speed.0 * 20.)
-//                                     + focus_speed;
-//                                 let pos = DVec3::new(
-//                                     shooting_transform.x as f64,
-//                                     shooting_transform.y as f64,
-//                                     0.,
-//                                 ) / scale;
-
-//                                 let (x, y, _) = (pos * scale).as_vec3().into();
-//                                 commands
-//                                     .spawn(MaterialMesh2dBundle {
-//                                         mesh: Mesh2dHandle(
-//                                             meshes.add(Circle { radius: MIN_RADIUS }),
-//                                         ),
-//                                         material: colors.ships.gui.clone(),
-//                                         transform: Transform::from_xyz(x, y, 1.),
-//                                         ..default()
-//                                     })
-//                                     .insert(Velocity(speed))
-//                                     .insert(Position(pos))
-//                                     .insert(Acceleration(DVec3::ZERO))
-//                             }
-//                         }
-//                         *shooting_state = ShootingState::Idle;
-//                     }
-//                 }
-//             }
-//         }
-//     }
-// }

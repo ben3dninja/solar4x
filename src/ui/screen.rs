@@ -1,18 +1,18 @@
 use bevy::prelude::*;
-use bevy_ratatui::terminal::RatatuiContext;
+use bevy_ratatui::{event::KeyEvent, terminal::RatatuiContext};
 use editor::{EditorContext, EditorScreen};
 use explorer::{ExplorerContext, ExplorerScreen};
 use fleet::{FleetContext, FleetScreen};
 use start::{StartMenu, StartMenuContext};
 
-use crate::objects::ships::ShipID;
+use crate::{client::ClientMode, objects::ships::ShipID, prelude::exit_on_error_if_app};
 
-use super::widget::space_map::SpaceMap;
+use super::{widget::space_map::SpaceMap, InputReading, Render};
 
-mod editor;
-mod explorer;
-mod fleet;
-mod start;
+pub mod editor;
+pub mod explorer;
+pub mod fleet;
+pub mod start;
 
 /// A resource storing the current screen
 /// Set this to change screen, the appropriate context is automatically generated when the app is ready
@@ -31,13 +31,38 @@ pub struct PreviousScreen(pub AppScreen);
 
 pub fn plugin(app: &mut App) {
     app.add_plugins((
-        StartMenuPlugin,
-        ExplorerScreenPlugin,
-        FleetScreenPlugin,
-        EditorPlugin,
+        start::plugin,
+        explorer::plugin,
+        fleet::plugin,
+        editor::plugin,
     ))
     .init_state::<AppScreen>()
-    .init_resource::<PreviousScreen>();
+    .init_resource::<PreviousScreen>()
+    .add_systems(
+        PreUpdate,
+        update_previous_screen.run_if(resource_changed::<NextState<AppScreen>>),
+    )
+    .add_systems(
+        Update,
+        clear_key_events
+            .before(InputReading)
+            .run_if(state_changed::<AppScreen>),
+    )
+    .add_systems(
+        OnEnter(ClientMode::Explorer),
+        move |mut next_screen: ResMut<NextState<AppScreen>>| next_screen.set(AppScreen::Explorer),
+    )
+    .add_systems(
+        OnEnter(ClientMode::Singleplayer),
+        move |mut next_screen: ResMut<NextState<AppScreen>>| next_screen.set(AppScreen::Fleet),
+    )
+    .add_systems(
+        PostUpdate,
+        render
+            .pipe(exit_on_error_if_app)
+            .run_if(resource_exists::<RatatuiContext>)
+            .in_set(Render),
+    );
 }
 
 fn update_previous_screen(
@@ -48,6 +73,10 @@ fn update_previous_screen(
     if let NextState::Pending(_) = next.as_ref() {
         previous.0 = *current.get();
     }
+}
+
+fn clear_key_events(mut events: ResMut<Events<KeyEvent>>) {
+    events.clear();
 }
 
 fn render(

@@ -1,12 +1,7 @@
 use std::env;
 
 use bevy::app::App;
-use rust_space_trading::{
-    bodies::{bodies_config::BodiesConfig, body_data::BodyType},
-    client::ClientPlugin,
-    ui::TuiPlugin,
-    utils::args::get_keymap,
-};
+use rust_space_trading::{prelude::*, utils::args::get_keymap};
 
 fn main() {
     #[allow(unused_variables)]

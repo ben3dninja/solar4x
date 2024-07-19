@@ -3,7 +3,7 @@ use ratatui::{
     widgets::{Block, ListState, Paragraph},
 };
 
-use super::ui::{cycle_add, Direction2};
+use super::{ui::cycle_add, Direction2};
 
 pub fn select_next_clamp(list_state: &mut ListState, max: usize) {
     list_state.select(match list_state.selected() {

@@ -7,11 +7,7 @@ use ratatui::{
     widgets::{block::Title, Block, List, ListState, Paragraph, StatefulWidget, Widget},
 };
 
-use crate::{
-    bodies::{body_data::BodyData, body_id::BodyID},
-    core_plugin::BodyInfo,
-    utils::{list::ClampedList, ui::Direction2},
-};
+use crate::prelude::*;
 
 #[derive(Debug)]
 pub enum SearchEvent {
@@ -151,15 +147,8 @@ impl SearchState {
 mod tests {
     use bevy::app::App;
 
-    use crate::{
-        bodies::{bodies_config::BodiesConfig, body_data::BodyType, body_id::id_from},
-        client::{ClientMode, ClientPlugin},
-        ui::{
-            explorer_screen::{ExplorerContext, ExplorerEvent},
-            search_plugin::SearchEvent,
-            TuiPlugin,
-        },
-    };
+    use super::*;
+    use crate::ui::screen::explorer::{ExplorerContext, ExplorerEvent};
 
     #[test]
     fn test_search() {
@@ -172,12 +161,11 @@ mod tests {
         ));
         app.update();
         app.update();
-        use ExplorerEvent::Search;
         use SearchEvent::*;
         app.world_mut().send_event_batch([
-            Search(WriteChar('M')),
-            Search(WriteChar('o')),
-            Search(WriteChar('o')),
+            ExplorerEvent::Search(WriteChar('M')),
+            ExplorerEvent::Search(WriteChar('o')),
+            ExplorerEvent::Search(WriteChar('o')),
         ]);
         app.update();
 

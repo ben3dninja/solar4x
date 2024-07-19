@@ -6,10 +6,8 @@ use ratatui::{
     widgets::{block::Title, Block, List, ListState, StatefulWidget, StatefulWidgetRef},
 };
 
-use crate::{
-    bodies::{body_data::BodyData, body_id::BodyID},
-    utils::{list::ClampedList, ui::Direction2},
-};
+use crate::utils::Direction2;
+use crate::{objects::prelude::*, utils::list::ClampedList};
 
 #[derive(Debug, Event)]
 pub enum TreeEvent {
@@ -310,13 +308,8 @@ impl TreeState {
 
 #[cfg(test)]
 mod tests {
+    use crate::{prelude::*, ui::screen::explorer::ExplorerContext};
     use bevy::app::App;
-
-    use crate::{
-        bodies::{bodies_config::BodiesConfig, body_data::BodyType, body_id::id_from},
-        client::{ClientMode, ClientPlugin},
-        ui::{explorer_screen::ExplorerContext, TuiPlugin},
-    };
 
     fn new_app(moons: bool) -> App {
         let mut app = App::new();

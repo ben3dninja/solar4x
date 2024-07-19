@@ -1,22 +1,15 @@
 //! A "Ship" is an object whose movement is governed by the gravitationnal
 //! attraction of the celestial bodies, along with custom trajectories
 
-use std::fs::{read_dir, remove_file};
-use std::path::PathBuf;
-use std::sync::{Arc, Mutex};
-
 use arrayvec::ArrayString;
 use bevy::{math::DVec3, prelude::*, utils::HashMap};
-use trajectory::*;
 
-use crate::game::{ClearOnUnload, LoadingState};
+use crate::game::{ClearOnUnload, Loaded};
 use crate::physics::influence::HillRadius;
 use crate::physics::leapfrog::get_acceleration;
 use crate::physics::prelude::*;
 
-use crate::utils::algebra::convert_orbital_to_global;
-use crate::utils::de::{read_trajectory, write_trajectory, TempDirectory};
-
+use super::id::MAX_ID_LENGTH;
 use super::prelude::{BodiesMapping, BodyInfo, PrimaryBody};
 use super::ObjectsUpdate;
 
@@ -39,24 +32,18 @@ pub mod trajectory;
 //     }
 // }
 
-pub struct ShipsPlugin {
-    pub testing: bool,
-}
+pub struct ShipsPlugin;
 
-impl ShipsPlugin {
-    pub fn build(&self, app: &mut App) {
-        app.add_plugins(TrajectoryPlugin {
-            testing: self.testing,
-        })
-        .add_event::<ShipEvent>()
-        .add_systems(
-            OnEnter(LoadingState::Loaded),
-            create_ships.in_set(ObjectsUpdate),
-        );
+impl Plugin for ShipsPlugin {
+    fn build(&self, app: &mut App) {
+        app.add_plugins(trajectory::plugin)
+            .add_event::<ShipEvent>()
+            .add_systems(Update, handle_ship_events.in_set(ObjectsUpdate))
+            .add_systems(OnEnter(Loaded), create_ships.in_set(ObjectsUpdate));
     }
 }
 
-pub(crate) type ShipID = ArrayString<32>;
+pub type ShipID = ArrayString<MAX_ID_LENGTH>;
 
 #[derive(Component, Clone, Default, PartialEq)]
 pub struct ShipInfo {

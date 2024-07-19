@@ -1,17 +1,27 @@
+use std::path::{Path, PathBuf};
+
 use bevy::{prelude::*, state::app::StatesPlugin, time::TimePlugin};
+use tempfile::{tempdir, TempDir};
 
 use crate::{
     client::ClientMode,
-    objects::{prelude::BodiesMapping, ships::ShipsMapping, ObjectsUpdate},
+    objects::{
+        bodies::BodiesPlugin,
+        prelude::BodiesMapping,
+        ships::{trajectory::TRAJECTORIES_PATH, ShipsMapping, ShipsPlugin},
+        ObjectsUpdate,
+    },
     physics::{
         influence::InfluenceUpdate, orbit::OrbitsUpdate, prelude::ToggleTime, PhysicsPlugin,
     },
-    ui::gui_plugin::GUIUpdate,
+    ui::gui::GUIUpdate,
 };
 
 pub mod prelude {
-    pub use super::{GameStage, InGame, LoadingState};
+    pub use super::{GameStage, InGame, Loaded};
 }
+
+pub const GAME_FILES_PATH: &str = "gamefiles";
 
 /// This plugin's role is to handle everything that is about the main game, and that is common to both the server and the client
 #[derive(Default)]
@@ -27,6 +37,14 @@ impl GamePlugin {
 
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
+        let path = if self.testing {
+            let dir = TempDirectory::default();
+            let path = dir.0.path().to_owned();
+            app.insert_resource(dir);
+            path
+        } else {
+            GAME_FILES_PATH.into()
+        };
         app.add_plugins((
             // required plugins for the app to work. If there is no gui, we still have to add a schedulerunner plugin (see bevy default and minimal plugin sets)
             TaskPoolPlugin::default(),
@@ -35,17 +53,44 @@ impl Plugin for GamePlugin {
             TimePlugin,
             StatesPlugin,
         ))
-        .add_plugins(PhysicsPlugin)
+        .add_plugins((PhysicsPlugin, BodiesPlugin, ShipsPlugin))
         .add_computed_state::<InGame>()
+        .add_computed_state::<Authoritative>()
         .add_sub_state::<GameStage>()
-        .init_state::<LoadingState>()
+        .add_computed_state::<Loaded>()
+        .insert_resource(GameFiles::new(path))
         .configure_sets(
-            OnEnter(LoadingState::Loaded),
-            (ObjectsUpdate, OrbitsUpdate, InfluenceUpdate, GUIUpdate),
+            OnEnter(Loaded),
+            (ObjectsUpdate, OrbitsUpdate, InfluenceUpdate, GUIUpdate).chain(),
         )
-        .add_systems(OnExit(LoadingState::Loaded), clear_loaded)
+        .add_systems(OnExit(Loaded), clear_loaded)
         .add_systems(OnEnter(GameStage::Action), enable_time)
         .add_systems(OnEnter(GameStage::Preparation), disable_time);
+    }
+}
+
+#[derive(Resource)]
+pub struct TempDirectory(pub TempDir);
+
+impl Default for TempDirectory {
+    fn default() -> Self {
+        Self(tempdir().unwrap())
+    }
+}
+
+#[derive(Resource)]
+pub struct GameFiles {
+    pub root: PathBuf,
+    pub trajectories: PathBuf,
+}
+
+impl GameFiles {
+    pub fn new(path: impl AsRef<Path>) -> Self {
+        let root: PathBuf = path.as_ref().into();
+        Self {
+            trajectories: root.join(TRAJECTORIES_PATH),
+            root,
+        }
     }
 }
 
@@ -54,10 +99,10 @@ impl Plugin for GamePlugin {
 pub struct InGame;
 
 impl ComputedStates for InGame {
-    type SourceStates = (Option<ClientMode>, LoadingState);
+    type SourceStates = (Option<ClientMode>, Loaded);
 
     fn compute(sources: Self::SourceStates) -> Option<Self> {
-        if !matches!(sources.1, LoadingState::Loaded) {
+        if !matches!(sources.1, Loaded) {
             None
         } else {
             match sources.0 {
@@ -92,15 +137,38 @@ impl std::fmt::Display for GameStage {
 /// This state represents whether or not bodies and ships are loaded in game.
 /// For server, is is automatically the case, but for a client a system is loaded only if one is connected to a server,
 /// or if the singleplayer or explore modes have been launched
-#[derive(States, Debug, PartialEq, Eq, Clone, Hash, Default)]
-pub enum LoadingState {
-    #[default]
-    NotLoaded,
-    Loaded,
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+pub struct Loaded;
+
+impl ComputedStates for Loaded {
+    type SourceStates = ClientMode;
+
+    fn compute(sources: Self::SourceStates) -> Option<Self> {
+        match sources {
+            ClientMode::None => None,
+            _ => Some(Loaded),
+        }
+    }
 }
 
 #[derive(Component)]
 pub struct ClearOnUnload;
+
+/// This state represents whether or not the running instance is authoritative or not,
+/// i.e. if it is the server or it runs in singleplayer.
+#[derive(Debug, PartialEq, Eq, Clone, Hash)]
+pub struct Authoritative;
+
+impl ComputedStates for Authoritative {
+    type SourceStates = Option<ClientMode>;
+
+    fn compute(sources: Self::SourceStates) -> Option<Self> {
+        match sources {
+            Some(ClientMode::Singleplayer) | None => Some(Self),
+            _ => None,
+        }
+    }
+}
 
 fn clear_loaded(mut commands: Commands, query: Query<Entity, With<ClearOnUnload>>) {
     for e in query.iter() {

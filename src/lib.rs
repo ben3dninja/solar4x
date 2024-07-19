@@ -1,5 +1,4 @@
 pub mod client;
-pub mod core_plugin;
 pub mod game;
 pub mod input;
 pub mod network;

@@ -1,6 +1,6 @@
 use bevy::{math::DVec3, prelude::*};
 
-use crate::game::LoadingState;
+use crate::game::Loaded;
 use crate::objects::prelude::*;
 
 use crate::objects::bodies::BodyID;
@@ -8,11 +8,8 @@ use crate::objects::bodies::BodyID;
 use super::Position;
 
 pub fn plugin(app: &mut App) {
-    app.add_systems(
-        OnEnter(LoadingState::Loaded),
-        setup_hill_spheres.in_set(InfluenceUpdate),
-    )
-    .add_systems(FixedUpdate, update_influence.in_set(InfluenceUpdate));
+    app.add_systems(OnEnter(Loaded), setup_hill_spheres.in_set(InfluenceUpdate))
+        .add_systems(FixedUpdate, update_influence.in_set(InfluenceUpdate));
 }
 
 #[derive(SystemSet, Debug, PartialEq, Eq, Hash, Clone)]
