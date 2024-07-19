@@ -1,17 +1,10 @@
 use bevy::{math::DVec3, prelude::*, utils::HashMap};
 
-use crate::{
-    bodies::body_id::BodyID,
-    core_plugin::{BodiesMapping, BodyInfo},
-    orbit::{EllipticalOrbit, GameTime, Position},
-    influence::Influenced,
-    leapfrog::{get_acceleration, get_dv, get_dx, Acceleration},
-    GAMETIME_PER_SIMTICK,
-};
+use crate::{objects::prelude::*, physics::prelude::*};
 
 use super::{
-    editor_screen::{EditorContext, InEditor},
-    CreateScreen,
+    leapfrog::{get_acceleration, get_dv, get_dx},
+    time::GAMETIME_PER_SIMTICK,
 };
 
 /// Number of client updates between two predictions
@@ -164,23 +157,13 @@ fn destroy_predictions(mut commands: Commands, predictions: Query<Entity, With<P
 
 #[cfg(test)]
 mod tests {
-    use bevy::{
-        app::App,
-        ecs::system::{Query, Res, SystemState},
-    };
+    use bevy::{ecs::system::SystemState, prelude::*};
 
     use crate::{
-        bodies::body_id::id_from,
-        client::{ClientMode, ClientPlugin},
-        core_plugin::{BodiesMapping, BodyInfo},
-        orbit::{EllipticalOrbit, Position, Velocity},
-        influence::Mass,
-        leapfrog::get_acceleration,
-        utils::algebra::circular_orbit_around_body,
-        GAMETIME_PER_SIMTICK,
+        physics::leapfrog::get_acceleration, prelude::*, utils::algebra::circular_orbit_around_body,
     };
 
-    use super::SpaceTimePoint;
+    use super::*;
 
     #[test]
     fn test_predictions() {

@@ -2,7 +2,7 @@ use std::fmt::Display;
 
 use serde::{Deserialize, Serialize};
 
-use super::body_id::BodyID;
+use super::BodyID;
 
 #[derive(Serialize, Deserialize, Clone, Copy, Debug, PartialEq, Default, PartialOrd)]
 pub enum BodyType {

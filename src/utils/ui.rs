@@ -23,28 +23,6 @@ pub fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
         .split(popup_layout[1])[1] // Return the middle chunk
 }
 
-#[derive(Debug, Clone, Copy)]
-pub enum Direction2 {
-    Up,
-    Down,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum Direction4 {
-    Front,
-    Back,
-    Left,
-    Right,
-}
-
-#[derive(Debug, Clone, Copy)]
-#[repr(u8)]
-pub enum Dimension {
-    X,
-    Y,
-    Z,
-}
-
 pub fn cycle_add(i: &mut usize, size: usize, value: isize) {
     *i = ((*i as isize + value) % size as isize) as usize
 }

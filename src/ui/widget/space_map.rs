@@ -45,37 +45,6 @@ pub struct SpaceMap {
     pub selected: Option<Entity>,
 }
 
-impl SpaceMapWidget {
-    pub fn update_map(
-        &mut self,
-        space_map: &SpaceMap,
-        query: &Query<(Entity, &Position, &BodyInfo)>,
-    ) {
-        let mut circles = Vec::new();
-        let &Position(focus_pos) = space_map
-            .focus_body
-            .map_or(&Position::default(), |f| query.get(f).unwrap().1);
-        for (entity, &Position(pos), BodyInfo(data)) in query.iter() {
-            let proj =
-                project_onto_plane(pos - focus_pos, (DVec3::X, DVec3::Y)) - space_map.offset_amount;
-            let color = match data.body_type {
-                _ if Some(entity) == space_map.selected => Color::Red,
-                BodyType::Star => Color::Yellow,
-                BodyType::Planet => Color::Blue,
-                _ => Color::DarkGray,
-            };
-            let radius = data.radius;
-            circles.push(Circle {
-                x: proj.x,
-                y: proj.y,
-                radius,
-                color,
-            });
-        }
-        self.circles = circles;
-    }
-}
-
 impl SpaceMap {
     pub fn new(system_size: f64, focus_body: Option<Entity>, selected: Option<Entity>) -> SpaceMap {
         SpaceMap {
@@ -141,6 +110,37 @@ impl SpaceMap {
 #[derive(Default)]
 pub struct SpaceMapWidget {
     circles: Vec<Circle>,
+}
+
+impl SpaceMapWidget {
+    pub fn update_map(
+        &mut self,
+        space_map: &SpaceMap,
+        query: &Query<(Entity, &Position, &BodyInfo)>,
+    ) {
+        let mut circles = Vec::new();
+        let &Position(focus_pos) = space_map
+            .focus_body
+            .map_or(&Position::default(), |f| query.get(f).unwrap().1);
+        for (entity, &Position(pos), BodyInfo(data)) in query.iter() {
+            let proj =
+                project_onto_plane(pos - focus_pos, (DVec3::X, DVec3::Y)) - space_map.offset_amount;
+            let color = match data.body_type {
+                _ if Some(entity) == space_map.selected => Color::Red,
+                BodyType::Star => Color::Yellow,
+                BodyType::Planet => Color::Blue,
+                _ => Color::DarkGray,
+            };
+            let radius = data.radius;
+            circles.push(Circle {
+                x: proj.x,
+                y: proj.y,
+                radius,
+                color,
+            });
+        }
+        self.circles = circles;
+    }
 }
 
 impl StatefulWidgetRef for SpaceMapWidget {

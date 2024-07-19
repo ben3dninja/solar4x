@@ -6,32 +6,26 @@ use bevy::{
 };
 
 use crate::{
-    bodies::body_data::BodyData,
-    core_plugin::{build_system, BodiesMapping, BodyInfo, LoadedSet, LoadingState, PrimaryBody},
-    utils::{
-        algebra::{mod_180, rotate},
-    },
+    objects::{bodies::build_system, prelude::*},
+    physics::prelude::*,
+    utils::algebra::{mod_180, rotate},
 };
 
+use super::time::GameTime;
 
-    pub fn plugin(app: &mut App) {
-        app.add_systems(
-                OnEnter(LoadingState::Loading),
-                (update_local, update_global).chain().after(build_system),
-            )
-            .add_systems(
-                FixedUpdate,
-                (update_local, update_global).in_set(BodiesUpdate)
-                    .in_set(LoadedSet)
-                    .chain()
-                    .run_if(resource_equals(ToggleTime(true))),
-            );
-    }
-
+pub fn plugin(app: &mut App) {
+    app.add_systems(
+        OnEnter(LoadingState::Loading),
+        (update_local, update_global).chain().after(build_system),
+    )
+    .add_systems(
+        FixedUpdate,
+        (update_local, update_global).chain().in_set(OrbitsUpdate),
+    );
+}
 
 #[derive(SystemSet, Debug, Clone, Copy, Hash, PartialEq, Eq)]
-pub struct BodiesUpdate;
-
+pub struct OrbitsUpdate;
 
 pub fn update_local(mut orbits: Query<&mut EllipticalOrbit>, time: Res<GameTime>) {
     orbits
@@ -60,7 +54,6 @@ pub fn update_global(
         i += 1;
     }
 }
-
 
 #[derive(Component, Default, Clone, Debug)]
 pub struct EllipticalOrbit {
@@ -161,12 +154,7 @@ impl From<&BodyData> for EllipticalOrbit {
 mod tests {
     use bevy::app::App;
 
-    use crate::{
-        bodies::{bodies_config::BodiesConfig, body_data::BodyType, body_id::id_from},
-        client::{ClientMode, ClientPlugin},
-        core_plugin::BodyInfo,
-        orbit::{EllipticalOrbit, Position},
-    };
+    use crate::prelude::*;
 
     #[test]
     fn test_update_local() {

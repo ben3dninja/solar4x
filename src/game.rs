@@ -1,22 +1,17 @@
-use std::time::Duration;
-
-use bevy::prelude::*;
-use trajectory::handle_thrusts;
+use bevy::{prelude::*, state::app::StatesPlugin, time::TimePlugin};
 
 use crate::{
     client::ClientMode,
-    core_plugin::{BodiesMapping, BodyInfo, EventHandling, LoadingState, PrimaryBody},
-    orbit::{Position, ToggleTime, Velocity},
-    influence::{compute_influence, HillRadius, InfluencePlugin},
-    leapfrog::{get_acceleration, Acceleration, LeapfrogPlugin, LeapfrogSystems},
-    spaceship::{ShipID, ShipInfo, ShipsMapping},
-    utils::de::TempDirectory,
-    TPS,
+    objects::{prelude::BodiesMapping, ships::ShipsMapping, ObjectsUpdate},
+    physics::{
+        influence::InfluenceUpdate, orbit::OrbitsUpdate, prelude::ToggleTime, PhysicsPlugin,
+    },
+    ui::gui_plugin::GUIUpdate,
 };
 
-use self::trajectory::{TrajectoriesDirectory, TrajectoryEvent, VelocityUpdate, TRAJECTORIES_PATH};
-
-pub mod trajectory;
+pub mod prelude {
+    pub use super::{GameStage, InGame, LoadingState};
+}
 
 /// This plugin's role is to handle everything that is about the main game, and that is common to both the server and the client
 #[derive(Default)]
@@ -32,29 +27,25 @@ impl GamePlugin {
 
 impl Plugin for GamePlugin {
     fn build(&self, app: &mut App) {
-        let path = if self.testing {
-            let dir = TempDirectory::default();
-            let path = dir.0.path().to_owned();
-            app.insert_resource(dir);
-            path
-        } else {
-            TRAJECTORIES_PATH.into()
-        };
-        app.add_plugins(InfluencePlugin)
-            .add_plugins(LeapfrogPlugin)
-            .add_computed_state::<InGame>()
-            .add_sub_state::<GameStage>()
-            .insert_resource(TrajectoriesDirectory(path))
-            .add_event::<TrajectoryEvent>()
-            .add_event::<VelocityUpdate>()
-            .add_systems(OnEnter(GameStage::Action), enable_time)
-            .add_systems(OnEnter(GameStage::Preparation), disable_time)
-            .add_systems(
-                FixedUpdate,
-                handle_thrusts
-                    .run_if(in_state(GameStage::Action))
-                    .before(LeapfrogSystems),
-            );
+        app.add_plugins((
+            // required plugins for the app to work. If there is no gui, we still have to add a schedulerunner plugin (see bevy default and minimal plugin sets)
+            TaskPoolPlugin::default(),
+            TypeRegistrationPlugin,
+            FrameCountPlugin,
+            TimePlugin,
+            StatesPlugin,
+        ))
+        .add_plugins(PhysicsPlugin)
+        .add_computed_state::<InGame>()
+        .add_sub_state::<GameStage>()
+        .init_state::<LoadingState>()
+        .configure_sets(
+            OnEnter(LoadingState::Loaded),
+            (ObjectsUpdate, OrbitsUpdate, InfluenceUpdate, GUIUpdate),
+        )
+        .add_systems(OnExit(LoadingState::Loaded), clear_loaded)
+        .add_systems(OnEnter(GameStage::Action), enable_time)
+        .add_systems(OnEnter(GameStage::Preparation), disable_time);
     }
 }
 
@@ -98,26 +89,39 @@ impl std::fmt::Display for GameStage {
     }
 }
 
+/// This state represents whether or not bodies and ships are loaded in game.
+/// For server, is is automatically the case, but for a client a system is loaded only if one is connected to a server,
+/// or if the singleplayer or explore modes have been launched
+#[derive(States, Debug, PartialEq, Eq, Clone, Hash, Default)]
+pub enum LoadingState {
+    #[default]
+    NotLoaded,
+    Loaded,
+}
 
+#[derive(Component)]
+pub struct ClearOnUnload;
 
-pub fn enable_time(mut toggle: ResMut<ToggleTime>) {
+fn clear_loaded(mut commands: Commands, query: Query<Entity, With<ClearOnUnload>>) {
+    for e in query.iter() {
+        commands.entity(e).despawn();
+    }
+    commands.remove_resource::<BodiesMapping>();
+    commands.remove_resource::<ShipsMapping>();
+}
+
+fn enable_time(mut toggle: ResMut<ToggleTime>) {
     toggle.0 = true;
 }
-pub fn disable_time(mut toggle: ResMut<ToggleTime>) {
+fn disable_time(mut toggle: ResMut<ToggleTime>) {
     toggle.0 = false;
 }
-
-
 
 #[cfg(test)]
 mod tests {
     use bevy::{app::App, math::DVec3, state::state::State};
 
-    use crate::{
-        client::{ClientMode, ClientPlugin},
-        game::{GameStage, InGame, ShipEvent},
-        spaceship::{ShipID, ShipInfo, ShipsMapping},
-    };
+    use crate::{objects::ships::ShipEvent, prelude::*};
 
     fn new_app() -> App {
         let mut app = App::new();

@@ -1,24 +1,27 @@
 use bevy::prelude::*;
 
+use crate::utils::Direction2;
+
 /// Number of server updates (ticks) per real time second
-const TPS: f64 = 1.;
+pub const TPS: f64 = 1.;
 
 /// Number of simulation updates (simticks) per real time second
-const STPS: f64 = 64.;
+pub const STPS: f64 = 64.;
 
 /// Game time that is added at each client update (in days, multiplied by simstepsize)
-const GAMETIME_PER_SIMTICK: f64 = 1e-2;
-
-const SECONDS_PER_DAY: f64 = 24.*3600.;
+pub const GAMETIME_PER_SIMTICK: f64 = 1e-2;
 
 pub fn plugin(app: &mut App) {
-    app
-    .init_resource::<ToggleTime>()
-    .init_resource::<GameTime>()
-    .init_resource::<SimStepSize>()
-    .add_event::<TimeEvent>()
-    .add_systems(Update, (update_simtick, update_tick).in_set(TimeUpdate))
-    .add_systems(Update, handle_time_events);
+    app.insert_resource(Time::<Fixed>::from_hz(STPS))
+        .init_resource::<ToggleTime>()
+        .init_resource::<GameTime>()
+        .init_resource::<SimStepSize>()
+        .add_event::<TimeEvent>()
+        .add_systems(
+            FixedUpdate,
+            (update_simtick, update_tick).in_set(TimeUpdate),
+        )
+        .add_systems(Update, handle_time_events);
 }
 
 #[derive(SystemSet, Debug, Clone, Copy, Hash, PartialEq, Eq)]
@@ -58,21 +61,17 @@ pub struct TickEvent;
 #[derive(Event, Clone, Copy)]
 pub enum TimeEvent {
     /// Change the number of simticks that are simulated per update.
-    /// 
+    ///
     /// **THIS CAN CHANGE SIMULATION OUTCOME**
     ChangeStepSize(Direction2),
     /// Change the number of updates that are processed per real time second.
-    /// 
+    ///
     /// This does not change simulation outcome, but leads to heavier CPU load.
     ChangeUpdateRate(Direction2),
     ToggleTime,
 }
 
-fn update_tick(
-    mut timer: ResMut<TickTimer>,
-    time: Res<Time>,
-    mut writer: EventWriter<TickEvent>,
-) {
+fn update_tick(mut timer: ResMut<TickTimer>, time: Res<Time>, mut writer: EventWriter<TickEvent>) {
     timer.0.tick(time.delta());
     if timer.0.just_finished() {
         writer.send_default();

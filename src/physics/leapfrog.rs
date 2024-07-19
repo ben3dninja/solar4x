@@ -1,28 +1,27 @@
 use bevy::{math::DVec3, prelude::*};
 
-use crate::{
-    orbit::{Position, SimStepSize, ToggleTime, Velocity},
-    influence::{Influenced, Mass},
-    game::InGame,
-    GAMETIME_PER_SIMTICK, SECONDS_PER_DAY,
+use super::{
+    prelude::*,
+    time::{SimStepSize, GAMETIME_PER_SIMTICK},
+    G,
 };
-
+use crate::game::InGame;
 
 // See https://en.wikipedia.org/wiki/Leapfrog_integration#Algorithm
-    pub fn plugin(app: &mut App) {
-        app.configure_sets(
-            FixedUpdate,
-            LeapfrogUpdate
-                .run_if(resource_equals(ToggleTime(true)))
-                .run_if(in_state(InGame)),
-        )
-        .add_systems(
-            FixedUpdate,
-            (update_position, update_acceleration, update_velocity)
-                .chain()
-                .in_set(LeapfrogUpdate),
-        );
-    }
+pub fn plugin(app: &mut App) {
+    app.configure_sets(
+        FixedUpdate,
+        LeapfrogUpdate
+            .run_if(resource_equals(ToggleTime(true)))
+            .run_if(in_state(InGame)),
+    )
+    .add_systems(
+        FixedUpdate,
+        (update_position, update_acceleration, update_velocity)
+            .chain()
+            .in_set(LeapfrogUpdate),
+    );
+}
 
 #[derive(SystemSet, Debug, PartialEq, Eq, Hash, Clone)]
 pub struct LeapfrogUpdate;
@@ -104,41 +103,16 @@ pub fn get_dv(previous_acc: DVec3, acc: DVec3, dt: f64) -> DVec3 {
 mod tests {
     use std::f64::consts::PI;
 
-    use bevy::prelude::*;
+    use bevy::app::FixedMain;
 
-    use crate::{
-        bodies::body_id::id_from,
-        client::{ClientMode, ClientPlugin},
-        core_plugin::BodiesMapping,
-        orbit::{
-            update_global, update_local, update_time, GameTime, Position, ToggleTime, Velocity,
-        },
-        influence::{Influenced, Mass},
-        leapfrog::{update_acceleration, update_position, update_velocity},
-        game::{GameStage, ShipEvent},
-        spaceship::ShipInfo,
-        utils::algebra::circular_orbit_around_body,
-    };
+    use super::*;
 
-    use super::G;
+    use crate::{prelude::*, utils::algebra::circular_orbit_around_body};
 
     #[test]
     fn test_leapfrog() {
         let mut app = App::new();
-        app.add_plugins(ClientPlugin::testing().in_mode(ClientMode::Singleplayer))
-            .add_systems(
-                Update,
-                (
-                    update_time,
-                    update_local,
-                    update_global,
-                    update_position,
-                    update_acceleration,
-                    update_velocity,
-                )
-                    .chain()
-                    .run_if(resource_equals(ToggleTime(true))),
-            );
+        app.add_plugins(ClientPlugin::testing().in_mode(ClientMode::Singleplayer));
         app.update();
         let world = app.world_mut();
         let mapping = &world.resource::<BodiesMapping>().0;
@@ -162,6 +136,7 @@ mod tests {
         app.update();
         while app.world().resource::<GameTime>().time() < period {
             app.update();
+            FixedMain::run_fixed_main(app.world_mut());
         }
         let world = app.world_mut();
         let pos = world

@@ -1,39 +1,58 @@
-use bevy::prelude::Resource;
-use serde::{Deserialize, Serialize};
+//! A "Body" is a celestial body whose position is entirely determined by the
+//! current simtick, following orbital mechanics.
+use arrayvec::ArrayString;
+use bevy::{prelude::*, utils::HashMap};
+use bodies_config::BodiesConfig;
+use body_data::BodyData;
 
-use super::id::{IDBuilder, NumberIncrementer};
+use crate::game::{ClearOnUnload, LoadingState};
+use crate::physics::prelude::*;
+use crate::utils::de::read_main_bodies;
+
+use super::id::MAX_ID_LENGTH;
+use super::ObjectsUpdate;
 
 pub mod bodies_config;
 pub mod body_data;
-pub mod body_id;
 mod main_bodies;
 
-#[derive(Serialize, Deserialize)]
-pub(crate) struct BodyID(u64);
+pub type BodyID = ArrayString<MAX_ID_LENGTH>;
+// #[derive(Serialize, Deserialize)]
+// pub(crate) struct BodyID(u64);
 
-#[derive(Resource, Default)]
-struct BodyIDBuilder(NumberIncrementer);
+// #[derive(Resource, Default)]
+// struct BodyIDBuilder(NumberIncrementer);
 
-impl IDBuilder for BodyIDBuilder {
-    type ID=BodyID;
+// impl IDBuilder for BodyIDBuilder {
+//     type ID = BodyID;
 
-    fn incrementer(&mut self) -> &mut NumberIncrementer {
-        &mut self.0
-    }
-    
-    fn id_from_u64(u: u64) -> Self::ID {
-        BodyID(u)
-    }
-}
+//     fn incrementer(&mut self) -> &mut NumberIncrementer {
+//         &mut self.0
+//     }
+
+//     fn id_from_u64(u: u64) -> Self::ID {
+//         BodyID(u)
+//     }
+// }
 
 #[derive(Component)]
 pub struct PrimaryBody;
 
+#[derive(Component, Debug, Clone)]
+pub struct BodyInfo(pub BodyData);
+
 #[derive(Resource)]
 pub struct BodiesMapping(pub HashMap<BodyID, Entity>);
 
-#[derive(Component, Debug, Clone)]
-pub struct BodyInfo(pub BodyData);
+#[derive(Resource)]
+pub struct SystemSize(pub f64);
+
+pub fn plugin(app: &mut App) {
+    app.add_systems(
+        OnEnter(LoadingState::Loading),
+        build_system.in_set(ObjectsUpdate),
+    );
+}
 
 pub fn build_system(
     mut commands: Commands,
@@ -59,6 +78,7 @@ pub fn build_system(
             Mass(data.mass),
             BodyInfo(data),
             Velocity::default(),
+            ClearOnUnload,
         ));
         if id == primary_body {
             entity.insert(PrimaryBody);
@@ -69,17 +89,20 @@ pub fn build_system(
     loading_state.set(LoadingState::Loaded);
 }
 
+pub fn insert_system_size(mut commands: Commands, body_positions: Query<&Position>) {
+    let system_size = body_positions
+        .iter()
+        .map(|pos| pos.0.length())
+        .max_by(|a, b| a.total_cmp(b))
+        .unwrap();
+    commands.insert_resource(SystemSize(system_size));
+}
 
 #[cfg(test)]
 mod tests {
     use bevy::{app::App, ecs::query::With};
 
-    use crate::{
-        bodies::body_id::id_from,
-        client::{ClientMode, ClientPlugin},
-        core_plugin::{BodiesMapping, PrimaryBody},
-        orbit::EllipticalOrbit,
-    };
+    use crate::prelude::*;
 
     use super::BodyInfo;
 
