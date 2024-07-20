@@ -29,7 +29,7 @@ const POSSIBLE_CODE_STRINGS: [&str; 26] = [
     "pageup",
     "pagedown",
     "tab",
-    "back_tab",
+    "backtab",
     "del",
     "ins",
     "null",
