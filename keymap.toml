@@ -40,9 +40,10 @@ back = "esc"
 edit_trajectory = "space"
 new_ship = "n"
 cycle_options = "tab"
-cycle_options_back = "S tab"
+cycle_options_back = "S backtab"
 validate_new_ship = "enter"
 delete_char = "backspace"
+enter_explorer = "e"
 
 [editor]
 select_next = "down"

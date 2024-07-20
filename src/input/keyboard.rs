@@ -5,9 +5,7 @@ use std::{
 };
 
 use bevy::ecs::system::Resource;
-use serde::{
-    Deserialize, Serialize,
-};
+use serde::{Deserialize, Serialize};
 
 use super::key::Key;
 
@@ -169,7 +167,7 @@ impl Default for FleetScreenKeymap {
             edit_trajectory: Key::from_str_unchecked("space"),
             new_ship: Key::from_str_unchecked("n"),
             cycle_options: Key::from_str_unchecked("tab"),
-            cycle_options_back: Key::from_str_unchecked("S tab"),
+            cycle_options_back: Key::from_str_unchecked("S backtab"),
             validate_new_ship: Key::from_str_unchecked("enter"),
             delete_char: Key::from_str_unchecked("backspace"),
             enter_explorer: Key::from_str_unchecked("e"),
