@@ -5,11 +5,17 @@ use crate::objects::prelude::*;
 
 use crate::objects::bodies::BodyID;
 
+use super::time::TickEvent;
 use super::Position;
 
 pub fn plugin(app: &mut App) {
     app.add_systems(OnEnter(Loaded), setup_hill_spheres.in_set(InfluenceUpdate))
-        .add_systems(FixedUpdate, update_influence.in_set(InfluenceUpdate));
+        .add_systems(
+            FixedUpdate,
+            update_influence
+                .in_set(InfluenceUpdate)
+                .run_if(on_event::<TickEvent>()),
+        );
 }
 
 #[derive(SystemSet, Debug, PartialEq, Eq, Hash, Clone)]

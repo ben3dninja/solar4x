@@ -1,4 +1,7 @@
-use std::path::{Path, PathBuf};
+use std::{
+    fs::create_dir_all,
+    path::{Path, PathBuf},
+};
 
 use bevy::{prelude::*, state::app::StatesPlugin, time::TimePlugin};
 use tempfile::{tempdir, TempDir};
@@ -58,11 +61,12 @@ impl Plugin for GamePlugin {
         .add_computed_state::<Authoritative>()
         .add_sub_state::<GameStage>()
         .add_computed_state::<Loaded>()
-        .insert_resource(GameFiles::new(path))
+        .insert_resource(GameFiles::new(path).unwrap())
         .configure_sets(
             OnEnter(Loaded),
             (ObjectsUpdate, OrbitsUpdate, InfluenceUpdate, GUIUpdate).chain(),
         )
+        .configure_sets(Update, ObjectsUpdate.run_if(in_state(Loaded)))
         .add_systems(OnExit(Loaded), clear_loaded)
         .add_systems(OnEnter(GameStage::Action), enable_time)
         .add_systems(OnEnter(GameStage::Preparation), disable_time);
@@ -85,12 +89,14 @@ pub struct GameFiles {
 }
 
 impl GameFiles {
-    pub fn new(path: impl AsRef<Path>) -> Self {
+    pub fn new(path: impl AsRef<Path>) -> Result<Self, std::io::Error> {
         let root: PathBuf = path.as_ref().into();
-        Self {
+        let trajectories = root.join(TRAJECTORIES_PATH);
+        create_dir_all(trajectories)?;
+        Ok(Self {
             trajectories: root.join(TRAJECTORIES_PATH),
             root,
-        }
+        })
     }
 }
 

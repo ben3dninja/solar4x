@@ -24,6 +24,7 @@ pub const TRAJECTORIES_PATH: &str = "trajectories";
 pub fn plugin(app: &mut App) {
     app.add_event::<TrajectoryEvent>()
         .add_event::<VelocityUpdate>()
+        // This system set is currently configured in the [physics] module
         .add_systems(FixedUpdate, handle_thrusts.in_set(TrajectoryUpdate))
         .add_systems(
             OnEnter(GameStage::Action),

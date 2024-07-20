@@ -5,9 +5,13 @@ use explorer::{ExplorerContext, ExplorerScreen};
 use fleet::{FleetContext, FleetScreen};
 use start::{StartMenu, StartMenuContext};
 
-use crate::{client::ClientMode, objects::ships::ShipID, prelude::exit_on_error_if_app};
+use crate::{
+    client::ClientMode,
+    objects::ships::ShipID,
+    prelude::{exit_on_error_if_app, Loaded},
+};
 
-use super::{widget::space_map::SpaceMap, InputReading, Render};
+use super::{widget::space_map::SpaceMap, InputReading, RenderSet};
 
 pub mod editor;
 pub mod explorer;
@@ -61,7 +65,7 @@ pub fn plugin(app: &mut App) {
         render
             .pipe(exit_on_error_if_app)
             .run_if(resource_exists::<RatatuiContext>)
-            .in_set(Render),
+            .in_set(RenderSet),
     );
 }
 
@@ -111,4 +115,11 @@ fn render(
         }
     })?;
     Ok(())
+}
+
+/// Helper function to reduce boilerplate
+pub fn in_loaded_screen<Context: Resource>(screen: AppScreen) -> impl Condition<()> {
+    in_state(screen)
+        .and_then(resource_exists::<Context>)
+        .and_then(in_state(Loaded))
 }

@@ -27,7 +27,7 @@ pub fn plugin(app: &mut App) {
                     .pipe(exit_on_error_if_app)
                     .in_set(EventHandling),
             )
-                .run_if(in_state(AppScreen::Fleet)),
+                .run_if(in_loaded_screen::<FleetContext>(AppScreen::Fleet)),
         )
         .add_systems(
             PostUpdate,
@@ -44,6 +44,9 @@ pub fn plugin(app: &mut App) {
             clear_screen.run_if(not(in_state(AppScreen::Fleet))),
         );
 }
+
+#[derive(SystemSet, Debug, Clone, Copy, Hash, PartialEq, Eq, Default)]
+struct FleetScreenSet;
 
 fn create_screen(
     mut commands: Commands,

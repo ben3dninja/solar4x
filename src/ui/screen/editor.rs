@@ -33,9 +33,13 @@ pub fn plugin(app: &mut App) {
                 read_input.in_set(InputReading),
                 handle_editor_events.in_set(EventHandling),
             )
-                .run_if(in_state(InEditor)),
+                .run_if(in_state(InEditor))
+                .run_if(resource_exists::<EditorContext>),
         )
-        .add_systems(OnEnter(InEditor), (create_screen, create_predictions))
+        .add_systems(
+            OnEnter(InEditor),
+            (create_screen, create_predictions).chain(),
+        )
         .add_systems(OnExit(InEditor), clear_screen);
 }
 
