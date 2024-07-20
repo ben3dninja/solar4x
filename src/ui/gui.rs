@@ -24,7 +24,7 @@ use crate::{
 
 use super::{
     widget::space_map::{SpaceMap, ZOOM_STEP},
-    UiUpdate,
+    RenderSet, UiUpdate,
 };
 
 const MAX_WIDTH: f32 = 1000.;
@@ -60,16 +60,16 @@ impl Plugin for GuiPlugin {
         )
         .add_systems(
             PostUpdate,
-            (update_transform, update_camera_pos)
-                .chain()
+            (
+                (update_transform, update_camera_pos)
+                    .chain()
+                    .in_set(UiUpdate),
+                draw_gizmos.in_set(RenderSet),
+            )
                 .run_if(resource_exists::<SpaceMap>)
-                .run_if(in_state(Loaded))
-                .in_set(UiUpdate),
+                .run_if(in_state(Loaded)),
         )
-        .add_systems(
-            Update,
-            (zoom_with_scroll, draw_gizmos).run_if(resource_exists::<SpaceMap>),
-        );
+        .add_systems(Update, zoom_with_scroll.run_if(resource_exists::<SpaceMap>));
     }
 }
 

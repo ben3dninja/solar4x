@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use crate::utils::Direction2;
 
 /// Number of server updates (ticks) per real time second
-pub const TPS: f64 = 1.;
+pub const TPS: f32 = 1.;
 
 /// Number of simulation updates (simticks) per real time second
 pub const STPS: f64 = 64.;
@@ -16,7 +16,9 @@ pub fn plugin(app: &mut App) {
         .init_resource::<ToggleTime>()
         .init_resource::<GameTime>()
         .init_resource::<SimStepSize>()
+        .init_resource::<TickTimer>()
         .add_event::<TimeEvent>()
+        .add_event::<TickEvent>()
         .add_systems(
             FixedUpdate,
             (update_simtick, update_tick).in_set(TimeUpdate),
@@ -54,6 +56,12 @@ impl Default for SimStepSize {
 
 #[derive(Resource)]
 struct TickTimer(Timer);
+
+impl Default for TickTimer {
+    fn default() -> Self {
+        Self(Timer::from_seconds(1. / TPS, TimerMode::Repeating))
+    }
+}
 
 #[derive(Event, Default)]
 pub struct TickEvent;

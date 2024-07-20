@@ -8,7 +8,10 @@ pub mod screen;
 pub mod widget;
 
 pub mod prelude {
-    pub use super::{screen::AppScreen, EventHandling, InputReading, TuiPlugin};
+    pub use super::{
+        screen::{in_loaded_screen, AppScreen},
+        EventHandling, InputReading, TuiPlugin,
+    };
 }
 
 #[derive(Default)]
@@ -33,8 +36,9 @@ impl Plugin for TuiPlugin {
         } else {
             app.add_plugins(RatatuiPlugins::default());
         }
-        app.insert_resource(self.keymap.clone())
-            .configure_sets(PostUpdate, (UiUpdate, Render).chain())
+        app.add_plugins(screen::plugin)
+            .insert_resource(self.keymap.clone())
+            .configure_sets(PostUpdate, (UiUpdate, RenderSet).chain())
             .configure_sets(Update, (InputReading, EventHandling).chain());
     }
 }
@@ -49,7 +53,7 @@ pub struct EventHandling;
 pub struct UiUpdate;
 
 #[derive(SystemSet, Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Render;
+pub struct RenderSet;
 
 #[cfg(test)]
 mod tests {

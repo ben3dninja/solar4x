@@ -4,6 +4,8 @@ use leapfrog::LeapfrogUpdate;
 use orbit::OrbitsUpdate;
 use time::{TimeUpdate, ToggleTime};
 
+use crate::objects::ships::trajectory::TrajectoryUpdate;
+
 pub mod influence;
 pub mod leapfrog;
 pub mod orbit;
@@ -46,7 +48,13 @@ impl Plugin for PhysicsPlugin {
         ))
         .configure_sets(
             FixedUpdate,
-            (TimeUpdate, OrbitsUpdate, InfluenceUpdate, LeapfrogUpdate)
+            (
+                TimeUpdate,
+                OrbitsUpdate,
+                InfluenceUpdate,
+                TrajectoryUpdate,
+                LeapfrogUpdate,
+            )
                 .chain()
                 .in_set(PhysicsUpdate)
                 .run_if(resource_equals(ToggleTime(true))),

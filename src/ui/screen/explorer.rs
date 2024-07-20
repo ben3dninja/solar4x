@@ -44,15 +44,9 @@ pub fn plugin(app: &mut App) {
             (
                 read_input.in_set(InputReading),
                 handle_explorer_events.in_set(EventHandling),
+                update_space_map.in_set(UiUpdate),
             )
-                .run_if(resource_exists::<ExplorerContext>),
-        )
-        .add_systems(
-            Update,
-            update_space_map
-                .run_if(resource_exists::<ExplorerContext>)
-                .run_if(resource_exists::<SpaceMap>)
-                .in_set(UiUpdate),
+                .run_if(in_loaded_screen::<ExplorerContext>(AppScreen::Explorer)),
         )
         .add_systems(
             OnEnter(AppScreen::Explorer),
