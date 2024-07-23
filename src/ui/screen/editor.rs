@@ -197,6 +197,7 @@ fn create_predictions(mut commands: Commands, mut ctx: ResMut<EditorContext>) {
                         simtick: tick + i as u64,
                     },
                     Position::default(),
+                    Velocity::default(),
                     TransformBundle::from_transform(Transform::from_xyz(0., 0., -3.)),
                     SelectionRadius {
                         min_radius: MAX_HEIGHT / 100.,
@@ -214,7 +215,7 @@ fn update_predictions(
     query: Query<(&Acceleration, &Influenced)>,
     bodies: Query<(&EllipticalOrbit, &BodyInfo)>,
     bodies_mapping: Res<BodiesMapping>,
-    mut positions: Query<&mut Position, With<Prediction>>,
+    mut coords: Query<(&mut Position, &mut Velocity), With<Prediction>>,
 ) {
     let (
         &Acceleration { current: acc, .. },
@@ -237,9 +238,9 @@ fn update_predictions(
         &bodies_mapping.0,
     );
     let mut i = 0;
-    let mut iter = positions.iter_many_mut(&ctx.predictions);
-    while let Some(mut pos) = iter.fetch_next() {
-        pos.0 = predictions[i];
+    let mut iter = coords.iter_many_mut(&ctx.predictions);
+    while let Some((mut pos, mut speed)) = iter.fetch_next() {
+        (pos.0, speed.0) = predictions[i];
         i += 1;
     }
 }
