@@ -48,7 +48,7 @@ pub struct EllipticalOrbit {
     /// 3D position with respect to the host body (in kilometers)
     pub local_pos: DVec3,
     /// 3D velocity (in kilometers per day)
-    pub local_velocity: DVec3,
+    pub local_speed: DVec3,
 }
 
 const E_TOLERANCE: f64 = 1e-6;
@@ -105,7 +105,7 @@ impl EllipticalOrbit {
         let O = self.long_asc_node.to_radians();
         let I = self.inclination.to_radians();
         self.local_pos = rotate(self.orbital_position, o, O, I);
-        self.local_velocity = rotate(self.orbital_velocity, o, O, I);
+        self.local_speed = rotate(self.orbital_velocity, o, O, I);
     }
 }
 
@@ -143,7 +143,7 @@ pub fn update_global(
         if let Some(entity) = mapping.0.get(&id) {
             if let Ok((mut world_pos, mut world_velocity, orbit, info)) = query.get_mut(*entity) {
                 let pos = parent_pos + orbit.local_pos;
-                let velocity = parent_velocity + orbit.local_velocity;
+                let velocity = parent_velocity + orbit.local_speed;
                 world_pos.0 = pos;
                 world_velocity.0 = velocity;
                 queue.extend(info.0.orbiting_bodies.iter().map(|c| (*c, (pos, velocity))));
@@ -182,7 +182,7 @@ mod tests {
             .iter(world)
             .find(|(_, BodyInfo(data))| data.id == id_from("terre"))
             .unwrap();
-        let (earth_dist, earth_speed) = (orbit.local_pos.length(), orbit.local_velocity.length());
+        let (earth_dist, earth_speed) = (orbit.local_pos.length(), orbit.local_speed.length());
         assert!(147095000. <= earth_dist);
         assert!(earth_dist <= 152100000.);
         assert!((earth_speed / 24. - 107200.).abs() <= 20000.);

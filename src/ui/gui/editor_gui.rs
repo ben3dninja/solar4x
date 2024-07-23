@@ -7,7 +7,10 @@ use crate::{
         RenderSet,
     },
 };
-use bevy::{color::palettes::css::RED, prelude::*};
+use bevy::{
+    color::palettes::css::{BLUE, GREEN, RED, WHITE},
+    prelude::*,
+};
 
 use super::MAX_HEIGHT;
 
@@ -43,12 +46,28 @@ fn draw_maneuver_node(
     space_map: Res<SpaceMap>,
     context: Res<EditorContext>,
     positions: Query<&Transform>,
+    speeds: Query<&Velocity>,
 ) {
     if let Some(e) = context.selected_prediction_entity() {
-        gizmos.circle_2d(
-            positions.get(e).unwrap().translation.xy(),
-            MAX_HEIGHT / (100. * space_map.zoom_level as f32),
+        let scale = MAX_HEIGHT as f64 * space_map.system_size;
+        let forward = (speeds.get(e).unwrap().0 * scale).normalize().as_vec3();
+        let center = positions.get(e).unwrap().translation;
+        let focus = space_map
+            .focus_body
+            .map_or(Vec3::ZERO, |e| positions.get(e).unwrap().translation);
+        let radial = (center - focus).normalize();
+        let down = forward
+            .cross(radial)
+            .normalize_or(forward.cross(Vec3::Z).normalize_or(forward.cross(Vec3::Y)));
+        let right = down.cross(forward).normalize();
+        let radius = MAX_HEIGHT / (50. * space_map.zoom_level as f32);
+        gizmos.circle_2d(center.xy(), radius, WHITE);
+        gizmos.arrow(
+            center + radius * forward,
+            center + 3. * radius * forward,
             RED,
         );
+        gizmos.arrow(center + radius * right, center + 3. * radius * right, GREEN);
+        gizmos.arrow(center + radius * down, center + 3. * radius * down, BLUE);
     }
 }

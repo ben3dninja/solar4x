@@ -35,7 +35,7 @@ impl PredictionStart {
         reference: Option<Entity>,
         bodies: &Query<(&EllipticalOrbit, &BodyInfo)>,
         mapping: &HashMap<BodyID, Entity>,
-    ) -> Vec<DVec3> {
+    ) -> Vec<(DVec3, DVec3)> {
         let dt = GAMETIME_PER_SIMTICK;
         let mut pos = self.pos;
         let mut speed = self.speed;
@@ -44,48 +44,59 @@ impl PredictionStart {
         let masses = influencers
             .clone()
             .map(|e| bodies.get(e).unwrap().1 .0.mass);
-        let initial_positions = get_bodies_pos(influencers.clone(), bodies, mapping, self.tick);
-        let initial_ref_pos = ref_index.map_or(DVec3::ZERO, |i| initial_positions[i]);
+        let initial_bodies_coords =
+            get_bodies_coordinates(influencers.clone(), bodies, mapping, self.tick);
+        let initial_ref_coords =
+            ref_index.map_or((DVec3::ZERO, DVec3::ZERO), |i| initial_bodies_coords[i]);
         let mut acc = self.acc;
         let mut previous_acc;
         for i in 1..number + 1 {
             pos += get_dx(speed, acc, dt);
-            let positions =
-                get_bodies_pos(influencers.clone(), bodies, mapping, self.tick + i as u64);
-            let ref_pos = ref_index.map_or(DVec3::ZERO, |i| positions[i]);
+            let (bodies_pos, bodies_speeds): (Vec<_>, Vec<_>) =
+                get_bodies_coordinates(influencers.clone(), bodies, mapping, self.tick + i as u64)
+                    .into_iter()
+                    .unzip();
+            let ref_coords = ref_index.map_or((DVec3::ZERO, DVec3::ZERO), |i| {
+                (bodies_pos[i], bodies_speeds[i])
+            });
             previous_acc = acc;
-            acc = get_acceleration(pos, positions.into_iter().zip(masses.clone()));
+            acc = get_acceleration(pos, bodies_pos.into_iter().zip(masses.clone()));
             speed += get_dv(previous_acc, acc, dt);
-            predictions.push(pos - ref_pos + initial_ref_pos);
+            predictions.push((
+                pos - ref_coords.0 + initial_ref_coords.0,
+                speed - ref_coords.1,
+            ));
         }
         predictions
     }
 }
 
-pub fn get_bodies_pos(
+pub fn get_bodies_coordinates(
     selected_bodies: impl Iterator<Item = Entity>,
     bodies: &Query<(&EllipticalOrbit, &BodyInfo)>,
     mapping: &HashMap<BodyID, Entity>,
     tick: u64,
-) -> Vec<DVec3> {
+) -> Vec<(DVec3, DVec3)> {
     fn compute_pos_rec(
         e: Entity,
-        map: &mut HashMap<Entity, DVec3>,
+        map: &mut HashMap<Entity, (DVec3, DVec3)>,
         tick: u64,
         bodies: &Query<(&EllipticalOrbit, &BodyInfo)>,
         mapping: &HashMap<BodyID, Entity>,
-    ) -> DVec3 {
+    ) -> (DVec3, DVec3) {
         let (orbit, BodyInfo(data)) = bodies.get(e).unwrap();
         let mut o = orbit.clone();
         o.update_pos(tick as f64 * GAMETIME_PER_SIMTICK);
-        if let Some(pos) = map.get(&e) {
-            *pos
+        if let Some(coords) = map.get(&e) {
+            *coords
         } else {
-            let pos = data.host_body.map_or(DVec3::ZERO, |parent| {
-                compute_pos_rec(mapping[&parent], map, tick, bodies, mapping) + o.local_pos
+            let (pos, speed) = data.host_body.map_or((DVec3::ZERO, DVec3::ZERO), |parent| {
+                let (parent_pos, parent_speed) =
+                    compute_pos_rec(mapping[&parent], map, tick, bodies, mapping);
+                (parent_pos + o.local_pos, parent_speed + o.local_speed)
             });
-            map.insert(e, pos);
-            pos
+            map.insert(e, (pos, speed));
+            (pos, speed)
         }
     }
 
@@ -135,7 +146,7 @@ mod tests {
             acc: get_acceleration(pos, query.iter_many(&influencers).map(|(p, m)| (p.0, m.0))),
         }
         .compute_predictions(3, influencers.into_iter(), Some(earth), &bodies, &mapping.0);
-        for (i, p) in predictions.into_iter().enumerate() {
+        for (i, (p, _)) in predictions.into_iter().enumerate() {
             // dbg!(p);
             // dbg!(pos + (i + 1) as f64 * (speed - earth_speed.0) * GAMETIME_PER_SIMTICK);
             assert!(
