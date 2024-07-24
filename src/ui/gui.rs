@@ -21,6 +21,8 @@ use crate::{
     },
 };
 
+use self::editor_gui::CurrentGizmo;
+
 use super::{
     widget::space_map::{SpaceMap, ZOOM_STEP},
     RenderSet, UiUpdate,
@@ -61,7 +63,10 @@ impl Plugin for GuiPlugin {
                 Update,
                 (
                     zoom_with_scroll,
-                    pan_when_dragging.run_if(input_pressed(MouseButton::Left)),
+                    pan_when_dragging.run_if(
+                        input_pressed(MouseButton::Left)
+                            .and_then(resource_exists_and_equals(CurrentGizmo(None))),
+                    ),
                 )
                     .run_if(resource_exists::<SpaceMap>),
             )
@@ -79,9 +84,10 @@ pub struct GUIUpdate;
 #[derive(Event)]
 pub struct SelectObjectEvent {
     pub entity: Entity,
+    pub cursor_pos: Vec2,
 }
 
-#[derive(Component, Copy, Clone, Debug)]
+#[derive(Component, Copy, Clone, Debug, Default)]
 /// A selectable object. The actual radius is the radius of the object in transform coordinates,
 /// but since it can seem too small when zooming out, we can provide a minimum radius that is independent of zoom level
 pub struct SelectionRadius {
@@ -220,7 +226,9 @@ fn send_select_object_event(
                                     .actual_radius
                                     .max(rad.min_radius / map.zoom_level as f32)
                         })
-                        .map(|(entity, _, _)| writer.send(SelectObjectEvent { entity }));
+                        .map(|(entity, _, _)| {
+                            writer.send(SelectObjectEvent { entity, cursor_pos })
+                        });
                 }
             }
         }

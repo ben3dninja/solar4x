@@ -1,6 +1,11 @@
+use std::collections::BTreeMap;
+
 use bevy::{math::DVec3, prelude::*, utils::HashMap};
 
-use crate::{objects::prelude::*, physics::prelude::*};
+use crate::{
+    objects::{prelude::*, ships::trajectory::ManeuverNode},
+    physics::prelude::*,
+};
 
 use super::{
     leapfrog::{get_acceleration, get_dv, get_dx},
@@ -11,7 +16,7 @@ use super::{
 pub const PREDICTIONS_STEP: usize = 20;
 
 /// A component representing identifying a prediction of a ship at a selected time
-#[derive(Component)]
+#[derive(Component, Clone, Copy)]
 pub struct Prediction {
     pub ship: Entity,
     pub index: usize,
@@ -35,6 +40,7 @@ impl PredictionStart {
         reference: Option<Entity>,
         bodies: &Query<(&EllipticalOrbit, &BodyInfo)>,
         mapping: &HashMap<BodyID, Entity>,
+        nodes: &BTreeMap<u64, ManeuverNode>,
     ) -> Vec<(DVec3, DVec3)> {
         let dt = GAMETIME_PER_SIMTICK;
         let mut pos = self.pos;
@@ -51,9 +57,13 @@ impl PredictionStart {
         let mut acc = self.acc;
         let mut previous_acc;
         for i in 1..number + 1 {
+            let tick = self.tick + i as u64;
+            if let Some(node) = nodes.get(&tick) {
+                speed += node.thrust;
+            }
             pos += get_dx(speed, acc, dt);
             let (bodies_pos, bodies_speeds): (Vec<_>, Vec<_>) =
-                get_bodies_coordinates(influencers.clone(), bodies, mapping, self.tick + i as u64)
+                get_bodies_coordinates(influencers.clone(), bodies, mapping, tick)
                     .into_iter()
                     .unzip();
             let ref_coords = ref_index.map_or((DVec3::ZERO, DVec3::ZERO), |i| {
@@ -145,7 +155,14 @@ mod tests {
             tick: 0,
             acc: get_acceleration(pos, query.iter_many(&influencers).map(|(p, m)| (p.0, m.0))),
         }
-        .compute_predictions(3, influencers.into_iter(), Some(earth), &bodies, &mapping.0);
+        .compute_predictions(
+            3,
+            influencers.into_iter(),
+            Some(earth),
+            &bodies,
+            &mapping.0,
+            &BTreeMap::new(),
+        );
         for (i, (p, _)) in predictions.into_iter().enumerate() {
             // dbg!(p);
             // dbg!(pos + (i + 1) as f64 * (speed - earth_speed.0) * GAMETIME_PER_SIMTICK);
