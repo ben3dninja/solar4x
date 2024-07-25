@@ -3,7 +3,7 @@ use std::{
     fs::{read_dir, remove_file, File},
     io::{Read, Write},
     iter::Peekable,
-    path::Path,
+    path::{Path, PathBuf},
     sync::Arc,
 };
 
@@ -34,6 +34,10 @@ pub fn plugin(app: &mut App) {
             OnEnter(GameStage::Action),
             dispatch_trajectories.run_if(in_state(Authoritative)),
         )
+        .add_systems(
+            OnEnter(GameStage::Preparation),
+            remove_old_nodes.run_if(in_state(Authoritative)),
+        )
         .add_systems(Update, handle_trajectory_event.pipe(exit_on_error_if_app));
 }
 
@@ -51,7 +55,7 @@ pub struct ManeuverNode {
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct Trajectory {
     #[serde(with = "vectorize")]
-    nodes: BTreeMap<u64, ManeuverNode>,
+    pub nodes: BTreeMap<u64, ManeuverNode>,
 }
 
 pub enum TrajectoryError {
@@ -98,11 +102,19 @@ pub struct VelocityUpdate {
     pub thrust: DVec3,
 }
 
-pub fn read_trajectory(path: impl AsRef<Path>) -> color_eyre::Result<Trajectory> {
+fn read_trajectory(path: impl AsRef<Path>) -> color_eyre::Result<Trajectory> {
     let mut file = File::open(&path)?;
     let mut buf = String::new();
     file.read_to_string(&mut buf)?;
     toml::from_str(&buf).map_err(color_eyre::eyre::Error::from)
+}
+
+fn build_path(dir: impl AsRef<Path>, id: ShipID) -> PathBuf {
+    dir.as_ref().join(id.to_string())
+}
+
+pub fn read_ship_trajectory(dir: impl AsRef<Path>, id: ShipID) -> color_eyre::Result<Trajectory> {
+    read_trajectory(build_path(dir, id))
 }
 
 pub fn write_trajectory(path: impl AsRef<Path>, t: &Trajectory) -> color_eyre::Result<()> {
@@ -173,20 +185,32 @@ pub fn dispatch_trajectories(
     }
 }
 
+pub fn remove_old_nodes(dir: Res<GameFiles>, time: Res<GameTime>) {
+    if let Ok(dir) = read_dir(&dir.trajectories) {
+        for entry in dir.flatten() {
+            let path = entry.path();
+            if let Ok(mut traj) = read_trajectory(&path) {
+                traj.nodes.retain(|t, _| *t >= time.simtick);
+                write_trajectory(path, &traj).expect("Could not write trajectory");
+            }
+        }
+    }
+}
+
 pub fn handle_trajectory_event(
     mut reader: EventReader<TrajectoryEvent>,
     dir: Res<GameFiles>,
 ) -> color_eyre::Result<()> {
     use TrajectoryEvent::*;
     for event in reader.read() {
-        let path = dir.trajectories.join(
-            match event {
+        let path = build_path(
+            &dir.trajectories,
+            *match event {
                 Create { ship, .. } => ship,
                 Delete(s) => s,
                 AddNode { ship, .. } => ship,
                 RemoveNode { ship, .. } => ship,
-            }
-            .to_string(),
+            },
         );
         match event {
             Create { trajectory, .. } => {
@@ -194,7 +218,7 @@ pub fn handle_trajectory_event(
             }
             Delete(_) => remove_file(path)?,
             AddNode { node, simtick, .. } => {
-                let mut t = read_trajectory(&path)?;
+                let mut t = read_trajectory(&path).unwrap_or_default();
                 t.nodes.insert(*simtick, node.clone());
                 write_trajectory(path, &t)?;
             }

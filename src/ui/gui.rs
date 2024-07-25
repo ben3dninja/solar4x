@@ -1,5 +1,5 @@
 use bevy::{
-    color::palettes::css::{BLACK, DARK_GRAY, GOLD, TEAL},
+    color::palettes::css::{BLACK, DARK_GRAY, GOLD, GREEN, TEAL},
     core_pipeline::bloom::BloomSettings,
     input::{
         common_conditions::input_pressed,
@@ -54,7 +54,8 @@ impl Plugin for GuiPlugin {
                         .chain()
                         .in_set(UiUpdate),
                     draw_gizmos.in_set(RenderSet),
-                    debug_print,
+                    // debug_print,
+                    // draw_selection_spheres,
                 )
                     .run_if(resource_exists::<SpaceMap>)
                     .run_if(in_state(Loaded)),
@@ -63,6 +64,9 @@ impl Plugin for GuiPlugin {
                 Update,
                 (
                     zoom_with_scroll,
+                    (adaptive_scale, adaptive_translation)
+                        .after(zoom_with_scroll)
+                        .after(EventHandling),
                     pan_when_dragging.run_if(
                         input_pressed(MouseButton::Left)
                             .and_then(resource_exists_and_equals(CurrentGizmo(None))),
@@ -87,12 +91,24 @@ pub struct SelectObjectEvent {
     pub cursor_pos: Vec2,
 }
 
+#[derive(Component)]
+pub struct AdaptiveScaling(f32);
+
+#[derive(Component)]
+pub struct AdaptiveTranslation(Vec3);
+
 #[derive(Component, Copy, Clone, Debug, Default)]
 /// A selectable object. The actual radius is the radius of the object in transform coordinates,
 /// but since it can seem too small when zooming out, we can provide a minimum radius that is independent of zoom level
 pub struct SelectionRadius {
     pub min_radius: f32,
     pub actual_radius: f32,
+}
+
+impl SelectionRadius {
+    pub fn radius(&self, zoom_level: f64) -> f32 {
+        self.actual_radius.max(self.min_radius / zoom_level as f32)
+    }
 }
 
 #[derive(Resource)]
@@ -186,6 +202,21 @@ fn insert_display_components(
     }
 }
 
+fn adaptive_scale(mut query: Query<(&mut Transform, &AdaptiveScaling)>, space_map: Res<SpaceMap>) {
+    query
+        .par_iter_mut()
+        .for_each(|(mut t, s)| t.scale = Vec3::ONE * s.0 * space_map.zoom_level as f32)
+}
+
+fn adaptive_translation(
+    mut query: Query<(&mut Transform, &AdaptiveTranslation)>,
+    space_map: Res<SpaceMap>,
+) {
+    query
+        .par_iter_mut()
+        .for_each(|(mut t, init)| t.translation = init.0 / space_map.zoom_level as f32)
+}
+
 fn zoom_with_scroll(mut events: EventReader<MouseWheel>, mut space_map: ResMut<SpaceMap>) {
     for event in events.read() {
         space_map.zoom_level *= ZOOM_STEP.powf(match event.unit {
@@ -207,7 +238,7 @@ fn send_select_object_event(
     window: Query<&Window, With<PrimaryWindow>>,
     cam: Query<(&Camera, &GlobalTransform)>,
     mut writer: EventWriter<SelectObjectEvent>,
-    objects: Query<(Entity, &Transform, &SelectionRadius)>,
+    objects: Query<(Entity, &GlobalTransform, &SelectionRadius)>,
     map: Res<SpaceMap>,
 ) {
     let (cam, cam_transform) = cam.single();
@@ -221,10 +252,8 @@ fn send_select_object_event(
                     objects
                         .iter()
                         .find(|(_, pos, rad)| {
-                            (pos.translation.xy() - translation).length()
-                                < rad
-                                    .actual_radius
-                                    .max(rad.min_radius / map.zoom_level as f32)
+                            (pos.translation().xy() - translation).length()
+                                < rad.radius(map.zoom_level)
                         })
                         .map(|(entity, _, _)| {
                             writer.send(SelectObjectEvent { entity, cursor_pos })
@@ -379,4 +408,18 @@ fn debug_print(mut keys: EventReader<bevy_ratatui::event::KeyEvent>, cam: Query<
             eprintln!("{}", viewable_radius(cam.single()).unwrap());
         }
     }
+}
+
+fn draw_selection_spheres(
+    mut gizmos: Gizmos,
+    spheres: Query<(&SelectionRadius, &GlobalTransform)>,
+    space_map: Res<SpaceMap>,
+) {
+    spheres.iter().for_each(|(r, pos)| {
+        gizmos.circle_2d(
+            pos.translation().xy(),
+            r.radius(space_map.zoom_level),
+            GREEN,
+        );
+    });
 }

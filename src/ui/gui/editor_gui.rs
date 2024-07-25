@@ -23,7 +23,7 @@ use bevy::{
     window::PrimaryWindow,
 };
 
-use super::{SelectObjectEvent, MAX_HEIGHT};
+use super::{AdaptiveTranslation, SelectObjectEvent, MAX_HEIGHT};
 
 const GIZMO_COLORS: [Color; 6] = [
     Color::Srgba(RED),
@@ -72,10 +72,10 @@ pub(super) struct GizmoDraggingState {
 }
 
 #[derive(Component, Clone, Debug)]
-struct ArrowGizmo {
-    color: Color,
+pub(super) struct ArrowGizmo {
+    pub color: Color,
     /// The unit vector pointing in the direction of the arrow
-    direction: Vec3,
+    pub direction: Vec3,
 }
 
 fn draw_predictions(
@@ -107,22 +107,29 @@ fn spawn_arrows(
         let focus = space_map
             .focus_body
             .map_or(Vec3::ZERO, |e| positions.get(e).unwrap().translation);
-        eprintln!("Pos: {}, speed: {}, focus: {}", pos, speed, focus);
         let directions = maneuver_gizmos_directions(pos, speed, focus);
-        for (i, d) in directions.iter().enumerate() {
-            eprintln!("Spawning gizmo with direction {:?}", d);
-            commands.spawn((
-                ArrowGizmo {
-                    color: GIZMO_COLORS[i],
-                    direction: *d,
-                },
-                ClearOnEditorExit,
-                SelectionRadius {
-                    min_radius: MAX_HEIGHT / 50.,
-                    ..default()
-                },
-            ));
-        }
+        commands
+            .spawn(TransformBundle::from_transform(
+                Transform::from_translation(pos),
+            ))
+            .with_children(|parent| {
+                let radius = MAX_HEIGHT / 50.;
+                for (i, d) in directions.iter().enumerate() {
+                    parent.spawn((
+                        ArrowGizmo {
+                            color: GIZMO_COLORS[i],
+                            direction: *d,
+                        },
+                        ClearOnEditorExit,
+                        SelectionRadius {
+                            min_radius: radius,
+                            ..default()
+                        },
+                        TransformBundle::default(),
+                        AdaptiveTranslation(*d * 2. * radius),
+                    ));
+                }
+            });
     }
 }
 
@@ -136,20 +143,21 @@ fn draw_maneuver_node(
     context: Res<EditorContext>,
     positions: Query<&Transform>,
     current_gizmo: Res<CurrentGizmo>,
-    arrows: Query<(Entity, &ArrowGizmo)>,
+    arrows: Query<(Entity, &ArrowGizmo, &GlobalTransform)>,
 ) {
     if let Some(e) = context.selected_prediction_entity() {
         let pos = positions.get(e).unwrap().translation;
-        let radius = MAX_HEIGHT / (50. * space_map.zoom_level as f32);
-        gizmos.circle_2d(pos.xy(), radius, WHITE);
-        for (gizmo, arrow) in arrows.iter() {
+        let size = MAX_HEIGHT / (50. * space_map.zoom_level as f32);
+        gizmos.circle_2d(pos.xy(), size, WHITE);
+        for (gizmo, arrow, arrow_pos) in arrows.iter() {
             let mut color = arrow.color;
             if current_gizmo.0.as_ref().is_some_and(|g| g.gizmo == gizmo) {
                 color = color.mix(&Color::WHITE, 0.5);
             }
+            let pos = arrow_pos.translation();
             gizmos.arrow(
-                pos + arrow.direction * radius,
-                pos + arrow.direction * 3. * radius,
+                pos - size * arrow.direction,
+                pos + size * arrow.direction,
                 color,
             );
         }
@@ -199,10 +207,9 @@ fn handle_drag_gizmo(
         }) = current_gizmo.0
         {
             let zoom = space_map.zoom_level;
-            let scale = MAX_HEIGHT as f64 * space_map.system_size;
             update_thrust.send(UpdateThrust(
-                direction.as_dvec3() * (cursor_pos - initial_mouse_pos).length() as f64
-                    / (zoom * scale),
+                direction.as_dvec3() * (cursor_pos - initial_mouse_pos).length() as f64 * 1e7
+                    / zoom,
             ));
         }
     }
