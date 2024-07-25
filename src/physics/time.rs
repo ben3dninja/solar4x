@@ -33,7 +33,7 @@ pub struct TimeUpdate;
 pub struct ToggleTime(pub bool);
 
 /// The elapsed time in game (stores simulation ticks)
-#[derive(Resource, Default)]
+#[derive(Resource, Default, Debug, Clone, Copy)]
 pub struct GameTime {
     pub simtick: u64,
 }

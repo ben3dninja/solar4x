@@ -18,7 +18,7 @@ use crate::{
     objects::prelude::{BodiesMapping, BodyID},
     physics::prelude::*,
     prelude::{exit_on_error_if_app, GameStage},
-    utils::algebra::convert_orbital_to_global,
+    utils::algebra::orbital_to_global_matrix,
 };
 
 use super::{ShipID, ShipInfo, ShipsMapping};
@@ -29,7 +29,12 @@ pub fn plugin(app: &mut App) {
     app.add_event::<TrajectoryEvent>()
         .add_event::<VelocityUpdate>()
         // This system set is currently configured in the [physics] module
-        .add_systems(FixedUpdate, handle_thrusts.in_set(TrajectoryUpdate))
+        .add_systems(
+            FixedUpdate,
+            (follow_trajectory, handle_thrusts)
+                .chain()
+                .in_set(TrajectoryUpdate),
+        )
         .add_systems(
             OnEnter(GameStage::Action),
             dispatch_trajectories.run_if(in_state(Authoritative)),
@@ -56,12 +61,6 @@ pub struct ManeuverNode {
 pub struct Trajectory {
     #[serde(with = "vectorize")]
     pub nodes: BTreeMap<u64, ManeuverNode>,
-}
-
-pub enum TrajectoryError {
-    MultipleNodesPerTime,
-    NotSorted,
-    IndexOutOfBounds,
 }
 
 /// A trajectory taken by an object, storing the index of the last processed maneuver node in the action stage the instance was created
@@ -102,29 +101,67 @@ pub struct VelocityUpdate {
     pub thrust: DVec3,
 }
 
-fn read_trajectory(path: impl AsRef<Path>) -> color_eyre::Result<Trajectory> {
+#[derive(Debug)]
+pub enum TrajectoryError {
+    Io(std::io::Error),
+    De(toml::de::Error),
+    Ser(toml::ser::Error),
+}
+
+impl From<std::io::Error> for TrajectoryError {
+    fn from(value: std::io::Error) -> Self {
+        Self::Io(value)
+    }
+}
+
+impl From<toml::de::Error> for TrajectoryError {
+    fn from(value: toml::de::Error) -> Self {
+        Self::De(value)
+    }
+}
+
+impl From<toml::ser::Error> for TrajectoryError {
+    fn from(value: toml::ser::Error) -> Self {
+        Self::Ser(value)
+    }
+}
+
+impl std::fmt::Display for TrajectoryError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TrajectoryError::Io(err) => write!(f, "Error when reading trajectory: {}", err),
+            TrajectoryError::De(err) => write!(f, "Error when deserializing trajectory: {}", err),
+            TrajectoryError::Ser(err) => write!(f, "Error when serializing trajectory: {}", err),
+        }
+    }
+}
+
+impl std::error::Error for TrajectoryError {}
+
+fn read_trajectory(path: impl AsRef<Path>) -> Result<Trajectory, TrajectoryError> {
     let mut file = File::open(&path)?;
     let mut buf = String::new();
     file.read_to_string(&mut buf)?;
-    toml::from_str(&buf).map_err(color_eyre::eyre::Error::from)
+    Ok(toml::from_str::<Trajectory>(&buf)?)
 }
 
 fn build_path(dir: impl AsRef<Path>, id: ShipID) -> PathBuf {
     dir.as_ref().join(id.to_string())
 }
 
-pub fn read_ship_trajectory(dir: impl AsRef<Path>, id: ShipID) -> color_eyre::Result<Trajectory> {
+pub fn read_ship_trajectory(
+    dir: impl AsRef<Path>,
+    id: ShipID,
+) -> Result<Trajectory, TrajectoryError> {
     read_trajectory(build_path(dir, id))
 }
 
-pub fn write_trajectory(path: impl AsRef<Path>, t: &Trajectory) -> color_eyre::Result<()> {
+pub fn write_trajectory(path: impl AsRef<Path>, t: &Trajectory) -> Result<(), TrajectoryError> {
     let s = toml::to_string_pretty(t)?;
-    File::create(path)?
-        .write_all(s.as_bytes())
-        .map_err(color_eyre::eyre::Error::from)
+    Ok(File::create(path)?.write_all(s.as_bytes())?)
 }
 
-pub fn follow_trajectory(
+fn follow_trajectory(
     mut velocity_events: EventWriter<VelocityUpdate>,
     mapping: Res<BodiesMapping>,
     coords: Query<(&Position, &Velocity)>,
@@ -134,11 +171,11 @@ pub fn follow_trajectory(
     let events = Arc::new(Mutex::new(Vec::new()));
     trajectories.par_iter_mut().for_each(|(e, mut t, info)| {
         if let Some((simtick, n)) = t.queue.peek() {
-            if *simtick >= time.simtick {
+            if *simtick <= time.simtick {
                 if let Some(origin) = mapping.0.get(&n.origin) {
                     let (&Position(o_pos), &Velocity(o_speed)) = coords.get(*origin).unwrap();
                     let (&Position(pos), &Velocity(speed)) = coords.get(e).unwrap();
-                    let thrust = convert_orbital_to_global(n.thrust, o_pos, o_speed, pos, speed);
+                    let thrust = orbital_to_global_matrix(o_pos, o_speed, pos, speed) * n.thrust;
                     events.lock().unwrap().push(VelocityUpdate {
                         ship_id: info.id,
                         thrust,
@@ -239,7 +276,11 @@ mod tests {
         io::Read,
     };
 
-    use bevy::{app::App, math::DVec3, state::state::NextState};
+    use bevy::{
+        app::{App, FixedMain},
+        math::DVec3,
+        state::state::NextState,
+    };
 
     use crate::{objects::ships::ShipEvent, prelude::*};
 
@@ -259,7 +300,7 @@ mod tests {
                 ManeuverNode {
                     name: "1".to_owned(),
                     thrust: DVec3::new(1e4, 0., 0.),
-                    origin: id_from("terre"),
+                    origin: id_from("soleil"),
                 },
             )]),
         }
@@ -313,5 +354,33 @@ mod tests {
             queue.collect::<Vec<_>>(),
             trajectory.nodes.into_iter().collect::<Vec<_>>()
         );
+    }
+
+    #[test]
+    fn test_follow_trajectory() {
+        let mut app = new_app();
+        let id = id_from("s");
+        app.world_mut().send_event(ShipEvent::Create(ShipInfo {
+            id,
+            spawn_pos: DVec3::new(0., 0., 1e10),
+            spawn_speed: DVec3::new(0., 1e4, 0.),
+        }));
+        let trajectory = new_trajectory();
+        app.world_mut().send_event(TrajectoryEvent::Create {
+            ship: id,
+            trajectory: trajectory.clone(),
+        });
+        app.update();
+        app.world_mut()
+            .resource_mut::<NextState<GameStage>>()
+            .set(GameStage::Action);
+        app.update();
+        FixedMain::run_fixed_main(app.world_mut());
+        assert_eq!(app.world().resource::<Events<VelocityUpdate>>().len(), 1);
+        let ship_speed = app
+            .world_mut()
+            .query_filtered::<&Velocity, With<ShipInfo>>()
+            .single(app.world());
+        assert!((ship_speed.0 - DVec3::new(0., 2e4, 0.)).length() < 10.);
     }
 }

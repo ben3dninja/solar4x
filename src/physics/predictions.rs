@@ -5,6 +5,7 @@ use bevy::{math::DVec3, prelude::*, utils::HashMap};
 use crate::{
     objects::{prelude::*, ships::trajectory::ManeuverNode},
     physics::prelude::*,
+    utils::algebra::orbital_to_global_matrix,
 };
 
 use super::{
@@ -58,14 +59,24 @@ impl PredictionStart {
         let mut previous_acc;
         for i in 1..number + 1 {
             let tick = self.tick + i as u64;
-            if let Some(node) = nodes.get(&tick) {
-                speed += node.thrust;
-            }
-            pos += get_dx(speed, acc, dt);
             let (bodies_pos, bodies_speeds): (Vec<_>, Vec<_>) =
                 get_bodies_coordinates(influencers.clone(), bodies, mapping, tick)
                     .into_iter()
                     .unzip();
+            if let Some(node) = nodes.get(&tick) {
+                // For now, the origin body must be an influencer
+                if let Some(node_origin) = mapping.get(&node.origin) {
+                    if let Some(index_of_origin) =
+                        influencers.clone().position(|a| a == *node_origin)
+                    {
+                        let (origin_pos, origin_speed) =
+                            (bodies_pos[index_of_origin], bodies_speeds[index_of_origin]);
+                        speed += orbital_to_global_matrix(origin_pos, origin_speed, pos, speed)
+                            * node.thrust;
+                    }
+                }
+            }
+            pos += get_dx(speed, acc, dt);
             let ref_coords = ref_index.map_or((DVec3::ZERO, DVec3::ZERO), |i| {
                 (bodies_pos[i], bodies_speeds[i])
             });

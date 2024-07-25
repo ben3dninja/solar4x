@@ -16,6 +16,7 @@ use crate::{
         orbit::SystemSize,
         predictions::{Prediction, PredictionStart},
     },
+    prelude::exit_on_error_if_app,
     ui::{
         gui::{SelectObjectEvent, SelectionRadius, MAX_HEIGHT},
         widget::space_map::SpaceMap,
@@ -43,7 +44,12 @@ pub fn plugin(app: &mut App) {
             (
                 read_input.in_set(InputReading),
                 (
-                    (handle_select_prediction, handle_editor_events).chain(),
+                    (
+                        handle_select_prediction
+                            .run_if(resource_exists::<Events<SelectObjectEvent>>),
+                        handle_editor_events,
+                    )
+                        .chain(),
                     (
                         handle_update_thrust.run_if(on_event::<UpdateThrust>()),
                         tick_prediction_delay,
@@ -67,7 +73,7 @@ pub fn plugin(app: &mut App) {
             OnEnter(InEditor),
             (
                 create_screen,
-                read_nodes,
+                read_nodes.pipe(exit_on_error_if_app),
                 create_predictions,
                 update_temp_predictions,
                 copy_predictions,
@@ -264,10 +270,14 @@ fn create_screen(
     }
 }
 
-fn read_nodes(mut context: ResMut<EditorContext>, gamefiles: Res<GameFiles>) {
+fn read_nodes(
+    mut context: ResMut<EditorContext>,
+    gamefiles: Res<GameFiles>,
+) -> color_eyre::Result<()> {
     if let Ok(traj) = read_ship_trajectory(&gamefiles.trajectories, context.ship_info.id) {
         context.nodes = traj.nodes;
     }
+    Ok(())
 }
 
 fn create_predictions(mut commands: Commands, mut ctx: ResMut<EditorContext>) {

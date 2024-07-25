@@ -99,17 +99,3 @@ pub fn draw_decreasing_alpha(
         )
     })
 }
-
-pub fn maneuver_gizmos_directions(
-    predicted_pos: Vec3,
-    predicted_relative_speed: Vec3,
-    origin_pos: Vec3,
-) -> [Vec3; 6] {
-    let forward = predicted_relative_speed.normalize_or(Vec3::X);
-    let radial = (predicted_pos - origin_pos).normalize();
-    let down = forward
-        .cross(radial)
-        .normalize_or(forward.cross(Vec3::Y).normalize_or(forward.cross(Vec3::Z)));
-    let right = down.cross(forward).normalize();
-    [forward, -forward, right, -right, down, -down]
-}
