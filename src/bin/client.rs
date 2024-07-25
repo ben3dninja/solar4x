@@ -1,7 +1,7 @@
 use std::env;
 
 use bevy::app::App;
-use rust_space_trading::{prelude::*, utils::args::get_keymap};
+use rust_space_trading::{prelude::*, ui::gui::GuiPlugin, utils::args::get_keymap};
 
 fn main() {
     #[allow(unused_variables)]
@@ -10,7 +10,6 @@ fn main() {
     let singleplayer_bodies_config = BodiesConfig::SmallestBodyType(BodyType::Comet);
     App::new()
         .add_plugins((
-            rust_space_trading::ui::gui::GuiPlugin,
             ClientPlugin {
                 singleplayer_bodies_config,
                 ..Default::default()
@@ -19,7 +18,7 @@ fn main() {
                 keymap: get_keymap(env::args()).unwrap(),
                 ..Default::default()
             },
-            // bevy::app::ScheduleRunnerPlugin::default(),
+            GuiPlugin,
         ))
         .run();
 }

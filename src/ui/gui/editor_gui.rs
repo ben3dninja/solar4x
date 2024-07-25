@@ -10,7 +10,7 @@ use crate::{
         widget::space_map::SpaceMap,
         RenderSet,
     },
-    utils::ui::maneuver_gizmos_directions,
+    utils::algebra::relative_axes,
 };
 use bevy::{
     color::palettes::css::{BLUE, DARK_BLUE, DARK_GREEN, DARK_RED, GREEN, RED, WHITE},
@@ -74,8 +74,10 @@ pub(super) struct GizmoDraggingState {
 #[derive(Component, Clone, Debug)]
 pub(super) struct ArrowGizmo {
     pub color: Color,
-    /// The unit vector pointing in the direction of the arrow
-    pub direction: Vec3,
+    /// The unit vector pointing in the direction of the arrow, in absolute coordinates
+    pub global_direction: Vec3,
+    /// The relative coordinates of the gizmo (should be Vec3::X or similar)
+    pub local_direction: Vec3,
 }
 
 fn draw_predictions(
@@ -107,18 +109,30 @@ fn spawn_arrows(
         let focus = space_map
             .focus_body
             .map_or(Vec3::ZERO, |e| positions.get(e).unwrap().translation);
-        let directions = maneuver_gizmos_directions(pos, speed, focus);
+        let [forward, right, down] = relative_axes(pos - focus, speed);
+        let directions = [forward, -forward, right, -right, down, -down];
+        let local_directions = [
+            Vec3::X,
+            Vec3::NEG_X,
+            Vec3::Y,
+            Vec3::NEG_Y,
+            Vec3::Z,
+            Vec3::NEG_Z,
+        ];
         commands
             .spawn(TransformBundle::from_transform(
                 Transform::from_translation(pos),
             ))
             .with_children(|parent| {
                 let radius = MAX_HEIGHT / 50.;
-                for (i, d) in directions.iter().enumerate() {
+                for (i, d) in directions.iter().zip(local_directions).enumerate() {
+                    let global_direction = d.0.as_vec3();
+                    let local_direction = d.1;
                     parent.spawn((
                         ArrowGizmo {
                             color: GIZMO_COLORS[i],
-                            direction: *d,
+                            global_direction,
+                            local_direction,
                         },
                         ClearOnEditorExit,
                         SelectionRadius {
@@ -126,7 +140,7 @@ fn spawn_arrows(
                             ..default()
                         },
                         TransformBundle::default(),
-                        AdaptiveTranslation(*d * 2. * radius),
+                        AdaptiveTranslation(global_direction * 2. * radius),
                     ));
                 }
             });
@@ -156,8 +170,8 @@ fn draw_maneuver_node(
             }
             let pos = arrow_pos.translation();
             gizmos.arrow(
-                pos - size * arrow.direction,
-                pos + size * arrow.direction,
+                pos - size * arrow.global_direction,
+                pos + size * arrow.global_direction,
                 color,
             );
         }
@@ -173,7 +187,7 @@ fn handle_click_gizmo(
         if let Ok(arrow) = arrows.get(event.entity) {
             current_gizmo.0 = Some(GizmoDraggingState {
                 gizmo: event.entity,
-                direction: arrow.direction,
+                direction: arrow.local_direction,
                 initial_mouse_pos: event.cursor_pos,
             })
         }

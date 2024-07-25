@@ -1,6 +1,6 @@
 use std::f64::consts::TAU;
 
-use bevy::math::{DVec2, DVec3};
+use bevy::math::{DMat3, DVec2, DVec3};
 use rand::Rng;
 
 use crate::physics::G;
@@ -31,19 +31,48 @@ pub fn project_onto_plane(v: DVec3, basis: (DVec3, DVec3)) -> DVec2 {
     DVec2::new(v.dot(basis.0), v.dot(basis.1))
 }
 
-/// Transforms radial/orthoradial/perp coordinates into absolute coordinates
-pub fn convert_orbital_to_global(
-    thrust: DVec3,
-    origin: DVec3,
+/// Transforms relative coordinates into absolute coordinates
+pub fn orbital_to_global_matrix(
+    origin_pos: DVec3,
     origin_speed: DVec3,
     pos: DVec3,
     speed: DVec3,
-) -> DVec3 {
-    let v1 = (pos - origin).normalize();
-    let v2 = (speed - origin_speed).try_normalize().unwrap_or(DVec3::Z);
-    let v3 = v1.cross(v2);
+) -> DMat3 {
+    let [v1, v2, v3] = relative_axes(pos - origin_pos, speed - origin_speed);
+    DMat3::from_cols(v1, v2, v3)
+}
 
-    thrust.x * v1 + thrust.y * v2 + thrust.z * v3
+pub fn global_to_orbital_matrix(
+    origin_pos: DVec3,
+    origin_speed: DVec3,
+    pos: DVec3,
+    speed: DVec3,
+) -> DMat3 {
+    orbital_to_global_matrix(origin_pos, origin_speed, pos, speed).inverse()
+}
+
+/// Produces three unit vectors pointing towards:
+///
+/// 1 - the "forward" direction of the ship, that is its speed compared to a host body
+///
+/// 2 - the direction orthogonal to both the first axis and the position of the ship relative to the host (i.e. orthogonal to the "radial" direction)
+///
+/// 3 - the cross product of the preceding two
+///
+/// If the orbit is circular (orthogonal position and speed are sufficient), then those correspond to orthoradial, radial and down.
+pub fn relative_axes(
+    relative_pos: impl Into<DVec3>,
+    relative_speed: impl Into<DVec3>,
+) -> [DVec3; 3] {
+    let forward = relative_speed.into().normalize_or(-DVec3::X);
+    let radial = relative_pos.into().normalize_or(DVec3::Y);
+    let down = forward.cross(radial).normalize_or(
+        forward
+            .cross(DVec3::Y)
+            .normalize_or(forward.cross(DVec3::X)),
+    );
+    let right = down.cross(forward).normalize();
+    [forward, right, down]
 }
 
 /// Position and velocity for circular orbit at given altitude around body
