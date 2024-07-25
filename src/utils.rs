@@ -12,6 +12,15 @@ pub enum Direction2 {
     Down,
 }
 
+impl From<&Direction2> for isize {
+    fn from(value: &Direction2) -> Self {
+        match value {
+            Direction2::Up => 1,
+            Direction2::Down => -1,
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub enum Direction4 {
     Front,

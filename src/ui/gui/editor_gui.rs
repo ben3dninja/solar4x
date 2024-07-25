@@ -3,18 +3,23 @@ use crate::{
     prelude::*,
     ui::{
         gui::SelectionRadius,
-        screen::editor::editor_backend::{ConfirmThrust, UpdateThrust, PREDICTIONS_NUMBER},
-        screen::editor::{ClearOnEditorExit, EditorContext, SelectNode},
+        screen::editor::{
+            editor_backend::{
+                ChangePredictionsNumber, ConfirmThrust, NumberOfPredictions, TempPrediction,
+                UpdateThrust,
+            },
+            ClearOnEditorExit, EditorContext, SelectNode,
+        },
         widget::space_map::SpaceMap,
         RenderSet,
     },
     utils::algebra::relative_axes,
 };
 use bevy::{
-    color::palettes::css::{BLUE, DARK_BLUE, DARK_GREEN, DARK_RED, GREEN, RED, WHITE},
+    color::palettes::css::{BLUE, DARK_BLUE, DARK_GREEN, DARK_RED, GREEN, ORANGE, RED, WHITE},
     input::{
         common_conditions::{input_just_released, input_pressed},
-        mouse::{MouseButtonInput, MouseMotion},
+        mouse::{MouseButtonInput, MouseMotion, MouseScrollUnit, MouseWheel},
         ButtonState,
     },
     prelude::*,
@@ -38,7 +43,7 @@ pub fn plugin(app: &mut App) {
             PostUpdate,
             (draw_predictions, draw_maneuver_node)
                 .in_set(RenderSet)
-                .run_if(in_state(Loaded).and_then(resource_exists::<EditorContext>)),
+                .run_if(resource_exists::<EditorContext>),
         )
         .add_systems(
             Update,
@@ -55,7 +60,14 @@ pub fn plugin(app: &mut App) {
                 handle_click_gizmo.run_if(on_event::<SelectObjectEvent>()),
                 handle_release_gizmo.run_if(input_just_released(MouseButton::Left)),
             )
-                .run_if(in_state(Loaded).and_then(resource_exists::<EditorContext>)),
+                .run_if(resource_exists::<EditorContext>),
+        )
+        .add_systems(
+            PreUpdate,
+            send_change_predictions_number
+                .run_if(resource_exists::<EditorContext>.and_then(
+                    input_pressed(KeyCode::ShiftLeft).and_then(on_event::<MouseWheel>()),
+                )),
         );
 }
 #[derive(Resource, PartialEq, Default)]
@@ -80,15 +92,25 @@ pub(super) struct ArrowGizmo {
 
 fn draw_predictions(
     mut gizmos: Gizmos,
-    predictions: Query<(&Transform, &Prediction)>,
+    predictions: Query<(&Transform, &Prediction, Option<&TempPrediction>)>,
     space_map: Res<SpaceMap>,
+    predictions_number: Res<NumberOfPredictions>,
 ) {
-    for (t, p) in predictions.iter() {
+    for (t, p, temp) in predictions.iter() {
+        if p.index % 10 != 0 {
+            continue;
+        }
+        let color = if temp.is_some() {
+            Color::Srgba(ORANGE)
+        } else {
+            Color::WHITE
+        }
+        .with_alpha(0.2);
         gizmos.circle_2d(
             t.translation.xy(),
-            (1. - p.index as f32 / PREDICTIONS_NUMBER as f32) * MAX_HEIGHT
+            (1. - p.index as f32 / predictions_number.0 as f32) * MAX_HEIGHT
                 / (500. * space_map.zoom_level as f32),
-            Color::srgba(1., 1., 1., 0.1),
+            color,
         );
     }
 }
@@ -224,5 +246,21 @@ fn handle_drag_gizmo(
                     / zoom,
             ));
         }
+    }
+}
+
+fn send_change_predictions_number(
+    mut events: EventWriter<ChangePredictionsNumber>,
+    mut scroll: EventReader<MouseWheel>,
+) {
+    for event in scroll.read() {
+        let is_step = match event.unit {
+            MouseScrollUnit::Line => true,
+            MouseScrollUnit::Pixel => false,
+        };
+        events.send(ChangePredictionsNumber {
+            is_step,
+            amount: event.y,
+        });
     }
 }

@@ -102,6 +102,6 @@ pub fn center_to_periapsis_direction(o: f64, O: f64, I: f64) -> DVec3 {
     )
 }
 
-pub fn half_sizes(a: f64, e: f64) -> DVec2 {
+pub fn ellipse_half_sizes(a: f64, e: f64) -> DVec2 {
     DVec2::new(1., (1. - e * e).sqrt()) * a
 }
