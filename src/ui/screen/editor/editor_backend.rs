@@ -11,14 +11,18 @@ use bevy::{math::DVec3, prelude::*};
 
 use super::{ClearOnEditorExit, EditorContext};
 
-pub const PREDICTIONS_NUMBER: usize = 1000;
+pub const PREDICTIONS_NUMBER: usize = 10_000;
 const PREDICTION_DELAY: Duration = Duration::from_millis(100);
+const PREDICTIONS_ADD_STEP: isize = 100;
 
 pub fn plugin(app: &mut App) {
     app.add_event::<UpdateThrust>()
         .add_event::<ConfirmThrust>()
         .add_event::<PredictionDelayEvent>()
+        .add_event::<ChangePredictionsNumber>()
+        .add_event::<ReloadPredictions>()
         .init_resource::<PredictionDelay>()
+        .init_resource::<NumberOfPredictions>()
         .add_systems(
             OnEnter(super::InEditor),
             (
@@ -34,7 +38,19 @@ pub fn plugin(app: &mut App) {
             Update,
             (
                 (
-                    handle_update_thrust.run_if(on_event::<UpdateThrust>()),
+                    handle_change_predictions_number.run_if(on_event::<ChangePredictionsNumber>()),
+                    (
+                        explicitly_clear_predictions,
+                        create_predictions,
+                        update_temp_predictions,
+                        copy_predictions,
+                    )
+                        .chain()
+                        .run_if(on_event::<ReloadPredictions>()),
+                )
+                    .chain(),
+                handle_update_thrust.run_if(on_event::<UpdateThrust>()),
+                (
                     tick_prediction_delay,
                     update_temp_predictions.run_if(on_event::<PredictionDelayEvent>()),
                 )
@@ -84,9 +100,13 @@ impl PredictionBundle {
 #[derive(Component)]
 pub struct TempPrediction;
 
-fn create_predictions(mut commands: Commands, mut ctx: ResMut<EditorContext>) {
+fn create_predictions(
+    mut commands: Commands,
+    mut ctx: ResMut<EditorContext>,
+    predictions_number: Res<NumberOfPredictions>,
+) {
     let (ship, tick) = (ctx.ship, ctx.tick);
-    (0..PREDICTIONS_NUMBER).for_each(|i| {
+    (0..predictions_number.0).for_each(|i| {
         let pred = PredictionBundle::from_prediction(Prediction {
             ship,
             index: i,
@@ -106,6 +126,53 @@ fn create_predictions(mut commands: Commands, mut ctx: ResMut<EditorContext>) {
         ctx.temp_predictions
             .push(commands.spawn((pred, TempPrediction)).id())
     });
+}
+
+fn explicitly_clear_predictions(mut commands: Commands, mut context: ResMut<EditorContext>) {
+    let EditorContext {
+        predictions,
+        temp_predictions,
+        ..
+    } = context.as_mut();
+    predictions
+        .drain(0..)
+        .chain(temp_predictions.drain(0..))
+        .for_each(|e| commands.entity(e).despawn());
+}
+
+#[derive(Resource, Debug, Clone, Copy)]
+pub struct NumberOfPredictions(pub usize);
+
+#[derive(Event, Clone, Copy)]
+pub struct ChangePredictionsNumber {
+    pub is_step: bool,
+    pub amount: f32,
+}
+
+impl Default for NumberOfPredictions {
+    fn default() -> Self {
+        Self(PREDICTIONS_NUMBER)
+    }
+}
+
+#[derive(Event, Default)]
+pub struct ReloadPredictions;
+
+fn handle_change_predictions_number(
+    mut events: EventReader<ChangePredictionsNumber>,
+    mut number: ResMut<NumberOfPredictions>,
+    mut reload: EventWriter<ReloadPredictions>,
+) {
+    for event in events.read() {
+        number.0 = number.0.saturating_add_signed(
+            (if event.is_step {
+                PREDICTIONS_ADD_STEP as f32
+            } else {
+                1.
+            } * event.amount) as isize,
+        );
+        reload.send_default();
+    }
 }
 
 #[derive(Event, Clone)]
@@ -169,6 +236,7 @@ fn tick_prediction_delay(
 
 fn update_temp_predictions(
     ctx: Res<EditorContext>,
+    predictions_number: Res<NumberOfPredictions>,
     query: Query<(&Acceleration, &Influenced)>,
     bodies: Query<(&EllipticalOrbit, &BodyInfo)>,
     bodies_mapping: Res<BodiesMapping>,
@@ -193,7 +261,7 @@ fn update_temp_predictions(
         nodes.get_mut(&tick).unwrap().thrust += thrust;
     }
     let predictions = start.compute_predictions(
-        PREDICTIONS_NUMBER,
+        predictions_number.0,
         influencers.iter().cloned(),
         *main_influencer,
         &bodies,

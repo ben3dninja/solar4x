@@ -16,8 +16,8 @@ use crate::{
     physics::{influence::HillRadius, orbit::SystemSize},
     prelude::*,
     utils::{
-        algebra::{center_to_periapsis_direction, half_sizes},
-        ui::{viewable_radius, EllipseBuilder},
+        algebra::{center_to_periapsis_direction, ellipse_half_sizes},
+        ui::EllipseBuilder,
     },
 };
 
@@ -54,8 +54,7 @@ impl Plugin for GuiPlugin {
                         .chain()
                         .in_set(UiUpdate),
                     draw_gizmos.in_set(RenderSet),
-                    // debug_print,
-                    // draw_selection_spheres,
+                    (debug_print, draw_selection_spheres).run_if(resource_exists::<DebugDisplay>),
                 )
                     .run_if(resource_exists::<SpaceMap>)
                     .run_if(in_state(Loaded)),
@@ -63,7 +62,9 @@ impl Plugin for GuiPlugin {
             .add_systems(
                 Update,
                 (
-                    zoom_with_scroll,
+                    zoom_with_scroll.run_if(
+                        on_event::<MouseWheel>().and_then(not(input_pressed(KeyCode::ShiftLeft))),
+                    ),
                     (adaptive_scale, adaptive_translation)
                         .after(zoom_with_scroll)
                         .after(EventHandling),
@@ -84,6 +85,9 @@ impl Plugin for GuiPlugin {
 
 #[derive(SystemSet, Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct GUIUpdate;
+
+#[derive(Resource)]
+struct DebugDisplay;
 
 #[derive(Event)]
 pub struct SelectObjectEvent {
@@ -365,7 +369,7 @@ fn draw_gizmos(
                     rotation: Quat::from_rotation_z(O as f32)
                         * Quat::from_rotation_x(I as f32)
                         * Quat::from_rotation_z(o as f32),
-                    half_size: (half_sizes(a, e) * scale).as_vec2(),
+                    half_size: (ellipse_half_sizes(a, e) * scale).as_vec2(),
                     color: Color::WHITE.with_alpha(0.1),
                     resolution,
                     initial_angle: E as f32,
@@ -402,10 +406,13 @@ fn draw_gizmos(
     }
 }
 
-fn debug_print(mut keys: EventReader<bevy_ratatui::event::KeyEvent>, cam: Query<&Camera>) {
+fn debug_print(
+    mut keys: EventReader<bevy_ratatui::event::KeyEvent>,
+    predictions_number: Res<crate::ui::screen::editor::editor_backend::NumberOfPredictions>,
+) {
     for event in keys.read() {
         if event.code == crossterm::event::KeyCode::Char('p') {
-            eprintln!("{}", viewable_radius(cam.single()).unwrap());
+            eprintln!("{}", predictions_number.0);
         }
     }
 }
