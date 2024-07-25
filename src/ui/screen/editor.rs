@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, time::Duration};
+use std::collections::BTreeMap;
 
 use bevy::{math::DVec3, prelude::*};
 use bevy_ratatui::event::KeyEvent;
@@ -8,78 +8,31 @@ use ratatui::{
     widgets::{Block, List, ListState, Paragraph, StatefulWidget, Widget},
 };
 
-use crate::{
-    game::GameFiles,
-    input::prelude::Keymap,
-    objects::ships::trajectory::{read_ship_trajectory, ManeuverNode, TrajectoryEvent},
-    physics::{
-        orbit::SystemSize,
-        predictions::{Prediction, PredictionStart},
-    },
-    prelude::exit_on_error_if_app,
-    ui::{
-        gui::{SelectObjectEvent, SelectionRadius, MAX_HEIGHT},
-        widget::space_map::SpaceMap,
-        EventHandling, InputReading,
-    },
-    utils::{list::ClampedList, Direction2},
-};
+use crate::{objects::ships::trajectory::ManeuverNode, prelude::*};
 
 use super::AppScreen;
-use crate::objects::prelude::*;
-use crate::physics::prelude::*;
 
-pub const PREDICTIONS_NUMBER: usize = 1000;
-const PREDICTION_DELAY: Duration = Duration::from_millis(100);
+pub mod editor_backend;
 
 pub fn plugin(app: &mut App) {
-    app.add_computed_state::<InEditor>()
+    app.add_plugins(editor_backend::plugin)
+        .add_computed_state::<InEditor>()
         .add_event::<SelectNode>()
-        .add_event::<UpdateThrust>()
-        .add_event::<ConfirmThrust>()
-        .add_event::<PredictionDelayEvent>()
-        .init_resource::<PredictionDelay>()
         .add_systems(
             Update,
             (
                 read_input.in_set(InputReading),
-                (
-                    (
-                        handle_select_prediction
-                            .run_if(resource_exists::<Events<SelectObjectEvent>>),
-                        handle_editor_events,
-                    )
-                        .chain(),
-                    (
-                        handle_update_thrust.run_if(on_event::<UpdateThrust>()),
-                        tick_prediction_delay,
-                        update_temp_predictions.run_if(on_event::<PredictionDelayEvent>()),
-                    )
-                        .chain(),
-                    (
-                        handle_confirm_thrust,
-                        update_temp_predictions,
-                        copy_predictions,
-                    )
-                        .chain()
-                        .run_if(on_event::<ConfirmThrust>()),
+                ((
+                    handle_select_prediction.run_if(resource_exists::<Events<SelectObjectEvent>>),
+                    handle_editor_events,
                 )
+                    .chain(),)
                     .in_set(EventHandling),
             )
                 .run_if(in_state(InEditor))
                 .run_if(resource_exists::<EditorContext>),
         )
-        .add_systems(
-            OnEnter(InEditor),
-            (
-                create_screen,
-                read_nodes.pipe(exit_on_error_if_app),
-                create_predictions,
-                update_temp_predictions,
-                copy_predictions,
-            )
-                .chain(),
-        )
+        .add_systems(OnEnter(InEditor), create_screen)
         .add_systems(OnExit(InEditor), clear_screen);
 }
 
@@ -208,31 +161,6 @@ impl ClampedList for EditorContext {
     }
 }
 
-#[derive(Component, Clone, Copy)]
-pub struct ClearOnEditorExit;
-
-#[derive(Bundle, Clone)]
-struct PredictionBundle {
-    prediction: Prediction,
-    pos: Position,
-    speed: Velocity,
-    transform: TransformBundle,
-    clear: ClearOnEditorExit,
-}
-impl PredictionBundle {
-    fn from_prediction(prediction: Prediction) -> Self {
-        Self {
-            prediction,
-            transform: TransformBundle::from_transform(Transform::from_xyz(0., 0., -3.)),
-            pos: Position::default(),
-            speed: Velocity::default(),
-            clear: ClearOnEditorExit,
-        }
-    }
-}
-#[derive(Component)]
-pub struct TempPrediction;
-
 pub struct EditorScreen;
 
 #[allow(clippy::too_many_arguments)]
@@ -270,120 +198,8 @@ fn create_screen(
     }
 }
 
-fn read_nodes(
-    mut context: ResMut<EditorContext>,
-    gamefiles: Res<GameFiles>,
-) -> color_eyre::Result<()> {
-    if let Ok(traj) = read_ship_trajectory(&gamefiles.trajectories, context.ship_info.id) {
-        context.nodes = traj.nodes;
-    }
-    Ok(())
-}
-
-fn create_predictions(mut commands: Commands, mut ctx: ResMut<EditorContext>) {
-    let (ship, tick) = (ctx.ship, ctx.tick);
-    (0..PREDICTIONS_NUMBER).for_each(|i| {
-        let pred = PredictionBundle::from_prediction(Prediction {
-            ship,
-            index: i,
-            simtick: tick + i as u64,
-        });
-        ctx.predictions.push(
-            commands
-                .spawn((
-                    pred.clone(),
-                    SelectionRadius {
-                        min_radius: MAX_HEIGHT / 100.,
-                        actual_radius: 0.,
-                    },
-                ))
-                .id(),
-        );
-        ctx.temp_predictions
-            .push(commands.spawn((pred, TempPrediction)).id())
-    });
-}
-
-#[derive(Event, Default)]
-struct PredictionDelayEvent;
-
-#[derive(Resource)]
-struct PredictionDelay(Timer);
-
-impl Default for PredictionDelay {
-    fn default() -> Self {
-        Self(Timer::new(PREDICTION_DELAY, TimerMode::Repeating))
-    }
-}
-
-fn tick_prediction_delay(
-    mut timer: ResMut<PredictionDelay>,
-    time: Res<Time>,
-    mut event: EventWriter<PredictionDelayEvent>,
-    ctx: Res<EditorContext>,
-) {
-    if ctx.editing_data.is_some() {
-        timer.0.tick(time.delta());
-        if timer.0.just_finished() {
-            event.send_default();
-        }
-    }
-}
-
-fn update_temp_predictions(
-    ctx: Res<EditorContext>,
-    query: Query<(&Acceleration, &Influenced)>,
-    bodies: Query<(&EllipticalOrbit, &BodyInfo)>,
-    bodies_mapping: Res<BodiesMapping>,
-    mut coords: Query<(&mut Position, &mut Velocity), With<TempPrediction>>,
-) {
-    let (
-        &Acceleration { current: acc, .. },
-        Influenced {
-            main_influencer,
-            influencers,
-        },
-    ) = query.get(ctx.ship).unwrap();
-    let start = PredictionStart {
-        pos: ctx.pos,
-        speed: ctx.speed,
-        tick: ctx.tick,
-        acc,
-    };
-    let thrust = ctx.editing_data.unwrap_or_default();
-    let mut nodes = ctx.nodes.clone();
-    if let Some(tick) = ctx.selected_tick() {
-        nodes.get_mut(&tick).unwrap().thrust += thrust;
-    }
-    let predictions = start.compute_predictions(
-        PREDICTIONS_NUMBER,
-        influencers.iter().cloned(),
-        *main_influencer,
-        &bodies,
-        &bodies_mapping.0,
-        &ctx.nodes,
-    );
-    let mut i = 0;
-    let mut iter = coords.iter_many_mut(&ctx.temp_predictions);
-    while let Some((mut pos, mut speed)) = iter.fetch_next() {
-        (pos.0, speed.0) = predictions[i];
-        i += 1;
-    }
-}
-
-fn copy_predictions(
-    ctx: Res<EditorContext>,
-    new_coords: Query<(&Position, &Velocity), With<TempPrediction>>,
-    mut coords: Query<(&mut Position, &mut Velocity), Without<TempPrediction>>,
-) {
-    let mut new_coords = new_coords.iter_many(&ctx.temp_predictions);
-    let mut iter = coords.iter_many_mut(&ctx.predictions);
-    while let (Some((mut pos, mut speed)), Some((new_pos, new_speed))) =
-        (iter.fetch_next(), new_coords.next())
-    {
-        (pos.0, speed.0) = (new_pos.0, new_speed.0);
-    }
-}
+#[derive(Component, Clone, Copy)]
+pub struct ClearOnEditorExit;
 
 fn clear_screen(mut commands: Commands, query: Query<Entity, With<ClearOnEditorExit>>) {
     commands.remove_resource::<EditorContext>();
@@ -420,12 +236,6 @@ pub enum SelectNode {
     SelectOrInsert(u64),
 }
 
-#[derive(Event, Clone)]
-pub struct ConfirmThrust;
-
-#[derive(Event, Clone)]
-pub struct UpdateThrust(pub DVec3);
-
 fn handle_editor_events(
     mut context: ResMut<EditorContext>,
     mut events: EventReader<SelectNode>,
@@ -450,33 +260,6 @@ fn handle_editor_events(
                 );
             }
         }
-    }
-}
-
-fn handle_confirm_thrust(
-    mut context: ResMut<EditorContext>,
-    mut traj_event: EventWriter<TrajectoryEvent>,
-) {
-    if let Some(thrust) = context.editing_data {
-        let ship = context.ship_info.id;
-        if let Some((&simtick, node)) = context.selected_entry_mut() {
-            node.thrust += thrust;
-            traj_event.send(TrajectoryEvent::AddNode {
-                ship,
-                node: node.clone(),
-                simtick,
-            });
-        }
-    }
-    context.editing_data = None;
-}
-
-fn handle_update_thrust(
-    mut thrust_updates: EventReader<UpdateThrust>,
-    mut context: ResMut<EditorContext>,
-) {
-    for &UpdateThrust(thrust) in thrust_updates.read() {
-        context.editing_data = Some(thrust);
     }
 }
 

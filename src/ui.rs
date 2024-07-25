@@ -9,7 +9,9 @@ pub mod widget;
 
 pub mod prelude {
     pub use super::{
+        gui::{SelectObjectEvent, MAX_HEIGHT},
         screen::{in_loaded_screen, AppScreen},
+        widget::space_map::SpaceMap,
         EventHandling, InputReading, TuiPlugin,
     };
 }

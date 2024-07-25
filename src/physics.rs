@@ -21,7 +21,8 @@ pub(crate) mod prelude {
     pub use super::{
         influence::Influenced,
         leapfrog::Acceleration,
-        orbit::EllipticalOrbit,
+        orbit::{EllipticalOrbit, SystemSize},
+        predictions::Prediction,
         time::{GameTime, ToggleTime},
         Mass, Position, Velocity,
     };

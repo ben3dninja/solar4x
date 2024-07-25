@@ -3,10 +3,8 @@ use crate::{
     prelude::*,
     ui::{
         gui::SelectionRadius,
-        screen::editor::{
-            ClearOnEditorExit, ConfirmThrust, EditorContext, SelectNode, UpdateThrust,
-            PREDICTIONS_NUMBER,
-        },
+        screen::editor::editor_backend::{ConfirmThrust, UpdateThrust, PREDICTIONS_NUMBER},
+        screen::editor::{ClearOnEditorExit, EditorContext, SelectNode},
         widget::space_map::SpaceMap,
         RenderSet,
     },
