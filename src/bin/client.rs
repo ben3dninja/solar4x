@@ -8,6 +8,7 @@ fn main() {
     let singleplayer_bodies_config = BodiesConfig::SmallestBodyType(BodyType::Moon);
     #[cfg(feature = "asteroids")]
     let singleplayer_bodies_config = BodiesConfig::SmallestBodyType(BodyType::Comet);
+
     App::new()
         .add_plugins((
             ClientPlugin {

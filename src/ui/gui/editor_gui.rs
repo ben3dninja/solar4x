@@ -144,7 +144,7 @@ fn spawn_arrows(
                 Transform::from_translation(pos),
             ))
             .with_children(|parent| {
-                let radius = MAX_HEIGHT / 50.;
+                let radius = MAX_HEIGHT / 30.;
                 for (i, d) in directions.iter().zip(local_directions).enumerate() {
                     let global_direction = d.0.as_vec3();
                     let local_direction = d.1;
@@ -156,11 +156,11 @@ fn spawn_arrows(
                         },
                         ClearOnEditorExit,
                         SelectionRadius {
-                            min_radius: radius,
+                            min_radius: 1.5 * radius,
                             ..default()
                         },
                         TransformBundle::default(),
-                        AdaptiveTranslation(global_direction * 2. * radius),
+                        AdaptiveTranslation(global_direction * 2.5 * radius),
                     ));
                 }
             });
@@ -181,7 +181,7 @@ fn draw_maneuver_node(
 ) {
     if let Some(e) = context.selected_prediction_entity() {
         let pos = positions.get(e).unwrap().translation;
-        let size = MAX_HEIGHT / (50. * space_map.zoom_level as f32);
+        let size = MAX_HEIGHT / (30. * space_map.zoom_level as f32);
         gizmos.circle_2d(pos.xy(), size, WHITE);
         for (gizmo, arrow, arrow_pos) in arrows.iter() {
             let mut color = arrow.color;
@@ -190,8 +190,8 @@ fn draw_maneuver_node(
             }
             let pos = arrow_pos.translation();
             gizmos.arrow(
-                pos - size * arrow.global_direction,
-                pos + size * arrow.global_direction,
+                pos - 1.5 * size * arrow.global_direction,
+                pos + 0.5 * size * arrow.global_direction,
                 color,
             );
         }
