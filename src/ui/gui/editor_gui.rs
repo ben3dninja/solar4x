@@ -5,8 +5,8 @@ use crate::{
         gui::SelectionRadius,
         screen::editor::{
             editor_backend::{
-                ChangePredictionsNumber, ConfirmThrust, NumberOfPredictions, TempPrediction,
-                UpdateThrust,
+                ChangeNodeTick, ChangePredictionsNumber, ConfirmThrust, NumberOfPredictions,
+                ReloadPredictions, TempPrediction, UpdateThrust,
             },
             ClearOnEditorExit, EditorContext, SelectNode,
         },
@@ -59,15 +59,19 @@ pub fn plugin(app: &mut App) {
                     .run_if(input_pressed(MouseButton::Left).and_then(on_event::<MouseMotion>())),
                 handle_click_gizmo.run_if(on_event::<SelectObjectEvent>()),
                 handle_release_gizmo.run_if(input_just_released(MouseButton::Left)),
+                (despawn_arrows, spawn_arrows)
+                    .chain()
+                    .run_if(on_event::<ReloadPredictions>()),
             )
                 .run_if(resource_exists::<EditorContext>),
         )
         .add_systems(
             PreUpdate,
-            send_change_predictions_number
-                .run_if(resource_exists::<EditorContext>.and_then(
-                    input_pressed(KeyCode::ShiftLeft).and_then(on_event::<MouseWheel>()),
-                )),
+            (
+                send_change_predictions_number.run_if(input_pressed(KeyCode::ShiftLeft)),
+                send_change_node_tick.run_if(input_pressed(KeyCode::ControlLeft)),
+            )
+                .run_if(resource_exists::<EditorContext>.and_then(on_event::<MouseWheel>())),
         );
 }
 #[derive(Resource, PartialEq, Default)]
@@ -259,6 +263,22 @@ fn send_change_predictions_number(
             MouseScrollUnit::Pixel => false,
         };
         events.send(ChangePredictionsNumber {
+            is_step,
+            amount: event.y,
+        });
+    }
+}
+
+fn send_change_node_tick(
+    mut events: EventWriter<ChangeNodeTick>,
+    mut scroll: EventReader<MouseWheel>,
+) {
+    for event in scroll.read() {
+        let is_step = match event.unit {
+            MouseScrollUnit::Line => true,
+            MouseScrollUnit::Pixel => false,
+        };
+        events.send(ChangeNodeTick {
             is_step,
             amount: event.y,
         });

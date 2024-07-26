@@ -14,12 +14,14 @@ use super::{ClearOnEditorExit, EditorContext};
 pub const PREDICTIONS_NUMBER: usize = 10_000;
 const PREDICTION_DELAY: Duration = Duration::from_millis(100);
 const PREDICTIONS_ADD_STEP: isize = 100;
+const TICK_ADD_STEP: isize = 10;
 
 pub fn plugin(app: &mut App) {
     app.add_event::<UpdateThrust>()
         .add_event::<ConfirmThrust>()
         .add_event::<PredictionDelayEvent>()
         .add_event::<ChangePredictionsNumber>()
+        .add_event::<ChangeNodeTick>()
         .add_event::<ReloadPredictions>()
         .init_resource::<PredictionDelay>()
         .init_resource::<NumberOfPredictions>()
@@ -39,6 +41,7 @@ pub fn plugin(app: &mut App) {
             (
                 (
                     handle_change_predictions_number.run_if(on_event::<ChangePredictionsNumber>()),
+                    handle_change_node_tick.run_if(on_event::<ChangeNodeTick>()),
                     (
                         explicitly_clear_predictions,
                         create_predictions,
@@ -175,6 +178,31 @@ fn handle_change_predictions_number(
     }
 }
 
+#[derive(Event, Clone, Copy)]
+pub struct ChangeNodeTick {
+    pub is_step: bool,
+    pub amount: f32,
+}
+
+fn handle_change_node_tick(
+    mut events: EventReader<ChangeNodeTick>,
+    mut ctx: ResMut<EditorContext>,
+    mut reload: EventWriter<ReloadPredictions>,
+) {
+    for event in events.read() {
+        if let Some(tick) = ctx.selected_tick() {
+            let newtick = tick.saturating_add_signed(
+                (if event.is_step {
+                    TICK_ADD_STEP as f32
+                } else {
+                    1.
+                } * event.amount) as i64,
+            );
+            ctx.change_tick(tick, newtick);
+        }
+        reload.send_default();
+    }
+}
 #[derive(Event, Clone)]
 pub struct ConfirmThrust;
 
