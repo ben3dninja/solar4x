@@ -242,7 +242,7 @@ fn handle_drag_gizmo(
         {
             let zoom = space_map.zoom_level;
             update_thrust.send(UpdateThrust(
-                direction.as_dvec3() * (cursor_pos - initial_mouse_pos).length() as f64 * 1e7
+                direction.as_dvec3() * (cursor_pos - initial_mouse_pos).length() as f64 * 1e6
                     / zoom,
             ));
         }
