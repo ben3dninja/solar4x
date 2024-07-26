@@ -37,6 +37,8 @@ pub struct GuiPlugin;
 
 impl Plugin for GuiPlugin {
     fn build(&self, app: &mut App) {
+        #[cfg(feature = "debug_display")]
+        app.init_resource::<DebugDisplay>();
         app.add_plugins(editor_gui::plugin)
             .insert_resource(ClearColor(Color::Srgba(BLACK)))
             .add_event::<SelectObjectEvent>()
@@ -86,7 +88,7 @@ impl Plugin for GuiPlugin {
 #[derive(SystemSet, Debug, Clone, Copy, Hash, PartialEq, Eq)]
 pub struct GUIUpdate;
 
-#[derive(Resource)]
+#[derive(Resource, Default)]
 struct DebugDisplay;
 
 #[derive(Event)]

@@ -43,6 +43,7 @@ vectorize = "0.2.0"
 
 [features]
 asteroids = []
+debug_display = []
 
 # Enable a small amount of optimization in debug mode
 [profile.dev]
