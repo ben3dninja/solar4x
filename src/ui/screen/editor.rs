@@ -150,6 +150,12 @@ impl EditorContext {
         self.nodes.entry(simtick).or_insert(default);
         self.select_tick(simtick);
     }
+
+    pub fn change_tick(&mut self, simtick: u64, newtick: u64) {
+        self.nodes
+            .remove(&simtick)
+            .map(|val| self.nodes.insert(newtick, val));
+    }
 }
 impl ClampedList for EditorContext {
     fn list_state(&mut self) -> &mut ListState {
