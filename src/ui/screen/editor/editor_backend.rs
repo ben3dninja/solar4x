@@ -42,6 +42,10 @@ pub fn plugin(app: &mut App) {
                 (
                     handle_change_predictions_number.run_if(on_event::<ChangePredictionsNumber>()),
                     handle_change_node_tick.run_if(on_event::<ChangeNodeTick>()),
+                    handle_change_focus.run_if(
+                        resource_exists::<Events<SelectObjectEvent>>
+                            .and_then(on_event::<SelectObjectEvent>()),
+                    ),
                     (
                         explicitly_clear_predictions,
                         create_predictions,
@@ -203,6 +207,22 @@ fn handle_change_node_tick(
         reload.send_default();
     }
 }
+
+fn handle_change_focus(
+    mut events: EventReader<SelectObjectEvent>,
+    mut reload: EventWriter<ReloadPredictions>,
+    bodies: Query<&BodyInfo>,
+    mut space_map: ResMut<SpaceMap>,
+) {
+    for event in events.read() {
+        let e = event.entity;
+        if bodies.get(e).is_ok() {
+            space_map.focus(e);
+            reload.send_default();
+        }
+    }
+}
+
 #[derive(Event, Clone)]
 pub struct ConfirmThrust;
 
@@ -269,6 +289,7 @@ fn update_temp_predictions(
     bodies: Query<(&EllipticalOrbit, &BodyInfo)>,
     bodies_mapping: Res<BodiesMapping>,
     mut coords: Query<(&mut Position, &mut Velocity), With<TempPrediction>>,
+    space_map: Res<SpaceMap>,
 ) {
     let (
         &Acceleration { current: acc, .. },
@@ -288,10 +309,14 @@ fn update_temp_predictions(
     if let Some(tick) = ctx.selected_tick() {
         nodes.get_mut(&tick).unwrap().thrust += thrust;
     }
+    let reference = space_map
+        .focus_body
+        .filter(|f| influencers.contains(f))
+        .or(*main_influencer);
     let predictions = start.compute_predictions(
         predictions_number.0,
         influencers.iter().cloned(),
-        *main_influencer,
+        reference,
         &bodies,
         &bodies_mapping.0,
         &nodes,
