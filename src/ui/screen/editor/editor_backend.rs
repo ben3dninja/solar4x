@@ -266,7 +266,7 @@ fn update_temp_predictions(
         *main_influencer,
         &bodies,
         &bodies_mapping.0,
-        &ctx.nodes,
+        &nodes,
     );
     let mut i = 0;
     let mut iter = coords.iter_many_mut(&ctx.temp_predictions);
