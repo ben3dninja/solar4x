@@ -1,7 +1,11 @@
 use bevy::prelude::*;
 use bevy_ratatui::event::KeyEvent;
 use crossterm::event::KeyEventKind;
-use ratatui::widgets::{List, ListState, StatefulWidget};
+use ratatui::{
+    layout::{Constraint, Flex, Layout},
+    text::Line,
+    widgets::{List, ListState, Paragraph, StatefulWidget, Widget},
+};
 
 use crate::prelude::*;
 
@@ -122,9 +126,29 @@ impl StatefulWidget for StartMenu {
         buf: &mut ratatui::prelude::Buffer,
         state: &mut Self::State,
     ) {
+        let title = r#"
+ _______  _____         _______  ______           _     _
+ |______ |     | |      |_____| |_____/  /_____|   \___/ 
+ ______| |_____| |_____ |     | |    \_        |  _/   \_
+        "#;
+        let split = title.split('\n');
+        // let title_width = split.clone().next().unwrap().len();
+        let title_height = split.count();
+        let chunks = Layout::vertical([
+            Constraint::Length(title_height as u16),
+            Constraint::Max(3),
+            Constraint::Length(SCREENS.len() as u16),
+        ])
+        .flex(Flex::Center)
+        .split(area);
+        Paragraph::new(title).centered().render(chunks[0], buf);
         let (_, entries): (Vec<_>, Vec<&str>) = SCREENS.into_iter().unzip();
-        List::new(entries)
-            .highlight_symbol(">")
-            .render(area, buf, &mut state.list_state);
+        let list_width = entries.iter().map(|s| s.len()).max().unwrap();
+        let entries = entries.into_iter().map(|s| Line::from(s).centered());
+        let list = List::new(entries).highlight_symbol(">");
+        let [list_area] = Layout::horizontal([Constraint::Length(list_width as u16 + 1)])
+            .flex(Flex::Center)
+            .areas(chunks[2]);
+        StatefulWidget::render(list, list_area, buf, &mut state.list_state);
     }
 }
