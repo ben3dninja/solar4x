@@ -2,8 +2,11 @@ use std::time::Duration;
 
 use crate::{
     game::GameFiles,
-    objects::ships::trajectory::{read_ship_trajectory, TrajectoryEvent},
-    physics::predictions::{Prediction, PredictionStart},
+    objects::ships::trajectory::{read_ship_trajectory, Trajectory, TrajectoryEvent},
+    physics::{
+        influence::HillRadius,
+        predictions::{Prediction, PredictionStart},
+    },
     prelude::*,
     ui::gui::SelectionRadius,
 };
@@ -35,6 +38,10 @@ pub fn plugin(app: &mut App) {
             )
                 .chain()
                 .after(super::create_screen),
+        )
+        .add_systems(
+            OnExit(super::InEditor),
+            save_trajectory.before(super::clear_screen),
         )
         .add_systems(
             Update,
@@ -83,6 +90,19 @@ fn read_nodes(
         context.nodes = traj.nodes;
     }
     Ok(())
+}
+
+fn save_trajectory(mut traj_event: EventWriter<TrajectoryEvent>, ctx: Res<EditorContext>) {
+    let ship = ctx.ship_info.id;
+    traj_event.send_batch([
+        TrajectoryEvent::Delete(ship),
+        TrajectoryEvent::Create {
+            ship,
+            trajectory: Trajectory {
+                nodes: ctx.nodes.clone(),
+            },
+        },
+    ]);
 }
 
 #[derive(Bundle, Clone)]
@@ -286,22 +306,16 @@ fn update_temp_predictions(
     ctx: Res<EditorContext>,
     predictions_number: Res<NumberOfPredictions>,
     query: Query<(&Acceleration, &Influenced)>,
-    bodies: Query<(&EllipticalOrbit, &BodyInfo)>,
+    mut bodies: Query<(&EllipticalOrbit, &BodyInfo, &HillRadius)>,
     bodies_mapping: Res<BodiesMapping>,
     mut coords: Query<(&mut Position, &mut Velocity), With<TempPrediction>>,
     space_map: Res<SpaceMap>,
 ) {
-    let (
-        &Acceleration { current: acc, .. },
-        Influenced {
-            main_influencer,
-            influencers,
-        },
-    ) = query.get(ctx.ship).unwrap();
+    let (&Acceleration { current: acc, .. }, influence) = query.get(ctx.ship).unwrap();
     let start = PredictionStart {
         pos: ctx.pos,
         speed: ctx.speed,
-        tick: ctx.tick,
+        simtick: ctx.tick,
         acc,
     };
     let thrust = ctx.editing_data.unwrap_or_default();
@@ -309,15 +323,12 @@ fn update_temp_predictions(
     if let Some(tick) = ctx.selected_tick() {
         nodes.get_mut(&tick).unwrap().thrust += thrust;
     }
-    let reference = space_map
-        .focus_body
-        .filter(|f| influencers.contains(f))
-        .or(*main_influencer);
+    let reference = space_map.focus_body.or(influence.main_influencer);
     let predictions = start.compute_predictions(
         predictions_number.0,
-        influencers.iter().cloned(),
+        influence,
         reference,
-        &bodies,
+        &mut bodies.as_query_lens(),
         &bodies_mapping.0,
         &nodes,
     );

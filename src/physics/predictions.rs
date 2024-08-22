@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use bevy::{math::DVec3, prelude::*, utils::HashMap};
+use bevy::{ecs::system::QueryLens, math::DVec3, prelude::*, utils::HashMap};
 
 use crate::{
     objects::{prelude::*, ships::trajectory::ManeuverNode},
@@ -9,8 +9,9 @@ use crate::{
 };
 
 use super::{
+    influence::HillRadius,
     leapfrog::{get_acceleration, get_dv, get_dx},
-    time::GAMETIME_PER_SIMTICK,
+    time::{GAMETIME_PER_SIMTICK, SIMTICKS_PER_TICK},
 };
 
 /// Number of client updates between two predictions
@@ -29,7 +30,7 @@ pub struct PredictionStart {
     pub pos: DVec3,
     pub speed: DVec3,
     pub acc: DVec3,
-    pub tick: u64,
+    pub simtick: u64,
 }
 
 impl PredictionStart {
@@ -37,64 +38,155 @@ impl PredictionStart {
     pub fn compute_predictions(
         &self,
         number: usize,
-        influencers: impl Iterator<Item = Entity> + Clone,
+        influence: &Influenced,
         reference: Option<Entity>,
-        bodies: &Query<(&EllipticalOrbit, &BodyInfo)>,
+        bodies: &mut QueryLens<(&EllipticalOrbit, &BodyInfo, &HillRadius)>,
         mapping: &HashMap<BodyID, Entity>,
         nodes: &BTreeMap<u64, ManeuverNode>,
     ) -> Vec<(DVec3, DVec3)> {
         let dt = GAMETIME_PER_SIMTICK;
+        let mut bodies = bodies.query();
         let mut pos = self.pos;
         let mut speed = self.speed;
         let mut predictions = Vec::new();
-        let ref_index = reference.and_then(|r| influencers.clone().position(|e| e == r));
-        let masses = influencers
-            .clone()
-            .map(|e| bodies.get(e).unwrap().1 .0.mass);
-        let initial_bodies_coords =
-            get_bodies_coordinates(influencers.clone(), bodies, mapping, self.tick);
-        let initial_ref_coords =
-            ref_index.map_or((DVec3::ZERO, DVec3::ZERO), |i| initial_bodies_coords[i]);
+        let simulated = simulated_from_influence(
+            influence,
+            &mut bodies.transmute_lens::<&BodyInfo>(),
+            mapping,
+        );
+        let mut map = simulated
+            .iter()
+            .map(|e| (*e, (DVec3::ZERO, DVec3::ZERO, bodies.get(*e).unwrap().2 .0)))
+            .collect::<HashMap<_, _>>();
+        let mut influencers = influence
+            .influencers
+            .iter()
+            .map(|e| {
+                let comp = bodies.get(*e).unwrap();
+                (*e, comp.1 .0.mass)
+            })
+            .collect::<HashMap<_, _>>();
+        let mut main = influence.main_influencer;
+        let initial_bodies_coords = get_bodies_coordinates(
+            map.keys().cloned(),
+            &mut bodies.transmute_lens::<(&EllipticalOrbit, &BodyInfo)>(),
+            mapping,
+            self.simtick,
+        );
+        map.values_mut()
+            .enumerate()
+            .for_each(|(i, v)| (v.0, v.1) = initial_bodies_coords[i]);
+        let initial_ref_coords = reference.and_then(|r| map.get(&r).cloned()).unwrap_or((
+            DVec3::ZERO,
+            DVec3::ZERO,
+            f64::INFINITY,
+        ));
         let mut acc = self.acc;
         let mut previous_acc;
         for i in 1..number + 1 {
-            let tick = self.tick + i as u64;
-            let (bodies_pos, bodies_speeds): (Vec<_>, Vec<_>) =
-                get_bodies_coordinates(influencers.clone(), bodies, mapping, tick)
-                    .into_iter()
-                    .unzip();
-            if let Some(node) = nodes.get(&tick) {
-                // For now, the origin body must be an influencer
+            let simtick = self.simtick + i as u64;
+            let bodies_coords = get_bodies_coordinates(
+                map.keys().cloned(),
+                &mut bodies.transmute_lens::<(&EllipticalOrbit, &BodyInfo)>(),
+                mapping,
+                simtick,
+            );
+            map.values_mut()
+                .enumerate()
+                .for_each(|(i, v)| (v.0, v.1) = bodies_coords[i]);
+            if let Some(node) = nodes.get(&simtick) {
+                // For now, the origin body must be simulated
                 if let Some(node_origin) = mapping.get(&node.origin) {
-                    if let Some(index_of_origin) =
-                        influencers.clone().position(|a| a == *node_origin)
-                    {
-                        let (origin_pos, origin_speed) =
-                            (bodies_pos[index_of_origin], bodies_speeds[index_of_origin]);
+                    if let Some(&(origin_pos, origin_speed, _)) = map.get(node_origin) {
                         speed += orbital_to_global_matrix(origin_pos, origin_speed, pos, speed)
                             * node.thrust;
                     }
                 }
             }
             pos += get_dx(speed, acc, dt);
-            let ref_coords = ref_index.map_or((DVec3::ZERO, DVec3::ZERO), |i| {
-                (bodies_pos[i], bodies_speeds[i])
-            });
+            let ref_coords = reference.and_then(|r| map.get(&r).cloned()).unwrap_or((
+                DVec3::ZERO,
+                DVec3::ZERO,
+                f64::INFINITY,
+            ));
             previous_acc = acc;
-            acc = get_acceleration(pos, bodies_pos.into_iter().zip(masses.clone()));
+            acc = get_acceleration(pos, influencers.iter().map(|(e, m)| (map[e].0, *m)));
             speed += get_dv(previous_acc, acc, dt);
             predictions.push((
                 pos - ref_coords.0 + initial_ref_coords.0,
                 speed - ref_coords.1,
             ));
+
+            if simtick % SIMTICKS_PER_TICK == 0 {
+                let (new_main, new_radius) = map
+                    .iter()
+                    .filter_map(|(e, (body_pos, _, r))| {
+                        let dist = (*body_pos - pos).length();
+                        if dist > *r {
+                            None
+                        } else {
+                            Some((*e, *r))
+                        }
+                    })
+                    .min_by(|(_, a), (_, b)| a.total_cmp(b))
+                    .unwrap();
+                if let Some(main_entity) = main {
+                    if new_main != main_entity {
+                        let radius = map.get(&main_entity).unwrap().2;
+                        if radius > new_radius {
+                            map.extend(
+                                children_entities(
+                                    new_main,
+                                    &mut bodies.transmute_lens::<&BodyInfo>(),
+                                    mapping,
+                                )
+                                .into_iter()
+                                .map(|e| {
+                                    (e, (DVec3::ZERO, DVec3::ZERO, bodies.get(e).unwrap().2 .0))
+                                }),
+                            );
+                            influencers.insert(new_main, bodies.get(new_main).unwrap().1 .0.mass);
+                        }
+                        main = Some(new_main);
+                    }
+                }
+            }
         }
         predictions
     }
 }
 
+fn simulated_from_influence(
+    influence: &Influenced,
+    bodies: &mut QueryLens<&BodyInfo>,
+    bodies_mapping: &HashMap<BodyID, Entity>,
+) -> Vec<Entity> {
+    let mut v = influence.influencers.clone();
+    if let Some(main) = influence.main_influencer {
+        v.extend(children_entities(main, bodies, bodies_mapping));
+    }
+    v
+}
+
+fn children_entities(
+    parent: Entity,
+    bodies: &mut QueryLens<&BodyInfo>,
+    bodies_mapping: &HashMap<BodyID, Entity>,
+) -> Vec<Entity> {
+    let query = bodies.query();
+    query
+        .get(parent)
+        .unwrap()
+        .0
+        .orbiting_bodies
+        .iter()
+        .filter_map(|id| bodies_mapping.get(id).cloned())
+        .collect()
+}
+
 pub fn get_bodies_coordinates(
     selected_bodies: impl Iterator<Item = Entity>,
-    bodies: &Query<(&EllipticalOrbit, &BodyInfo)>,
+    bodies: &mut QueryLens<(&EllipticalOrbit, &BodyInfo)>,
     mapping: &HashMap<BodyID, Entity>,
     tick: u64,
 ) -> Vec<(DVec3, DVec3)> {
@@ -102,7 +194,7 @@ pub fn get_bodies_coordinates(
         e: Entity,
         map: &mut HashMap<Entity, (DVec3, DVec3)>,
         tick: u64,
-        bodies: &Query<(&EllipticalOrbit, &BodyInfo)>,
+        bodies: Query<(&EllipticalOrbit, &BodyInfo)>,
         mapping: &HashMap<BodyID, Entity>,
     ) -> (DVec3, DVec3) {
         let (orbit, BodyInfo(data)) = bodies.get(e).unwrap();
@@ -124,7 +216,7 @@ pub fn get_bodies_coordinates(
     let mut map = HashMap::new();
 
     selected_bodies
-        .map(|e| compute_pos_rec(e, &mut map, tick, bodies, mapping))
+        .map(|e| compute_pos_rec(e, &mut map, tick, bodies.query(), mapping))
         .collect()
 }
 
@@ -153,24 +245,28 @@ mod tests {
             .unwrap();
         let (pos, speed) = circular_orbit_around_body(1e5, mass.0, earth_pos.0, earth_speed.0);
         let influencers = vec![sun, earth];
+        let influence = Influenced {
+            main_influencer: Some(earth),
+            influencers: influencers.clone(),
+        };
         #[allow(clippy::type_complexity)]
         let mut system_state: SystemState<(
             Res<BodiesMapping>,
-            Query<(&EllipticalOrbit, &BodyInfo)>,
+            Query<(&EllipticalOrbit, &BodyInfo, &HillRadius)>,
             Query<(&Position, &Mass)>,
         )> = SystemState::new(world);
-        let (mapping, bodies, query) = system_state.get(world);
+        let (mapping, mut bodies, query) = system_state.get(world);
         let predictions = PredictionStart {
             pos,
             speed,
-            tick: 0,
+            simtick: 0,
             acc: get_acceleration(pos, query.iter_many(&influencers).map(|(p, m)| (p.0, m.0))),
         }
         .compute_predictions(
             3,
-            influencers.into_iter(),
+            &influence,
             Some(earth),
-            &bodies,
+            &mut bodies.as_query_lens(),
             &mapping.0,
             &BTreeMap::new(),
         );

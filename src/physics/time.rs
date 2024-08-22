@@ -3,7 +3,7 @@ use bevy::prelude::*;
 use crate::utils::Direction2;
 
 /// Number of server updates (ticks) per real time second
-pub const TPS: f32 = 1.;
+// pub const TPS: f32 = 1.;
 
 /// Number of simulation updates (simticks) per real time second
 pub const STPS: f64 = 64.;
@@ -11,12 +11,13 @@ pub const STPS: f64 = 64.;
 /// Game time that is added at each client update (in days, multiplied by simstepsize)
 pub const GAMETIME_PER_SIMTICK: f64 = 1e-3;
 
+pub const SIMTICKS_PER_TICK: u64 = 10;
+
 pub fn plugin(app: &mut App) {
     app.insert_resource(Time::<Fixed>::from_hz(STPS))
         .init_resource::<ToggleTime>()
         .init_resource::<GameTime>()
         .init_resource::<SimStepSize>()
-        .init_resource::<TickTimer>()
         .add_event::<TimeEvent>()
         .add_event::<TickEvent>()
         .add_systems(
@@ -54,15 +55,6 @@ impl Default for SimStepSize {
     }
 }
 
-#[derive(Resource)]
-struct TickTimer(Timer);
-
-impl Default for TickTimer {
-    fn default() -> Self {
-        Self(Timer::from_seconds(1. / TPS, TimerMode::Repeating))
-    }
-}
-
 #[derive(Event, Default)]
 pub struct TickEvent;
 
@@ -79,9 +71,8 @@ pub enum TimeEvent {
     ToggleTime,
 }
 
-fn update_tick(mut timer: ResMut<TickTimer>, time: Res<Time>, mut writer: EventWriter<TickEvent>) {
-    timer.0.tick(time.delta());
-    if timer.0.just_finished() {
+fn update_tick(mut writer: EventWriter<TickEvent>, game_time: Res<GameTime>) {
+    if game_time.simtick % SIMTICKS_PER_TICK == 0 {
         writer.send_default();
     }
 }

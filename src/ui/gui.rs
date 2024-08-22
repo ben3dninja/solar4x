@@ -411,11 +411,11 @@ fn draw_gizmos(
 
 fn debug_print(
     mut keys: EventReader<bevy_ratatui::event::KeyEvent>,
-    predictions_number: Res<crate::ui::screen::editor::editor_backend::NumberOfPredictions>,
+    influence: Query<&Influenced>,
 ) {
     for event in keys.read() {
         if event.code == crossterm::event::KeyCode::Char('p') {
-            eprintln!("{}", predictions_number.0);
+            influence.iter().for_each(|i| eprintln!("{:?}", i));
         }
     }
 }
