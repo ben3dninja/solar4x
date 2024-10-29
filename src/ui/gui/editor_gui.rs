@@ -1,5 +1,5 @@
 use crate::{
-    physics::predictions::Prediction,
+    physics::{predictions::Prediction, time::SIMTICKS_PER_TICK},
     prelude::*,
     ui::{
         gui::SelectionRadius,
@@ -101,7 +101,7 @@ fn draw_predictions(
     predictions_number: Res<NumberOfPredictions>,
 ) {
     for (t, p, temp) in predictions.iter() {
-        if p.index % 10 != 0 {
+        if p.index % SIMTICKS_PER_TICK as usize != 0 {
             continue;
         }
         let color = if temp.is_some() {

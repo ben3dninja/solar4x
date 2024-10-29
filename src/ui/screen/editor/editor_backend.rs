@@ -17,7 +17,7 @@ use super::{ClearOnEditorExit, EditorContext};
 pub const PREDICTIONS_NUMBER: usize = 10_000;
 const PREDICTION_DELAY: Duration = Duration::from_millis(100);
 const PREDICTIONS_ADD_STEP: isize = 100;
-const TICK_ADD_STEP: isize = 10;
+const TICK_ADD_STEP: isize = 1;
 
 pub fn plugin(app: &mut App) {
     app.add_event::<UpdateThrust>()
@@ -132,7 +132,7 @@ fn create_predictions(
     mut ctx: ResMut<EditorContext>,
     predictions_number: Res<NumberOfPredictions>,
 ) {
-    let (ship, tick) = (ctx.ship, ctx.tick);
+    let (ship, tick) = (ctx.ship, ctx.simtick);
     (0..predictions_number.0).for_each(|i| {
         let pred = PredictionBundle::from_prediction(Prediction {
             ship,
@@ -255,12 +255,12 @@ fn handle_confirm_thrust(
 ) {
     if let Some(thrust) = context.editing_data {
         let ship = context.ship_info.id;
-        if let Some((&simtick, node)) = context.selected_entry_mut() {
+        if let Some((&tick, node)) = context.selected_entry_mut() {
             node.thrust += thrust;
             traj_event.send(TrajectoryEvent::AddNode {
                 ship,
                 node: node.clone(),
-                simtick,
+                tick,
             });
         }
     }
@@ -315,7 +315,7 @@ fn update_temp_predictions(
     let start = PredictionStart {
         pos: ctx.pos,
         speed: ctx.speed,
-        simtick: ctx.tick,
+        simtick: ctx.simtick,
         acc,
     };
     let thrust = ctx.editing_data.unwrap_or_default();

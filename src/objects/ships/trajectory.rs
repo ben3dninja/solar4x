@@ -31,7 +31,10 @@ pub fn plugin(app: &mut App) {
         // This system set is currently configured in the [physics] module
         .add_systems(
             FixedUpdate,
-            (follow_trajectory, handle_thrusts)
+            (
+                follow_trajectory, // .run_if(on_event::<TickEvent>())
+                handle_thrusts,
+            )
                 .chain()
                 .in_set(TrajectoryUpdate),
         )
@@ -56,14 +59,14 @@ pub struct ManeuverNode {
     pub origin: BodyID,
 }
 
-/// A succession of maneuver nodes sorted by order of time, with a single node per time
+/// A succession of maneuver nodes sorted by order of time, with a single node per server tick
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct Trajectory {
     #[serde(with = "vectorize")]
     pub nodes: BTreeMap<u64, ManeuverNode>,
 }
 
-/// A trajectory taken by an object, storing the index of the last processed maneuver node in the action stage the instance was created
+/// A trajectory taken by an object, storing a peekable queue of all remaining maneuver nodes
 #[derive(Component, Debug)]
 pub struct CurrentTrajectory {
     queue: Peekable<btree_map::IntoIter<u64, ManeuverNode>>,
@@ -87,11 +90,11 @@ pub enum TrajectoryEvent {
     AddNode {
         ship: ShipID,
         node: ManeuverNode,
-        simtick: u64,
+        tick: u64,
     },
     RemoveNode {
         ship: ShipID,
-        simtick: u64,
+        tick: u64,
     },
 }
 
@@ -170,8 +173,8 @@ fn follow_trajectory(
 ) {
     let events = Arc::new(Mutex::new(Vec::new()));
     trajectories.par_iter_mut().for_each(|(e, mut t, info)| {
-        if let Some((simtick, n)) = t.queue.peek() {
-            if *simtick <= time.simtick {
+        if let Some((tick, n)) = t.queue.peek() {
+            if *tick <= time.tick() {
                 if let Some(origin) = mapping.0.get(&n.origin) {
                     let (&Position(o_pos), &Velocity(o_speed)) = coords.get(*origin).unwrap();
                     let (&Position(pos), &Velocity(speed)) = coords.get(e).unwrap();
@@ -180,6 +183,7 @@ fn follow_trajectory(
                         ship_id: info.id,
                         thrust,
                     });
+                    println!("receiving node at tick {}", time.tick());
                 }
                 t.queue.next();
             }
@@ -227,7 +231,7 @@ pub fn remove_old_nodes(dir: Res<GameFiles>, time: Res<GameTime>) {
         for entry in dir.flatten() {
             let path = entry.path();
             if let Ok(mut traj) = read_trajectory(&path) {
-                traj.nodes.retain(|t, _| *t >= time.simtick);
+                traj.nodes.retain(|t, _| *t >= time.tick());
                 write_trajectory(path, &traj).expect("Could not write trajectory");
             }
         }
@@ -254,14 +258,14 @@ pub fn handle_trajectory_event(
                 write_trajectory(path, trajectory)?;
             }
             Delete(_) => remove_file(path)?,
-            AddNode { node, simtick, .. } => {
+            AddNode { node, tick, .. } => {
                 let mut t = read_trajectory(&path).unwrap_or_default();
-                t.nodes.insert(*simtick, node.clone());
+                t.nodes.insert(*tick, node.clone());
                 write_trajectory(path, &t)?;
             }
-            RemoveNode { simtick, .. } => {
+            RemoveNode { tick, .. } => {
                 let mut t = read_trajectory(&path)?;
-                t.nodes.remove(simtick);
+                t.nodes.remove(tick);
                 write_trajectory(path, &t)?;
             }
         }
@@ -282,7 +286,7 @@ mod tests {
         state::state::NextState,
     };
 
-    use crate::{objects::ships::ShipEvent, prelude::*};
+    use crate::{objects::ships::ShipEvent, physics::time::SIMTICKS_PER_TICK, prelude::*};
 
     use super::*;
 
@@ -296,7 +300,7 @@ mod tests {
     fn new_trajectory() -> Trajectory {
         Trajectory {
             nodes: BTreeMap::from([(
-                0,
+                1,
                 ManeuverNode {
                     name: "1".to_owned(),
                     thrust: DVec3::new(1e4, 0., 0.),
@@ -375,6 +379,12 @@ mod tests {
             .resource_mut::<NextState<GameStage>>()
             .set(GameStage::Action);
         app.update();
+        let mut simtick = 0;
+
+        while simtick < SIMTICKS_PER_TICK - 1 {
+            app.update();
+            simtick = app.world().resource::<GameTime>().simtick;
+        }
         FixedMain::run_fixed_main(app.world_mut());
         assert_eq!(app.world().resource::<Events<VelocityUpdate>>().len(), 1);
         let ship_speed = app

@@ -8,7 +8,9 @@ use ratatui::{
     widgets::{Block, List, ListState, Paragraph, StatefulWidget, Widget},
 };
 
-use crate::{objects::ships::trajectory::ManeuverNode, prelude::*};
+use crate::{
+    objects::ships::trajectory::ManeuverNode, physics::time::SIMTICKS_PER_TICK, prelude::*,
+};
 
 use super::AppScreen;
 
@@ -56,7 +58,7 @@ pub struct EditorContext {
     pub ship_info: ShipInfo,
     pub pos: DVec3,
     pub speed: DVec3,
-    pub tick: u64,
+    pub simtick: u64,
     list_state: ListState,
     /// Each maneuver node is stored here along with the associated tick, and corresponds to a prediction.
     /// Since there is a prediction for each tick, the index of the prediction is simply the number of ticks
@@ -83,7 +85,7 @@ impl EditorContext {
             ship_info,
             pos,
             speed,
-            tick,
+            simtick: tick,
             list_state: ListState::default(),
             nodes: BTreeMap::new(),
             predictions: Vec::new(),
@@ -105,10 +107,8 @@ impl EditorContext {
 
     /// Attempts to select the node at the provided tick, returning the index if successful
     pub fn select_tick(&mut self, tick: u64) -> Option<usize> {
-        self.index_of_tick(tick).map(|i| {
-            self.list_state.select(Some(i));
-            i
-        })
+        self.index_of_tick(tick)
+            .inspect(|&i| self.list_state.select(Some(i)))
     }
 
     pub fn index_of_tick(&self, tick: u64) -> Option<usize> {
@@ -127,33 +127,33 @@ impl EditorContext {
             .and_then(|i| self.nodes.iter_mut().nth(i))
     }
 
-    fn index_of_prediction_at_tick(&self, tick: u64) -> usize {
-        (tick - self.tick) as usize
+    fn index_of_prediction_at_simtick(&self, simtick: u64) -> usize {
+        (simtick - self.simtick) as usize
     }
 
-    fn prediction_at_tick(&self, tick: u64) -> Option<Entity> {
+    fn prediction_at_simtick(&self, tick: u64) -> Option<Entity> {
         self.predictions
-            .get(self.index_of_prediction_at_tick(tick))
+            .get(self.index_of_prediction_at_simtick(tick))
             .cloned()
     }
 
     pub fn selected_prediction_entity(&self) -> Option<Entity> {
         self.selected_tick()
-            .and_then(|t| self.prediction_at_tick(t))
+            .and_then(|t| self.prediction_at_simtick(SIMTICKS_PER_TICK * t))
     }
 
-    pub fn get_node(&self, simtick: u64) -> Option<&ManeuverNode> {
-        self.nodes.get(&simtick)
+    pub fn get_node(&self, tick: u64) -> Option<&ManeuverNode> {
+        self.nodes.get(&tick)
     }
 
-    pub fn select_or_insert(&mut self, simtick: u64, default: ManeuverNode) {
-        self.nodes.entry(simtick).or_insert(default);
-        self.select_tick(simtick);
+    pub fn select_or_insert(&mut self, tick: u64, default: ManeuverNode) {
+        self.nodes.entry(tick).or_insert(default);
+        self.select_tick(tick);
     }
 
-    pub fn change_tick(&mut self, simtick: u64, newtick: u64) {
+    pub fn change_tick(&mut self, tick: u64, newtick: u64) {
         self.nodes
-            .remove(&simtick)
+            .remove(&tick)
             .map(|val| self.nodes.insert(newtick, val));
     }
 }
@@ -239,7 +239,7 @@ fn read_input(
 #[derive(Event, Clone, Copy)]
 pub enum SelectNode {
     SelectAdjacent(Direction2),
-    SelectOrInsert(u64),
+    SelectNearestOrInsert(u64),
 }
 
 fn handle_editor_events(
@@ -252,12 +252,12 @@ fn handle_editor_events(
     for event in events.read() {
         match *event {
             SelectNode::SelectAdjacent(d) => context.select_adjacent(d),
-            SelectNode::SelectOrInsert(tick) => {
+            SelectNode::SelectNearestOrInsert(simtick) => {
                 let origin = space_map
                     .focus_body
                     .map_or(primary.single().0.id, |e| bodies.get(e).unwrap().0.id);
                 context.select_or_insert(
-                    tick,
+                    simtick / SIMTICKS_PER_TICK,
                     ManeuverNode {
                         name: "Node".into(),
                         thrust: DVec3::ZERO,
@@ -276,7 +276,7 @@ fn handle_select_prediction(
 ) {
     for event in select_events.read() {
         if let Ok(p) = predictions.get(event.entity) {
-            editor_events.send(SelectNode::SelectOrInsert(p.simtick));
+            editor_events.send(SelectNode::SelectNearestOrInsert(p.simtick));
         }
     }
 }
