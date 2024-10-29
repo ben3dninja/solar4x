@@ -94,30 +94,18 @@ impl PredictionStart {
             map.values_mut()
                 .enumerate()
                 .for_each(|(i, v)| (v.0, v.1) = bodies_coords[i]);
-            if let Some(node) = nodes.get(&simtick) {
-                // For now, the origin body must be simulated
-                if let Some(node_origin) = mapping.get(&node.origin) {
-                    if let Some(&(origin_pos, origin_speed, _)) = map.get(node_origin) {
-                        speed += orbital_to_global_matrix(origin_pos, origin_speed, pos, speed)
-                            * node.thrust;
-                    }
-                }
-            }
-            pos += get_dx(speed, acc, dt);
-            let ref_coords = reference.and_then(|r| map.get(&r).cloned()).unwrap_or((
-                DVec3::ZERO,
-                DVec3::ZERO,
-                f64::INFINITY,
-            ));
-            previous_acc = acc;
-            acc = get_acceleration(pos, influencers.iter().map(|(e, m)| (map[e].0, *m)));
-            speed += get_dv(previous_acc, acc, dt);
-            predictions.push((
-                pos - ref_coords.0 + initial_ref_coords.0,
-                speed - ref_coords.1,
-            ));
 
             if simtick % SIMTICKS_PER_TICK == 0 {
+                if let Some(node) = nodes.get(&(simtick / SIMTICKS_PER_TICK)) {
+                    // For now, the origin body must be simulated
+                    if let Some(node_origin) = mapping.get(&node.origin) {
+                        if let Some(&(origin_pos, origin_speed, _)) = map.get(node_origin) {
+                            speed += orbital_to_global_matrix(origin_pos, origin_speed, pos, speed)
+                                * node.thrust;
+                        }
+                    }
+                }
+
                 let (new_main, new_radius) = map
                     .iter()
                     .filter_map(|(e, (body_pos, _, r))| {
@@ -151,6 +139,20 @@ impl PredictionStart {
                     }
                 }
             }
+
+            pos += get_dx(speed, acc, dt);
+            let ref_coords = reference.and_then(|r| map.get(&r).cloned()).unwrap_or((
+                DVec3::ZERO,
+                DVec3::ZERO,
+                f64::INFINITY,
+            ));
+            previous_acc = acc;
+            acc = get_acceleration(pos, influencers.iter().map(|(e, m)| (map[e].0, *m)));
+            speed += get_dv(previous_acc, acc, dt);
+            predictions.push((
+                pos - ref_coords.0 + initial_ref_coords.0,
+                speed - ref_coords.1,
+            ));
         }
         predictions
     }

@@ -45,9 +45,6 @@ pub fn plugin(app: &mut App) {
         );
 }
 
-#[derive(SystemSet, Debug, Clone, Copy, Hash, PartialEq, Eq, Default)]
-struct FleetScreenSet;
-
 fn create_screen(
     mut commands: Commands,
     mut next_screen: ResMut<NextState<AppScreen>>,

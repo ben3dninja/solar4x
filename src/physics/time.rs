@@ -43,6 +43,10 @@ impl GameTime {
     pub fn time(&self) -> f64 {
         self.simtick as f64 * GAMETIME_PER_SIMTICK
     }
+
+    pub fn tick(&self) -> u64 {
+        self.simtick / SIMTICKS_PER_TICK
+    }
 }
 
 /// The number of simticks that are added at each update
