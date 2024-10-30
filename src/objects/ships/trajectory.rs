@@ -16,7 +16,7 @@ use std::sync::Mutex;
 use crate::{
     game::{Authoritative, GameFiles},
     objects::prelude::{BodiesMapping, BodyID},
-    physics::prelude::*,
+    physics::{prelude::*, time::TickEvent},
     prelude::{exit_on_error_if_app, GameStage},
     utils::algebra::orbital_to_global_matrix,
 };
@@ -32,7 +32,7 @@ pub fn plugin(app: &mut App) {
         .add_systems(
             FixedUpdate,
             (
-                follow_trajectory, // .run_if(on_event::<TickEvent>())
+                follow_trajectory.run_if(on_event::<TickEvent>()),
                 handle_thrusts,
             )
                 .chain()
@@ -183,7 +183,6 @@ fn follow_trajectory(
                         ship_id: info.id,
                         thrust,
                     });
-                    println!("receiving node at tick {}", time.tick());
                 }
                 t.queue.next();
             }
