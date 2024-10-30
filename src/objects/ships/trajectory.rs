@@ -256,7 +256,7 @@ pub fn handle_trajectory_event(
             Create { trajectory, .. } => {
                 write_trajectory(path, trajectory)?;
             }
-            Delete(_) => remove_file(path)?,
+            Delete(_) => remove_file(path).unwrap_or_default(),
             AddNode { node, tick, .. } => {
                 let mut t = read_trajectory(&path).unwrap_or_default();
                 t.nodes.insert(*tick, node.clone());
@@ -380,7 +380,7 @@ mod tests {
         app.update();
         let mut simtick = 0;
 
-        while simtick < SIMTICKS_PER_TICK - 1 {
+        while simtick < SIMTICKS_PER_TICK {
             app.update();
             simtick = app.world().resource::<GameTime>().simtick;
         }

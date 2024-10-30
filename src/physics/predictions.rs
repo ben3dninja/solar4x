@@ -121,19 +121,23 @@ impl PredictionStart {
                 if let Some(main_entity) = main {
                     if new_main != main_entity {
                         let radius = map.get(&main_entity).unwrap().2;
+                        let new_children = children_entities(
+                            new_main,
+                            &mut bodies.transmute_lens::<&BodyInfo>(),
+                            mapping,
+                        );
+                        map.retain(|k, _| {
+                            influencers.contains_key(k) || [new_main, main_entity].contains(k)
+                        });
+                        map.extend(
+                            new_children.into_iter().map(|e| {
+                                (e, (DVec3::ZERO, DVec3::ZERO, bodies.get(e).unwrap().2 .0))
+                            }),
+                        );
                         if radius > new_radius {
-                            map.extend(
-                                children_entities(
-                                    new_main,
-                                    &mut bodies.transmute_lens::<&BodyInfo>(),
-                                    mapping,
-                                )
-                                .into_iter()
-                                .map(|e| {
-                                    (e, (DVec3::ZERO, DVec3::ZERO, bodies.get(e).unwrap().2 .0))
-                                }),
-                            );
                             influencers.insert(new_main, bodies.get(new_main).unwrap().1 .0.mass);
+                        } else {
+                            influencers.remove(&main_entity);
                         }
                         main = Some(new_main);
                     }
