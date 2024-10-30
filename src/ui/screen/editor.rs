@@ -128,7 +128,7 @@ impl EditorContext {
     }
 
     fn index_of_prediction_at_simtick(&self, simtick: u64) -> usize {
-        (simtick - self.simtick) as usize
+        (simtick - self.simtick).max(self.simtick) as usize
     }
 
     fn prediction_at_simtick(&self, tick: u64) -> Option<Entity> {
